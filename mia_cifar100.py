@@ -1,273 +1,245 @@
+import argparse
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Subset
-import numpy as np
-from sklearn.model_selection import train_test_split
-from tqdm import tqdm
-import os
-import time  # 追加: 時間計測用
+from sklearn.metrics import precision_score, recall_score
+import time
 
-# --- Configuration (Optimized for RTX 5070) ---
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-BATCH_SIZE = 512 
-LR = 0.001
-LR_DECAY = 1e-07
-TARGET_EPOCHS = 100
-SHADOW_EPOCHS = 100
-NUM_CLASSES = 100 
+class TargetModel(nn.Module):
+	"""
+	ターゲットモデルおよびシャドウモデルのアーキテクチャ。
+	"""
+	def __init__(self):
+		super(TargetModel, self).__init__()
+		# features: 特徴量抽出器
+		# in_channels: 入力チャネル数 RGBなので3
+		# out_channels: 出力チャネル数 32個のフィルタを使用するので32種類の特徴マップが出力される
+		# kernel_size: カーネル=フィルタのサイズ 3x3のフィルタを使用
+		# stride: ストライド幅
+		# padding: パディング幅　畳み込みの出力サイズを入力と同じにするために1ピクセルのパディングを追加
+		self.features = nn.Sequential(
+			nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1),	# Conv2d: 2次元畳み込み層
+			nn.Tanh(),	# 活性化関数 -1～1
+			nn.MaxPool2d(kernel_size=2, stride=2),	# 特徴マップの空間サイズを半分に 範囲(2x2)の最大値を採用
+			nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1),
+			nn.Tanh(),
+			nn.MaxPool2d(kernel_size=2, stride=2)
+		)
+		# classifier: 分類器
+		# in_features: 入力特徴量数 (64チャネル * 8 * 8)
+		# out_features: 出力特徴量数
+		self.classifier = nn.Sequential(
+			nn.Linear(in_features=64 * 8 * 8, out_features=128), # 全結合層 チャネル64 * サイズ 8*8 の特徴を128種類(ベクトル)に変換
+			nn.Tanh(),
+			nn.Linear(in_features=128, out_features=100) # 出力層 クラス数100に対応する出力を生成
+			# 訓練時はCrossEntropyLossでSoftMaxが内包されるため、ここではロジットを出力する
+		)
 
-NUM_SHADOW_MODELS = 100
-TARGET_TRAIN_SIZE = 15000 
-NUM_WORKERS = 4 
+	def forward(self, x):
+		x = self.features(x) # 入力画像を特徴マップに変換
+		x = x.view(x.size(0), -1) # テンソルを1次元ベクトルに平坦化 (チャネル数 * 高さ * 幅)の3次元テンソルを1次元ベクトルに変換
+		x = self.classifier(x) # 分類
+		return x
 
-print(f"Running on {DEVICE} ({torch.cuda.get_device_name(0)})")
-print(f"Configuration: Batch={BATCH_SIZE}, Shadow Models={NUM_SHADOW_MODELS}, Workers={NUM_WORKERS}")
+class AttackModel(nn.Module):
+	"""
+	クラスごとに構築するアタックモデル（二値分類器）。
+	"""
+	def __init__(self, num_classes=100):
+		super(AttackModel, self).__init__()
+		self.fc = nn.Sequential(
+			nn.Linear(in_features=num_classes, out_features=64), # 論文ではサイズ64の隠れ層を使用
+			nn.ReLU(),
+			nn.Linear(in_features=64, out_features=2) # クラス: 0 (out), 1 (in)
+		)
 
-# --- Model Definitions ---
-class TargetNet(nn.Module):
-    def __init__(self):
-        super(TargetNet, self).__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=3, padding=1),
-            nn.Tanh(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.Tanh(),
-            nn.MaxPool2d(2),
-        )
-        self.classifier = nn.Sequential(
-            nn.Linear(64 * 8 * 8, 128),
-            nn.Tanh(),
-            nn.Linear(128, NUM_CLASSES),
-        )
+	def forward(self, x):
+		return self.fc(x)
+	
 
-    def forward(self, x):
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.classifier(x)
-        return x
+# ==========================================
+# 2. データセット準備
+# ==========================================
+def prepare_datasets(train_size, batch_size):
+	"""
+	CIFAR-100データセットをダウンロードし、ターゲット用とシャドウ用に分割する。
+	"""
+	
+	# データ前処理: テンソル化と正規化
+	transform = transforms.Compose([
+		transforms.ToTensor(),
+		transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))
+	])
+	
+	# root: データセットの保存先ディレクトリ
+	# train: 訓練データ(True)かテストデータ(False)か
+	# download: 自動ダウンロードするか否か
+	full_train = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
+	full_test = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
+	
+	# データセットのインデックスをランダムにシャッフル
+	indices = np.random.permutation(len(full_train)) # シャッフルインデックス生成 [3, 0, 4, 1, 2]
+	
+	# ターゲットモデル用データ（train_size分を抽出）
+	target_train_idx = indices[:train_size] # シャッフルインデックスから最初のtrain_size個を取得
+	target_train = Subset(full_train, target_train_idx) # そのインデックスに対応するデータをSubsetで抽出
+	# ターゲットモデル評価用 訓練と同数
+	target_test_idx = np.random.permutation(len(full_test))[:train_size]
+	target_test = Subset(full_test, target_test_idx)
 
-class AttackNet(nn.Module):
-    def __init__(self, input_dim):
-        super(AttackNet, self).__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, 64),
-            nn.ReLU(),
-            nn.Linear(64, 2)
-        )
+	# シャドーモデル用 重複しない
+	shadow_pool_idx = indices[train_size:]
 
-    def forward(self, x):
-        return self.net(x)
+	# DataLoader: ミニバッチを作成するためのイテレータ
+	# shuffle: エポックごとにデータをシャッフルするか否か    
+	target_train_loader = DataLoader(target_train, batch_size=batch_size, shuffle=True)
+	target_test_loader = DataLoader(target_test, batch_size=batch_size, shuffle=False) # ここでのテストデータはモデルの評価用
+	
+	return target_train_loader, target_test_loader, full_train, shadow_pool_idx, full_test
 
-def train_model(model, train_loader, epochs):
-    model = model.to(DEVICE)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=LR_DECAY)
-    
-    model.train()
-    for _ in range(epochs):
-        for inputs, labels in train_loader:
-            inputs, labels = inputs.to(DEVICE, non_blocking=True), labels.to(DEVICE, non_blocking=True)
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-    return model
+# モデルの学習
+def train_model(model, train_loader, epochs=100, device='cuda', lr=0.001, weight_decay=1e-07):
+	"""
+	モデルの学習プロセス。
+	"""
+	model.to(device)
+	criterion = nn.CrossEntropyLoss()
+	# lr: learning rate (学習率)
+	# weight_decay: L2正則化の係数。論文におけるlearning rate decayを近似する意味合いも持つ。
+	optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+	
+	model.train()
+	for epoch in range(epochs):
+		for inputs, targets in train_loader:
+			inputs, targets = inputs.to(device), targets.to(device)
+			optimizer.zero_grad() # 勾配の初期化
+			outputs = model(inputs)
+			loss = criterion(outputs, targets)
+			loss.backward() # 誤差逆伝播
+			optimizer.step() # パラメータ更新
+	return model
 
-def get_predictions(model, loader):
-    model.eval()
-    preds = []
-    labels_list = []
-    with torch.no_grad():
-        for inputs, labels in loader:
-            inputs = inputs.to(DEVICE, non_blocking=True)
-            outputs = torch.softmax(model(inputs), dim=1)
-            preds.append(outputs.cpu())
-            labels_list.append(labels)
-    return torch.cat(preds), torch.cat(labels_list)
-
-def get_accuracy(model, loader):
-    correct = 0
-    total = 0
-    model.eval()
-    with torch.no_grad():
-        for inputs, labels in loader:
-            inputs, labels = inputs.to(DEVICE, non_blocking=True), labels.to(DEVICE, non_blocking=True)
-            outputs = model(inputs)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-    return correct / total
+def get_predictions(model, dataloader, device, is_member):
+	"""モデルから予測確率ベクトルとラベルを取得する [cite: 181, 185]"""
+	model.eval()
+	probs_list, labels_list, membership_list = [], [], []
+	with torch.no_grad():
+		for inputs, targets in dataloader:
+			inputs = inputs.to(device)
+			outputs = model(inputs)
+			probs = F.softmax(outputs, dim=1).cpu().numpy()
+			probs_list.append(probs)
+			labels_list.append(targets.numpy())
+			membership_list.append(np.full(targets.size(0), is_member))
+			
+	return np.vstack(probs_list), np.concatenate(labels_list), np.concatenate(membership_list)
 
 def main():
-    total_start_time = time.time()
+	parser = argparse.ArgumentParser(description="Membership Inference Attack on CIFAR-100")
+	parser.add_argument('--train_size', type=int, default=10520, help="Size of target training dataset [cite: 447]")
+	parser.add_argument('--num_shadows', type=int, default=10, help="Number of shadow models ")
+	parser.add_argument('--epochs', type=int, default=100, help="Training epochs for target/shadow models ")
+	parser.add_argument('--batch_size', type=int, default=128, help="Batch size for training")
+	parser.add_argument('--lr', type=float, default=0.001, help="Learning rate ")
+	args = parser.parse_args()
 
-    # --- 1. Data Preparation ---
-    print("Preparing Data...")
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-    
-    full_train_set = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
-    test_set = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
-    
-    indices = np.arange(len(full_train_set))
-    target_train_indices, shadow_pool_indices = train_test_split(indices, train_size=TARGET_TRAIN_SIZE, random_state=42)
-    
-    target_train_loader = DataLoader(
-        Subset(full_train_set, target_train_indices), 
-        batch_size=BATCH_SIZE, shuffle=True, 
-        num_workers=NUM_WORKERS, pin_memory=True
-    )
-    target_test_loader = DataLoader(
-        test_set, batch_size=BATCH_SIZE, shuffle=False, 
-        num_workers=NUM_WORKERS, pin_memory=True
-    )
+	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+	print(f"Using device: {device}")
 
-    # --- 2. Train Target Model ---
-    print("\n[Phase 1] Training Target Model...")
-    p1_start = time.time()
-    
-    target_model = TargetNet()
-    target_model = train_model(target_model, target_train_loader, TARGET_EPOCHS)
-    
-    p1_end = time.time()
-    p1_duration = p1_end - p1_start
-    print(f">> Target Model Training Time: {p1_duration:.2f} sec")
+	# データセット準備
+	print("Preparing datasets...")
+	t_train_loader, t_test_loader, full_train, shadow_pool_idx, full_test = prepare_datasets(args.train_size, args.batch_size)
 
-    train_acc = get_accuracy(target_model, target_train_loader)
-    test_acc = get_accuracy(target_model, target_test_loader)
-    print(f"Target Result -> Train: {train_acc:.4f}, Test: {test_acc:.4f} (Gap: {train_acc - test_acc:.4f})")
+	# 1. ターゲットモデルの学習
+	print(f"\nTraining Target Model on {args.train_size} samples for {args.epochs} epochs...")
+	target_model = CNN(num_classes=100)
+	train_model(target_model, t_train_loader, args.epochs, args.lr, device)
 
-    # --- 3. Train Shadow Models ---
-    print(f"\n[Phase 2] Training {NUM_SHADOW_MODELS} Shadow Models...")
-    p2_start = time.time()
-    
-    attack_x = []
-    attack_y = [] 
-    attack_classes = []
-    
-    for i in tqdm(range(NUM_SHADOW_MODELS), desc="Shadow Models"):
-        sample_size = TARGET_TRAIN_SIZE
-        
-        shadow_train_idx = np.random.choice(shadow_pool_indices, sample_size, replace=False)
-        shadow_train_subset = Subset(full_train_set, shadow_train_idx)
-        
-        shadow_train_loader = DataLoader(
-            shadow_train_subset, batch_size=BATCH_SIZE, shuffle=True, 
-            num_workers=NUM_WORKERS, pin_memory=True
-        )
-        
-        remaining_indices = np.setdiff1d(shadow_pool_indices, shadow_train_idx)
-        current_test_size = min(len(remaining_indices), sample_size)
-        shadow_test_idx = np.random.choice(remaining_indices, current_test_size, replace=False)
-        
-        shadow_test_subset = Subset(full_train_set, shadow_test_idx)
-        shadow_test_loader = DataLoader(
-            shadow_test_subset, batch_size=BATCH_SIZE, shuffle=False, 
-            num_workers=NUM_WORKERS, pin_memory=True
-        )
+	# 2. シャドウモデル群の学習と攻撃用訓練データの収集 [cite: 176, 260]
+	attack_X, attack_Y, attack_classes = [], [], []
+	for i in range(args.num_shadows):
+		print(f"\nTraining Shadow Model {i+1}/{args.num_shadows}...")
+		# シャドウモデル用のデータをプールからランダムサンプリング（ターゲットとは重複しない） 
+		s_train_idx = np.random.choice(shadow_pool_idx, size=args.train_size, replace=False)
+		s_train = Subset(full_train, s_train_idx)
+		s_train_loader = DataLoader(s_train, batch_size=args.batch_size, shuffle=True)
+		
+		# シャドウテスト用データ（訓練に使っていないもの） [cite: 261]
+		s_test_idx = np.random.permutation(len(full_test))[:args.train_size]
+		s_test = Subset(full_test, s_test_idx)
+		s_test_loader = DataLoader(s_test, batch_size=args.batch_size, shuffle=False)
 
-        shadow_model = TargetNet()
-        shadow_model = train_model(shadow_model, shadow_train_loader, SHADOW_EPOCHS)
-        
-        preds_in, labels_in = get_predictions(shadow_model, shadow_train_loader)
-        for p, l in zip(preds_in, labels_in):
-            attack_x.append(p.numpy())
-            attack_y.append(1) 
-            attack_classes.append(l.item())
-            
-        preds_out, labels_out = get_predictions(shadow_model, shadow_test_loader)
-        for p, l in zip(preds_out, labels_out):
-            attack_x.append(p.numpy())
-            attack_y.append(0)
-            attack_classes.append(l.item())
+		shadow_model = CNN(num_classes=100)
+		train_model(shadow_model, s_train_loader, args.epochs, args.lr, device)
 
-    p2_end = time.time()
-    p2_duration = p2_end - p2_start
-    avg_shadow_time = p2_duration / NUM_SHADOW_MODELS
-    
-    print(f">> Shadow Models Total Time: {p2_duration:.2f} sec")
-    print(f">> Average Time per Shadow Model: {avg_shadow_time:.2f} sec")
-    print(f">> Estimated Time for 100 Models: {(avg_shadow_time * 100) / 60:.2f} min")
+		# 予測の収集 ("in" = 1, "out" = 0) [cite: 262]
+		p_in, l_in, m_in = get_predictions(shadow_model, s_train_loader, device, is_member=1)
+		p_out, l_out, m_out = get_predictions(shadow_model, s_test_loader, device, is_member=0)
+		
+		attack_X.extend([p_in, p_out])
+		attack_Y.extend([m_in, m_out])
+		attack_classes.extend([l_in, l_out])
 
-    attack_x = torch.tensor(np.array(attack_x), dtype=torch.float32)
-    attack_y = torch.tensor(np.array(attack_y), dtype=torch.long)
-    attack_classes = np.array(attack_classes)
+	attack_X = np.vstack(attack_X)
+	attack_Y = np.concatenate(attack_Y)
+	attack_classes = np.concatenate(attack_classes)
 
-    # --- 4. Train Attack Models ---
-    print("\n[Phase 3] Training Attack Models...")
-    p3_start = time.time()
-    
-    attack_models = {}
-    ATTACK_BATCH = 128
-    
-    for c in tqdm(range(NUM_CLASSES), desc="Attack Models"):
-        idx = np.where(attack_classes == c)[0]
-        if len(idx) == 0: continue
-        
-        c_x = attack_x[idx]
-        c_y = attack_y[idx]
-        
-        dataset = torch.utils.data.TensorDataset(c_x, c_y)
-        loader = DataLoader(dataset, batch_size=ATTACK_BATCH, shuffle=True)
-        
-        net = AttackNet(input_dim=NUM_CLASSES).to(DEVICE)
-        optimizer = optim.Adam(net.parameters(), lr=0.01)
-        criterion = nn.CrossEntropyLoss()
-        
-        net.train()
-        for _ in range(50):
-            for bx, by in loader:
-                bx, by = bx.to(DEVICE), by.to(DEVICE)
-                optimizer.zero_grad()
-                out = net(bx)
-                loss = criterion(out, by)
-                loss.backward()
-                optimizer.step()
-        
-        attack_models[c] = net
+	# 3. アタックモデル群の学習（クラスごとに構築） [cite: 173]
+	print("\nTraining Attack Models...")
+	attack_models = [AttackModel(num_classes=100).to(device) for _ in range(100)]
+	criterion = nn.CrossEntropyLoss()
+	
+	for c in range(100):
+		idx = np.where(attack_classes == c)[0]
+		if len(idx) == 0: continue
+		
+		X_c = torch.tensor(attack_X[idx], dtype=torch.float32)
+		Y_c = torch.tensor(attack_Y[idx], dtype=torch.long)
+		dataset_c = torch.utils.data.TensorDataset(X_c, Y_c)
+		loader_c = DataLoader(dataset_c, batch_size=64, shuffle=True)
+		
+		optimizer = optim.Adam(attack_models[c].parameters(), lr=0.001)
+		attack_models[c].train()
+		for epoch in range(50):
+			for inputs, targets in loader_c:
+				inputs, targets = inputs.to(device), targets.to(device)
+				optimizer.zero_grad()
+				loss = criterion(attack_models[c](inputs), targets)
+				loss.backward()
+				optimizer.step()
 
-    p3_end = time.time()
-    p3_duration = p3_end - p3_start
-    print(f">> Attack Models Training Time: {p3_duration:.2f} sec")
+	# 4. ターゲットモデルに対する攻撃の実行と評価 [cite: 499, 502]
+	print("\nEvaluating Attack Models against Target Model...")
+	t_p_in, t_l_in, t_m_in = get_predictions(target_model, t_train_loader, device, is_member=1)
+	t_p_out, t_l_out, t_m_out = get_predictions(target_model, t_test_loader, device, is_member=0)
+	
+	eval_X = np.vstack([t_p_in, t_p_out])
+	eval_Y = np.concatenate([t_m_in, t_m_out])
+	eval_classes = np.concatenate([t_l_in, t_l_out])
 
-    # --- 5. Evaluate ---
-    print("\n[Phase 4] Evaluating...")
-    t_preds_in, t_labels_in = get_predictions(target_model, target_train_loader)
-    t_preds_out, t_labels_out = get_predictions(target_model, target_test_loader)
-    
-    correct = 0
-    total = 0
-    
-    for p, l in zip(t_preds_in, t_labels_in):
-        cls = l.item()
-        if cls in attack_models:
-            net = attack_models[cls]
-            out = net(p.unsqueeze(0).to(DEVICE))
-            if torch.argmax(out, dim=1).item() == 1: correct += 1
-            total += 1
-            
-    for p, l in zip(t_preds_out, t_labels_out):
-        cls = l.item()
-        if cls in attack_models:
-            net = attack_models[cls]
-            out = net(p.unsqueeze(0).to(DEVICE))
-            if torch.argmax(out, dim=1).item() == 0: correct += 1
-            total += 1
-            
-    print(f"Final Attack Accuracy: {correct / total:.4f}")
+	preds = []
+	for i in range(len(eval_X)):
+		c = eval_classes[i]
+		x = torch.tensor(eval_X[i], dtype=torch.float32).unsqueeze(0).to(device)
+		attack_models[c].eval()
+		with torch.no_grad():
+			out = attack_models[c](x)
+			pred = torch.argmax(out, dim=1).item()
+			preds.append(pred)
 
-    total_end_time = time.time()
-    total_duration = total_end_time - total_start_time
-    print(f"\n=========================================")
-    print(f"Total Execution Time: {total_duration:.2f} sec ({total_duration/60:.2f} min)")
-    print(f"=========================================")
+	# 適合率(Precision)と再現率(Recall)の計算 [cite: 503, 504]
+	precision = precision_score(eval_Y, preds)
+	recall = recall_score(eval_Y, preds)
+	
+	print("\n--- Attack Evaluation Results ---")
+	print(f"Overall Precision: {precision:.4f}")
+	print(f"Overall Recall:    {recall:.4f}")
+	print("---------------------------------")
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+	main()
