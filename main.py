@@ -1,48 +1,71 @@
 import time
 import torch
+import argparse
 from tqdm import trange
+from datetime import datetime
+import os
+
 
 import config
 from dataset import dataset
 from target_model import TargetCNN
 from attack_model import AttackNet
-from utils import train_model, get_predictions, get_accuracy
+from utils import train_model, get_predictions, get_accuracy, save_model, load_model
 
 
-def main():
-	# 設定の表示
-	print("Configurations:")
-	for key in dir(config):
-		if key.isupper():  # 大文字だけ表示
-			print(f"  {key}: {getattr(config, key)}")
-   
-	# データセットの準備
-	print("\n[Phase 1] Preparing data...")
-	p1_start_time = time.time()
-	dataset_instance = dataset()
-	trainloader, testloader, num_train, num_test = dataset_instance.get_target_dataloaders()
-	print(f"Train: {num_train}, Test: {num_test}")
-	print(f"-> {time.time() - p1_start_time:.2f} sec")
- 
+def train_target_model(dataset_instance, MODEL_SAVE_DIR):
+	# ----------------------------------
 	# ターゲットモデルの訓練と評価
+	# ----------------------------------
 	print("\n[Phase 2] Training target model...")
 	p2_start_time = time.time()
 	target_model = TargetCNN().to(config.DEVICE) # モデルの初期化とデバイスへの転送
-	target_model = train_model(target_model, trainloader, config.MAX_EPOCHS) # 訓練
+	# モデルの読み込みに失敗した場合は訓練して保存
+	if not load_model(target_model, os.path.join(config.ASSIGNED_MODEL_PATH, config.TARGET_MODEL_NAME)):
+		trainloader, testloader, num_train, num_test = dataset_instance.get_target_dataloaders() # データ読み込み
+		print(f"Train: {num_train}, Test: {num_test}")
+		target_model = train_model(target_model, trainloader, config.MAX_EPOCHS) # 訓練
+		save_model(target_model, os.path.join(MODEL_SAVE_DIR, config.TARGET_MODEL_NAME)) # モデルの保存
+
 	train_acc = get_accuracy(target_model, trainloader) # 訓練データに対する精度
 	test_acc = get_accuracy(target_model, testloader) # テストデータに対する精度
 	print(f"Target Result -> Train: {train_acc:.4f}, Test: {test_acc:.4f} (Gap: {train_acc - test_acc:.4f})")
 	print(f"-> {time.time() - p2_start_time:.2f} sec")
  
+	return target_model
+
+def train_shadow_models(dataset_instance, target_model, MODEL_SAVE_DIR):
+    # ----------------------------------
 	# シャドーモデルの訓練
+	# ----------------------------------
 	print(f"\n[Phase 3] Training shadow models...")
 	p3_start_time = time.time()
-	attack_x, attack_y, attack_classes = [], [], []
+	shadow_models = []
+	# シャドーモデルの訓練
 	for i in trange(config.NUM_SHADOW_MODELS, desc="Shadow Models"):
-		shadow_train_loader, shadow_test_loader, _, _ = dataset_instance.get_shadow_dataloader() # シャドーモデルのデータローダーを取得
 		shadow_model = TargetCNN().to(config.DEVICE) # シャドーモデルの初期化とデバイスへの転送
-		shadow_model = train_model(shadow_model, shadow_train_loader, config.MAX_EPOCHS) # シャドーモデルの訓練
-		
+		if not load_model(shadow_model, os.path.join(config.ASSIGNED_MODEL_PATH, config.SHADOW_MODEL_NAME_TEMPLATE.format(i))):
+			shadow_train_loader, shadow_test_loader, _, _ = dataset_instance.get_shadow_dataloader(seed=i) # シャドーモデルのデータローダーを取得
+			shadow_model = train_model(shadow_model, shadow_train_loader, config.MAX_EPOCHS) # シャドーモデルの訓練
+			save_model(shadow_model, os.path.join(MODEL_SAVE_DIR, config.SHADOW_MODEL_NAME_TEMPLATE.format(i))) # モデルの保存
+		shadow_models.append(shadow_model) # シャドーモデルをリストに追加
+
+	print(f"-> {time.time() - p3_start_time:.2f} sec")
+ 
+	return shadow_models
+
+def train_attack_models(dataset_instance, shadow_models, MODEL_SAVE_DIR):
+	# ----------------------------------
+	# 攻撃モデルの訓練
+	# ----------------------------------
+	print("\n[Phase 4] Training attack model...")
+	p4_start_time = time.time()
+ 
+	attack_x, attack_y, attack_classes = [], [], []
+	for i in trange(config.NUM_SHADOW_MODELS, desc="Prepare Dataset"):
+		# シャドーモデルの訓練データとテストデータに対する予測とラベルを取得し、攻撃用の特徴量とラベルを作成
+		shadow_train_loader, shadow_test_loader, _, _ = dataset_instance.get_shadow_dataloader(seed=i) # シャドーモデルのデータローダーを取得
+		shadow_model = shadow_models[i] # シャドーモデルを取得
 		preds_in, labels_in = get_predictions(shadow_model, shadow_train_loader) # シャドーモデルの訓練データに対する予測とラベルを取得
 		preds_out, labels_out = get_predictions(shadow_model, shadow_test_loader) # シャドーモデルのテストデータに対する予測とラベルを取得
 		
@@ -53,52 +76,50 @@ def main():
 		attack_x.append(preds_out.cpu()) # テストデータの予測を攻撃用特徴量リストに追加
 		attack_y.append(torch.zeros(len(labels_out), dtype=torch.long)) # テストデータは非メンバなので0を追加
 		attack_classes.append(labels_out.cpu()) # テストデータのクラスラベルをリストに追加
-  
+
 	attack_x = torch.cat(attack_x) # 攻撃用特徴量を一つのテンソルに結合
 	attack_y = torch.cat(attack_y) # 攻撃用ラベルを一つのテンソルに結合
 	attack_classes = torch.cat(attack_classes) # 攻撃用クラスラベルを一つのテンソルに結合
 	print(f"Attack Dataset -> Features: {attack_x.shape}, Labels: {attack_y.shape}, Classes: {attack_classes.shape}")
-	print(f"-> {time.time() - p3_start_time:.2f} sec")
-
-	# 攻撃モデルの訓練
-	print("\n[Phase 4] Training attack model...")
-	p4_start_time = time.time()
 	
+	# クラスごとに攻撃モデルを訓練
 	attack_models = {}
 	for class_idx in trange(config.NUM_CLASSES, desc="Attack Models"):
 		class_mask = (attack_classes == class_idx) # クラスごとのマスクを作成
 		if class_mask.sum() == 0: # クラスにデータがない場合はスキップ
 			continue
-
-		# クラスごとの攻撃用特徴量とラベルを抽出
-		class_attack_x = attack_x[class_mask]
-		class_attack_y = attack_y[class_mask]
-		# データセット作成
-		class_dataset = torch.utils.data.TensorDataset(class_attack_x, class_attack_y)
-		class_loader = torch.utils.data.DataLoader(class_dataset, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=config.NUM_WORKERS, pin_memory=True)
-	
-		# 訓練
 		attack_model = AttackNet(input_dim=config.NUM_CLASSES).to(config.DEVICE) # 攻撃モデルの初期化とデバイスへの転送
-		attack_model = train_model(attack_model, class_loader, config.MAX_EPOCHS)
+		if not load_model(attack_model, os.path.join(config.ASSIGNED_MODEL_PATH, config.ATTACK_MODEL_NAME_TEMPLATE.format(class_idx))):
+			# クラスごとの攻撃用特徴量とラベルを抽出
+			class_attack_x = attack_x[class_mask]
+			class_attack_y = attack_y[class_mask]
+			# データセット作成
+			class_dataset = torch.utils.data.TensorDataset(class_attack_x, class_attack_y)
+			class_loader = torch.utils.data.DataLoader(class_dataset, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=config.NUM_WORKERS, pin_memory=True)
+			# 攻撃モデルの訓練
+			attack_model = train_model(attack_model, class_loader, config.MAX_EPOCHS)
+			save_model(attack_model, os.path.join(MODEL_SAVE_DIR, config.ATTACK_MODEL_NAME_TEMPLATE.format(class_idx))) # モデルの保存
+
 		attack_models[class_idx] = attack_model # クラスごとの攻撃モデルを辞書に保存
 
 	print(f"-> {time.time() - p4_start_time:.2f} sec")
  
- 
+	return attack_models
+
+
+def evaluate_attack_models(dataset_instance, target_model, attack_models, p1_start_time):
+	# ----------------------------------
 	# 攻撃モデルの評価
+	# ----------------------------------
 	print("\n[Phase 5] Evaluating attack model...")
 	p5_start_time = time.time()
 	# ターゲットモデルの予測とラベルを取得
+	trainloader, testloader, _, _ = dataset_instance.get_target_dataloaders() # ターゲットモデルのデータローダーを取得
 	target_preds_in, target_labels_in = get_predictions(target_model, trainloader) # メンバーの予測とラベル
 	target_preds_out, target_labels_out = get_predictions(target_model, testloader) # 非メンバーの予測とラベル
  
-	eval_preds = []
-	eval_trues = []
-	eval_classes = []
-	
- 
-	class_amounts = torch.bincount(attack_classes) # クラスごとのデータ数をカウント
-	print(f"Class Distribution in Attack Dataset: {class_amounts}")
+	class_precisions = []
+	class_recalls = []	
  
  
 	for class_idx in trange(config.NUM_CLASSES, desc="Evaluating Classes"):
@@ -107,40 +128,129 @@ def main():
 		
 		attack_model = attack_models[class_idx] # クラスごとの攻撃モデルを取得
 		
-		# ターゲットモデルのメンバーと非メンバーの予測とラベルをクラスごとにマスク
+		# マスク作成
 		class_mask_in = (target_labels_in == class_idx)
 		class_mask_out = (target_labels_out == class_idx)
 		# 抽出 Trueのやつだけ残す
 		class_preds_in = target_preds_in[class_mask_in]
 		class_preds_out = target_preds_out[class_mask_out]
-
-		class_trues_in = torch.ones(len(class_preds_in)) # メンバーは1
-		class_trues_out = torch.zeros(len(class_preds_out)) # 非メンバーは0
+  
+		if len(class_preds_in) == 0 or len(class_preds_out) == 0:
+			continue
   
 		# 攻撃モデルで予測
 		with torch.no_grad():
-			class_eval_preds_in = attack_model(class_preds_in.to(config.DEVICE)).cpu() # メンバーの予測
-			class_eval_preds_out = attack_model(class_preds_out.to(config.DEVICE)).cpu() # 非メンバーの予測
+			preds_in = attack_model(class_preds_in.to(config.DEVICE)).cpu() # メンバーの予測
+			preds_out = attack_model(class_preds_out.to(config.DEVICE)).cpu() # 非メンバーの予測
    
-		eval_preds.append(torch.cat([class_eval_preds_in, class_eval_preds_out])) # 予測をリストに追加
-		eval_trues.append(torch.cat([class_trues_in, class_trues_out])) # 真のラベルをリストに追加
-		eval_classes.append(torch.cat([torch.full_like(class_trues_in, class_idx), torch.full_like(class_trues_out, class_idx)])) # クラスラベルをリストに追加
+		# クラスごとの指標計算
+		tp = (preds_in.argmax(dim=1) == 1).sum().item()
+		fp = (preds_out.argmax(dim=1) == 1).sum().item()
+		fn = (preds_in.argmax(dim=1) == 0).sum().item()
   
-	eval_preds = torch.cat(eval_preds) # すべての予測を一つのテンソルに結合
-	eval_trues = torch.cat(eval_trues) # すべての真のラベルを一つのテンソルに結合
-	eval_classes = torch.cat(eval_classes) # すべてのクラスラベルを一つのテンソルに結合
-	print(f"Evaluation Dataset -> Predictions: {eval_preds.shape}, Trues: {eval_trues.shape}, Classes: {eval_classes.shape}")
+		precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+		recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+   
+		class_precisions.append(precision)
+		class_recalls.append(recall)  
+  
+  
+	# 統計量の表示 (論文に準じて中央値を採用)
+	print(f"\nAttack Model Evaluation:")
+	print("class_precisions:", [f"{x:.4f}" for x in class_precisions])
+	print("class_recalls:", [f"{x:.4f}" for x in class_recalls])
 	print(f"-> {time.time() - p5_start_time:.2f} sec")
+
+	print(f"\nTotal Time: {time.time() - p1_start_time:.2f} sec")
+
+
+
+def main():
+    # 引数処理
+	parser = argparse.ArgumentParser(description="Membership Inference Attack on CIFAR-100")
+	parser.add_argument('--assigned_model_path', type=str, default="", help="Path to load pre-trained models")
+	parser.add_argument('--load_target_model', action='store_true', default=False, help="Whether to load pre-trained target model")
+	parser.add_argument('--load_shadow_models', action='store_true', default=False, help="Whether to load pre-trained shadow models")
+	parser.add_argument('--load_attack_models', action='store_true', default=False, help="Whether to load pre-trained attack models")
+	args = parser.parse_args()
  
-	# Precision: TP / (TP + FP)
-	# Recall: TP / (TP + FN)
-	tp = ((eval_preds.argmax(dim=1) == 1) & (eval_trues == 1)).sum().item() # 真陽性
-	fp = ((eval_preds.argmax(dim=1) == 1) & (eval_trues == 0)).sum().item() # 偽陽性
-	fn = ((eval_preds.argmax(dim=1) == 0) & (eval_trues == 1)).sum().item() # 偽陰性
-	precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0 # Precisionの計算
-	recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0 # Recallの計算
+	is_assigned_model_path = (not args.assigned_model_path == "")
+
+	# パス整形
+	assigned_model_path = args.assigned_model_path.strip() # パスの前後の空白を削除
+	assigned_model_path = os.path.join(config.MODEL_DIR, assigned_model_path)
+	# 早期終了判定
+	if is_assigned_model_path:
+		# 指定されたパスのディレクトリが存在しない場合早期終了
+		if not os.path.exists(assigned_model_path):
+			print(f"Error: Assigned model path '{assigned_model_path}' does not exist.")
+			return
+		# パスを指定しているのにモデルを読み込まない場合早期終了
+		if (not args.load_target_model) and (not args.load_shadow_models) and (not args.load_attack_models):
+			print("Error: No model to load. Please specify the model to load.")
+			return
+
+	# 保存ディレクトリ作成
+	timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+	MODEL_SAVE_DIR = os.path.join(config.MODEL_DIR, timestamp)
+	os.makedirs(MODEL_SAVE_DIR, exist_ok=True)
+	# メタ情報保存
+	with open(os.path.join(MODEL_SAVE_DIR, "specification.txt"), "w") as f:
+		f.write("Configurations:\n")
+		for key in dir(config):
+			if key.isupper():  # 大文字だけ表示
+				f.write(f"{key}: {getattr(config, key)}\n")
+		f.write(f"Arguments:\n")
+		for key in args.__dict__.keys():
+			f.write(f"{key}: {args.__dict__[key]}\n")
+
+	# 設定の表示
+	print("Configurations:")
+	for key in dir(config):
+		if key.isupper():  # 大文字だけ表示
+			print(f"  {key}: {getattr(config, key)}")
+	print(f"Model Save Directory: {MODEL_SAVE_DIR}")
+	print(f"Assigned Model Path: {assigned_model_path}")
+	print(f"is_assigned_model_path: {is_assigned_model_path}")
  
-	print(f"Attack Model Evaluation -> Precision: {precision:.4f}, Recall: {recall:.4f}")
+   
+	# ----------------------------------
+	# データセットの準備
+	# ----------------------------------
+	print("\n[Phase 1] Preparing data...")
+	p1_start_time = time.time()
+	if is_assigned_model_path:
+		dataset_instance = dataset(MODEL_SAVE_DIR, assigned_model_path=assigned_model_path)
+	else:
+		dataset_instance = dataset(MODEL_SAVE_DIR)
+	print(f"-> {time.time() - p1_start_time:.2f} sec")
+
+	# ターゲットモデルの訓練と評価
+	target_model = TargetCNN().to(config.DEVICE)
+	if not args.load_target_model:
+		target_model = train_target_model(dataset_instance, MODEL_SAVE_DIR)
+	else:
+		load_model(target_model, os.path.join(assigned_model_path, config.TARGET_MODEL_NAME))
+	# シャドーモデルの訓練
+	shadow_models = []
+	if not args.load_shadow_models:
+		shadow_models = train_shadow_models(dataset_instance, target_model, MODEL_SAVE_DIR)
+	else:
+		for i in range(config.NUM_SHADOW_MODELS):
+			shadow_model = TargetCNN().to(config.DEVICE)
+			load_model(shadow_model, os.path.join(assigned_model_path, config.SHADOW_MODEL_NAME_TEMPLATE.format(i)))
+			shadow_models.append(shadow_model)
+	# 攻撃モデルの訓練
+	attack_models = {}
+	if not args.load_attack_models:
+		attack_models = train_attack_models(dataset_instance, shadow_models, MODEL_SAVE_DIR)
+	else:
+		for class_idx in range(config.NUM_CLASSES):
+			attack_model = AttackNet(input_dim=config.NUM_CLASSES).to(config.DEVICE)
+			load_model(attack_model, os.path.join(assigned_model_path, config.ATTACK_MODEL_NAME_TEMPLATE.format(class_idx)))
+			attack_models[class_idx] = attack_model
+	# 攻撃モデルの評価
+	evaluate_attack_models(dataset_instance, target_model, attack_models, p1_start_time)
   
   
   

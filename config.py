@@ -20,6 +20,17 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # データセットの保存先ディレクトリ
 DATA_DIR = './data'
 
+# モデルデータの保存先ディレクトリ
+MODEL_DIR = './models'
+
+# 指定ターゲットモデル
+ASSIGNED_MODEL_PATH = ""
+
+# モデル保存名
+TARGET_MODEL_NAME = "target_model.pth"
+SHADOW_MODEL_NAME_TEMPLATE = "shadow_models/{}.pth"
+ATTACK_MODEL_NAME_TEMPLATE = "attack_models/{}.pth"
+
 # データセットの数
 # 各モデルの訓練データとテストデータは重複無し、同サイズ
 # → メンバと非メンバを同数にすることでBaseを50%にする
@@ -36,3 +47,5 @@ SEED = 42
 torch.manual_seed(SEED)
 if torch.cuda.is_available():
 	torch.cuda.manual_seed_all(SEED)
+ 
+ 

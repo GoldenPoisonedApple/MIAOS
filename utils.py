@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from tqdm import trange
+import os
 
 
 # 自作モジュールのインポート
@@ -18,7 +19,7 @@ def train_model(model, train_loader, epochs):
 	optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=1e-4)
 	# 学習率スケジューラ (CosineAnnealingLR: コサインカーブに従って学習率を減衰させる)
 	# T_max: 半周期のエポック数 指定のエポック数で学習率(重みの修正幅)が最小値に達するように設定
-	scheduler = CosineAnnealingLR(optimizer, T_max=config.MAX_EPOCHS)
+	scheduler = CosineAnnealingLR(optimizer, T_max=epochs)
 
 	# 学習モード: Dropout(ランダムにニューロンを無効化)、BatchNorm(バッチごとの統計量を使用)
 	model.train()
@@ -73,3 +74,16 @@ def get_accuracy(model, test_loader):
 			total += labels.size(0)
 			correct += (predicted == labels).sum().item()
 	return correct / total
+
+# モデルの保存
+def save_model(model, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(model.state_dict(), path)
+
+# モデルの読み込み
+def load_model(model, path):
+    if os.path.exists(path):
+        model.load_state_dict(torch.load(path, map_location=config.DEVICE))
+        model.eval()
+        return True
+    return False
