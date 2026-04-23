@@ -2,16 +2,18 @@ import os
 import torch
 
 # シャドーモデルの数
-NUM_SHADOW_MODELS = 20
+NUM_SHADOW_MODELS = 100
 # クラス数
 NUM_CLASSES = 100
 
 # バッチサイズ: 1回の重み更新に用いるサンプルの数
 BATCH_SIZE = 256
 # 最大エポック数: データセット全体を学習する回数
-MAX_EPOCHS = 20
+MAX_EPOCHS = 200
 # データロードに使用するサブプロセス数
-NUM_WORKERS = os.cpu_count() or 4
+# CIFARのやつはオンメモリより0で
+# NUM_WORKERS = os.cpu_count() or 4
+NUM_WORKERS = 0
 
 # デバイスの設定 (GPUが利用可能であればCUDA、そうでなければCPU)
 # CUDA: Compute Unified Device Architecture (NVIDIAの並列計算プラットフォーム)
@@ -28,7 +30,7 @@ ASSIGNED_MODEL_PATH = ""
 
 # モデル保存名
 TARGET_MODEL_NAME = "target_model.pth"
-SHADOW_MODEL_NAME_TEMPLATE = "shadow_models/{}.pth"
+ATTACK_DATASET_NAME = "attack_dataset.pth"
 ATTACK_MODEL_NAME_TEMPLATE = "attack_models/{}.pth"
 
 # データセットの数
