@@ -4,7 +4,8 @@ import argparse
 from tqdm import trange
 from datetime import datetime
 import os
-
+import logging
+import sys
 
 import config
 from dataset import dataset
@@ -13,27 +14,27 @@ from attack_model import AttackNet
 from utils import train_model, get_predictions, get_accuracy, save_model, load_model
 
 # ターゲットモデルの訓練
-def train_target_model(dataset_instance, MODEL_SAVE_DIR):
+def train_target_model(dataset_instance, MODEL_SAVE_DIR, logger):
 
 	p2_start_time = time.time()
 	target_model = TargetCNN().to(config.DEVICE) # モデルの初期化とデバイスへの転送
 	# モデルの読み込みに失敗した場合は訓練して保存
 	if not load_model(target_model, os.path.join(config.ASSIGNED_MODEL_PATH, config.TARGET_MODEL_NAME)):
 		trainloader, testloader, num_train, num_test = dataset_instance.get_target_dataloaders() # データ読み込み
-		print(f"Train: {num_train}, Test: {num_test}")
+		logger.info(f"Train: {num_train}, Test: {num_test}")
 		target_model = train_model(target_model, trainloader, config.MAX_EPOCHS) # 訓練
 		save_model(target_model, os.path.join(MODEL_SAVE_DIR, config.TARGET_MODEL_NAME)) # モデルの保存
 
 	train_acc = get_accuracy(target_model, trainloader) # 訓練データに対する精度
 	test_acc = get_accuracy(target_model, testloader) # テストデータに対する精度
-	print(f"Target Result -> Train: {train_acc:.4f}, Test: {test_acc:.4f} (Gap: {train_acc - test_acc:.4f})")
-	print(f"-> {time.time() - p2_start_time:.2f} sec")
+	logger.info(f"Target Result -> Train: {train_acc:.4f}, Test: {test_acc:.4f} (Gap: {train_acc - test_acc:.4f})")
+	logger.info(f"-> {time.time() - p2_start_time:.2f} sec")
 
 	return target_model
 
 
 # 攻撃モデルのデータセット準備
-def prepare_attack_dataset(dataset_instance, MODEL_SAVE_DIR):
+def prepare_attack_dataset(dataset_instance, MODEL_SAVE_DIR, logger):
 	start_time = time.time()
 	
 	attack_x, attack_y, attack_classes = [], [], []
@@ -71,14 +72,14 @@ def prepare_attack_dataset(dataset_instance, MODEL_SAVE_DIR):
 		'classes': attack_classes
 	}, os.path.join(MODEL_SAVE_DIR, config.ATTACK_DATASET_NAME))
 	
-	print(f"Attack Dataset -> Features: {attack_x.shape}, Labels: {attack_y.shape}, Classes: {attack_classes.shape}")
-	print(f"-> {time.time() - start_time:.2f} sec")
+	logger.info(f"Attack Dataset -> Features: {attack_x.shape}, Labels: {attack_y.shape}, Classes: {attack_classes.shape}")
+	logger.info(f"-> {time.time() - start_time:.2f} sec")
 	
 	return attack_x, attack_y, attack_classes
 
 
 # 攻撃モデルの訓練
-def train_attack_models(attack_x, attack_y, attack_classes, MODEL_SAVE_DIR):
+def train_attack_models(attack_x, attack_y, attack_classes, MODEL_SAVE_DIR, logger):
 	p4_start_time = time.time()
 	
 	# クラスごとに攻撃モデルを訓練
@@ -101,13 +102,13 @@ def train_attack_models(attack_x, attack_y, attack_classes, MODEL_SAVE_DIR):
 
 		attack_models[class_idx] = attack_model # クラスごとの攻撃モデルを辞書に保存
 
-	print(f"-> {time.time() - p4_start_time:.2f} sec")
+	logger.info(f"-> {time.time() - p4_start_time:.2f} sec")
 
 	return attack_models
 
 
 # 攻撃モデルの評価
-def evaluate_attack_models(dataset_instance, target_model, attack_models, p1_start_time):
+def evaluate_attack_models(dataset_instance, target_model, attack_models, p1_start_time, logger):
 	p5_start_time = time.time()
 	# ターゲットモデルの予測とラベルを取得
 	trainloader, testloader, _, _ = dataset_instance.get_target_dataloaders() # ターゲットモデルのデータローダーを取得
@@ -152,17 +153,17 @@ def evaluate_attack_models(dataset_instance, target_model, attack_models, p1_sta
 
 
 	# 統計量の表示 (論文に準じて中央値を採用)
-	print(f"\nAttack Model Evaluation:")
-	# print("class_precisions:", [f"{x:.4f}" for x in class_precisions])
-	# print("class_recalls:", [f"{x:.4f}" for x in class_recalls])
+	logger.info(f"Attack Model Evaluation:")
+	# logger.info("class_precisions:", [f"{x:.4f}" for x in class_precisions])
+	# logger.info("class_recalls:", [f"{x:.4f}" for x in class_recalls])
 	import numpy as np
-	print(f"Precision Median: {np.median(class_precisions):.4f}")
-	print(f"Precision Variance: {np.var(class_precisions):.4f}")
-	print(f"Recall Median: {np.median(class_recalls):.4f}")
-	print(f"Recall Variance: {np.var(class_recalls):.4f}")
-	print(f"-> {time.time() - p5_start_time:.2f} sec")
+	logger.info(f"Precision Median: {np.median(class_precisions):.4f}")
+	logger.info(f"Precision Variance: {np.var(class_precisions):.4f}")
+	logger.info(f"Recall Median: {np.median(class_recalls):.4f}")
+	logger.info(f"Recall Variance: {np.var(class_recalls):.4f}")
+	logger.info(f"-> {time.time() - p5_start_time:.2f} sec")
 
-	print(f"\nTotal Time: {time.time() - p1_start_time:.2f} sec")
+	logger.info(f"Total Time: {time.time() - p1_start_time:.2f} sec -> {(time.time() - p1_start_time)/60:.2f} min")
 
 
 
@@ -207,75 +208,87 @@ def main():
 		f.write(f"Arguments:\n")
 		for key in args.__dict__.keys():
 			f.write(f"{key}: {args.__dict__[key]}\n")
+   
+	# ロガー
+	log_file_path = os.path.join(MODEL_SAVE_DIR, "execution.log")
+	logging.basicConfig(
+		level=logging.INFO,
+		format='%(asctime)s [%(levelname)s] %(message)s',
+		handlers=[
+			logging.FileHandler(log_file_path), # ファイルへの出力
+			logging.StreamHandler(sys.stdout)   # 標準出力(ターミナル)への出力
+		]
+	)
+	logger = logging.getLogger(__name__)
 
 	# 設定の表示
-	print("Configurations:")
+	logger.info("Configurations:")
 	for key in dir(config):
 		if key.isupper():  # 大文字だけ表示
-			print(f"  {key}: {getattr(config, key)}")
-	print(f"Model Save Directory: {MODEL_SAVE_DIR}")
-	print(f"Assigned Model Path: {assigned_model_path}")
-	print(f"is_assigned_model_path: {is_assigned_model_path}")
+			logger.info(f"  {key}: {getattr(config, key)}")
+	logger.info(f"Model Save Directory: {MODEL_SAVE_DIR}")
+	logger.info(f"Assigned Model Path: {assigned_model_path}")
+	logger.info(f"is_assigned_model_path: {is_assigned_model_path}")
 
 
 	# ----------------------------------
 	# データセットの準備
 	# ----------------------------------
-	print("\n[Phase 1] Preparing data...")
+	logger.info("[Phase 1] Preparing data...")
 	p1_start_time = time.time()
 	if is_assigned_model_path:
 		dataset_instance = dataset(MODEL_SAVE_DIR, assigned_model_path=assigned_model_path)
 	else:
 		dataset_instance = dataset(MODEL_SAVE_DIR)
-	print(f"-> {time.time() - p1_start_time:.2f} sec")
+	logger.info(f"-> {time.time() - p1_start_time:.2f} sec")
 
 	# ----------------------------------
 	# ターゲットモデルの訓練と評価
 	# ----------------------------------
-	print("\n[Phase 2] Training target model...")
+	logger.info("[Phase 2] Training target model...")
 	target_model = TargetCNN().to(config.DEVICE)
 	if not args.load_target_model:
-		target_model = train_target_model(dataset_instance, MODEL_SAVE_DIR)
+		target_model = train_target_model(dataset_instance, MODEL_SAVE_DIR, logger)
 	else:
 		load_model(target_model, os.path.join(assigned_model_path, config.TARGET_MODEL_NAME))
-		print("Loading complete")
+		logger.info("Loading complete")
   
 	# ----------------------------------
 	# 攻撃モデルのデータセット作成
 	# ----------------------------------
-	print(f"\n[Phase 3] Preparing attack dataset...")
+	logger.info(f"[Phase 3] Preparing attack dataset...")
 	attack_x, attack_y, attack_classes = [], [], []
 	if not args.load_attack_dataset:
-		attack_x, attack_y, attack_classes = prepare_attack_dataset(dataset_instance, MODEL_SAVE_DIR)
+		attack_x, attack_y, attack_classes = prepare_attack_dataset(dataset_instance, MODEL_SAVE_DIR, logger)
 	else:
 		# テンソルを含む辞書をロード
 		data = torch.load(os.path.join(assigned_model_path, config.ATTACK_DATASET_NAME), map_location='cpu')
 		attack_x = data['x']
 		attack_y = data['y']
 		attack_classes = data['classes']
-		print("Loading complete")
+		logger.info("Loading complete")
 
   
 	# ----------------------------------
 	# 攻撃モデルの訓練
 	# ----------------------------------
-	print("\n[Phase 4] Training attack model...")
+	logger.info("[Phase 4] Training attack model...")
 	attack_models = {}
 	if not args.load_attack_models:
-		attack_models = train_attack_models(attack_x, attack_y, attack_classes, MODEL_SAVE_DIR)
+		attack_models = train_attack_models(attack_x, attack_y, attack_classes, MODEL_SAVE_DIR, logger)
 	else:
 		for class_idx in range(config.NUM_CLASSES):
 			attack_model = AttackNet(input_dim=config.NUM_CLASSES).to(config.DEVICE)
 			load_model(attack_model, os.path.join(assigned_model_path, config.ATTACK_MODEL_NAME_TEMPLATE.format(class_idx)))
 			attack_models[class_idx] = attack_model
-		print("Loading complete")
+		logger.info("Loading complete")
 
 
 	# ----------------------------------
 	# 攻撃モデルの評価
 	# ----------------------------------
-	print("\n[Phase 5] Evaluating attack model...")
-	evaluate_attack_models(dataset_instance, target_model, attack_models, p1_start_time)
+	logger.info("[Phase 5] Evaluating attack model...")
+	evaluate_attack_models(dataset_instance, target_model, attack_models, p1_start_time, logger)
 
 
 
