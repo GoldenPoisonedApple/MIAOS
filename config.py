@@ -12,8 +12,8 @@ BATCH_SIZE = 256
 MAX_EPOCHS = 60
 # データロードに使用するサブプロセス数
 # CIFARのやつはオンメモリより0で
-# NUM_WORKERS = os.cpu_count() or 4
-NUM_WORKERS = 0
+NUM_WORKERS = os.cpu_count() or 4
+# NUM_WORKERS = 0
 
 # デバイスの設定 (GPUが利用可能であればCUDA、そうでなければCPU)
 # CUDA: Compute Unified Device Architecture (NVIDIAの並列計算プラットフォーム)

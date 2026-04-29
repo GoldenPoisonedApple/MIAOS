@@ -7,7 +7,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # --- ユーザー作成の追加 ---
 ARG UID=1000
 ARG GID=1000
-ARG USERNAME=devuser
+ARG USERNAME=tipsy
 
 RUN groupadd -g ${GID} ${USERNAME} && useradd -u ${UID} -g ${GID} -m -s /bin/bash ${USERNAME}
 
