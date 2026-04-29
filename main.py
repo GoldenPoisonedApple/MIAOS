@@ -7,6 +7,13 @@ import os
 import logging
 import sys
 
+# ROC曲線描画用に追加
+import matplotlib
+matplotlib.use('Agg') # GUIを持たないDocker環境での描画用バックエンド
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve, auc
+import numpy as np
+
 import config
 from dataset import dataset
 from target_model import TargetCNN
@@ -108,7 +115,7 @@ def train_attack_models(attack_x, attack_y, attack_classes, MODEL_SAVE_DIR, logg
 
 
 # 攻撃モデルの評価
-def evaluate_attack_models(dataset_instance, target_model, attack_models, p1_start_time, logger):
+def evaluate_attack_models(dataset_instance, target_model, attack_models, p1_start_time, MODEL_SAVE_DIR, logger):
 	p5_start_time = time.time()
 	# ターゲットモデルの予測とラベルを取得
 	trainloader, testloader, _, _ = dataset_instance.get_target_dataloaders() # ターゲットモデルのデータローダーを取得
@@ -116,7 +123,12 @@ def evaluate_attack_models(dataset_instance, target_model, attack_models, p1_sta
 	target_preds_out, target_labels_out = get_predictions(target_model, testloader) # 非メンバーの予測とラベル
 
 	class_precisions = []
-	class_recalls = []	
+	class_recalls = []
+ 
+ 
+	# ROC曲線用に全クラスの確率と真のラベルを保存するリスト
+	all_probs_in = []
+	all_trues = []
 
 
 	for class_idx in trange(config.NUM_CLASSES, desc="Evaluating Classes"):
@@ -137,8 +149,21 @@ def evaluate_attack_models(dataset_instance, target_model, attack_models, p1_sta
 
 		# 攻撃モデルで予測
 		with torch.no_grad():
-			preds_in = attack_model(class_preds_in.to(config.DEVICE)).cpu() # メンバーの予測
-			preds_out = attack_model(class_preds_out.to(config.DEVICE)).cpu() # 非メンバーの予測
+			out_in = attack_model(class_preds_in.to(config.DEVICE))
+			out_out = attack_model(class_preds_out.to(config.DEVICE))
+			
+			preds_in = out_in.cpu()
+			preds_out = out_out.cpu()
+			
+			# クラス1(メンバー=In)の確率をSoftmaxで取得
+			prob_in = torch.softmax(preds_in, dim=1)[:, 1].numpy()
+			prob_out = torch.softmax(preds_out, dim=1)[:, 1].numpy()
+   
+		# ROC用データの集約
+		all_probs_in.extend(prob_in)
+		all_probs_in.extend(prob_out)
+		all_trues.extend([1] * len(prob_in))
+		all_trues.extend([0] * len(prob_out))
 
 		# クラスごとの指標計算
 		tp = (preds_in.argmax(dim=1) == 1).sum().item()
@@ -151,20 +176,43 @@ def evaluate_attack_models(dataset_instance, target_model, attack_models, p1_sta
 		class_precisions.append(precision)
 		class_recalls.append(recall)  
 
+	# --- ROC曲線の計算と描画 ---
+	all_trues = np.array(all_trues)
+	all_probs_in = np.array(all_probs_in)
+	fpr, tpr, thresholds = roc_curve(all_trues, all_probs_in)
+	roc_auc = auc(fpr, tpr)
+	# Carlini論文に基づく対数スケールのROC曲線描画
+	plt.figure(figsize=(8, 8))
+	plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'Attack ROC (AUC = {roc_auc:.4f})')
+	plt.plot([1e-5, 1], [1e-5, 1], color='navy', lw=2, linestyle='--', label='Random Guess')
+	# 軸のスケールを対数に設定
+	plt.xscale('log')
+	plt.yscale('log')
+	# 表示範囲の設定 (0は対数で表現できないため、極小値 1e-5 から 1.0 とする)
+	plt.xlim([1e-5, 1.0])
+	plt.ylim([1e-5, 1.05])
+	plt.xlabel('False Positive Rate (FPR)')
+	plt.ylabel('True Positive Rate (TPR)')
+	plt.title('Membership Inference Attack ROC Curve (Log-Log Scale)')
+	plt.legend(loc="lower right")
+	plt.grid(True, which="both", ls="--", alpha=0.5)
+	roc_plot_path = os.path.join(MODEL_SAVE_DIR, "roc_curve_log.png")
+	plt.savefig(roc_plot_path, dpi=300, bbox_inches='tight')
+	plt.close()
+ 
+	# 特定の低FPRにおけるTPRの抽出
+	# fprが特定値よりも小さい環境下での最大TPRを取得: FPRが1%の境界線に最も近い(許容値の中で最も緩い)ときの最大の攻撃成功率を取得
+	tpr_at_1_fpr = tpr[fpr <= 0.01].max() if len(tpr[fpr <= 0.01]) > 0 else 0.0
+	tpr_at_01_fpr = tpr[fpr <= 0.001].max() if len(tpr[fpr <= 0.001]) > 0 else 0.0
+	tpr_at_001_fpr = tpr[fpr <= 0.0001].max() if len(tpr[fpr <= 0.0001]) > 0 else 0.0
 
-	# 統計量の表示 (論文に準じて中央値を採用)
-	logger.info(f"Attack Model Evaluation:")
-	# logger.info("class_precisions:", [f"{x:.4f}" for x in class_precisions])
-	# logger.info("class_recalls:", [f"{x:.4f}" for x in class_recalls])
-	import numpy as np
-	logger.info(f"Precision Median: {np.median(class_precisions):.4f}")
-	logger.info(f"Precision Variance: {np.var(class_precisions):.4f}")
-	logger.info(f"Recall Median: {np.median(class_recalls):.4f}")
-	logger.info(f"Recall Variance: {np.var(class_recalls):.4f}")
+	logger.info(f"Global AUC: {roc_auc:.4f}")
+	logger.info(f"TPR: {tpr_at_1_fpr:.4f} at 1.0% FPR")
+	logger.info(f"TPR: {tpr_at_01_fpr:.4f} at 0.1% FPR")
+	logger.info(f"TPR: {tpr_at_001_fpr:.4f} at 0.01% FPR")
+	logger.info(f"Saved ROC curve plot to: {roc_plot_path}")
 	logger.info(f"-> {time.time() - p5_start_time:.2f} sec")
-
 	logger.info(f"Total Time: {time.time() - p1_start_time:.2f} sec -> {(time.time() - p1_start_time)/60:.2f} min")
-
 
 
 def main():
@@ -288,7 +336,7 @@ def main():
 	# 攻撃モデルの評価
 	# ----------------------------------
 	logger.info("[Phase 5] Evaluating attack model...")
-	evaluate_attack_models(dataset_instance, target_model, attack_models, p1_start_time, logger)
+	evaluate_attack_models(dataset_instance, target_model, attack_models, p1_start_time, MODEL_SAVE_DIR, logger)
 
 
 
