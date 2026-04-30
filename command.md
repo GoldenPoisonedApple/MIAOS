@@ -1,15 +1,15 @@
 # ビルド
-docker build --build-arg UID=$(id -u) --build-arg GID=$(id -g) -t mia-cifar-cu130 .
+docker build --build-arg UID=$(id -u) --build-arg GID=$(id -g) -t mia_ito .
 # ビルド(arm64)
-docker build -f Dockerfile.arm64 --build-arg UID=$(id -u) --build-arg GID=$(id -g) -t mia-cifar-cu130 .
+docker build -f Dockerfile.arm64 --build-arg UID=$(id -u) --build-arg GID=$(id -g) -t mia_ito .
 
 
 # 実行
-docker run --gpus all -it --rm --shm-size=8g -v $(pwd):/workspace mia-cifar-cu130
+docker run --gpus all -it --rm --shm-size=8g -v $(pwd):/workspace mia_ito
 
 
 # バックグラウンド実行
-docker run -d --gpus all -it --rm --shm-size=8g -v $(pwd):/workspace mia-cifar-cu130 python main.py
+docker run -d --gpus all -it --rm --shm-size=8g -v $(pwd):/workspace mia_ito python main.py
 
 # ログ
 docker logs -f <container_id>
