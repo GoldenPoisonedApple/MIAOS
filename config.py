@@ -1,19 +1,29 @@
 import os
 import torch
+from enum import Enum
+
+# 攻撃手法の列挙型
+class mia_method(Enum):
+	OFFLINE_LIRA = "Offline LiRA"
+	SHOKRI = "Shokri"
+ 
+# 攻撃手法の選択
+MIA_METHOD = mia_method.SHOKRI
+
 
 # シャドーモデルの数
-NUM_SHADOW_MODELS = 100
+NUM_SHADOW_MODELS = 10
 # クラス数
 NUM_CLASSES = 100
 
 # バッチサイズ: 1回の重み更新に用いるサンプルの数
 BATCH_SIZE = 256
 # 最大エポック数: データセット全体を学習する回数
-MAX_EPOCHS = 200
+MAX_EPOCHS = 20
 # データロードに使用するサブプロセス数
 # CIFARのやつはオンメモリより0で
-NUM_WORKERS = os.cpu_count() or 4
-# NUM_WORKERS = 0
+# NUM_WORKERS = os.cpu_count() or 4
+NUM_WORKERS = 0
 
 # デバイスの設定 (GPUが利用可能であればCUDA、そうでなければCPU)
 # CUDA: Compute Unified Device Architecture (NVIDIAの並列計算プラットフォーム)
@@ -25,13 +35,10 @@ DATA_DIR = './data'
 # モデルデータの保存先ディレクトリ
 MODEL_DIR = './models'
 
-# 指定ターゲットモデル
-ASSIGNED_MODEL_PATH = ""
-
 # モデル保存名
 TARGET_MODEL_NAME = "target_model.pth"
-ATTACK_DATASET_NAME = "attack_dataset.pth"
-ATTACK_MODEL_NAME_TEMPLATE = "attack_models/{}.pth"
+SHADOW_MODEL_NAME = "shadow_models.pth"
+ATTACK_MODEL_NAME = "attack_models.pth"
 
 # データセットの数
 # 各モデルの訓練データとテストデータは重複無し、同サイズ

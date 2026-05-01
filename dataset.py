@@ -110,4 +110,3 @@ class dataset:
 			pin_memory=True if config.DEVICE.type == 'cuda' else False
 		)
 		return shadow_train_loader, shadow_test_loader, len(shadow_train_idx), len(shadow_test_idx)
-
