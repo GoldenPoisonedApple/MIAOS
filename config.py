@@ -12,14 +12,14 @@ MIA_METHOD = mia_method.SHOKRI
 
 
 # シャドーモデルの数
-NUM_SHADOW_MODELS = 10
+NUM_SHADOW_MODELS = 100
 # クラス数
 NUM_CLASSES = 100
 
 # バッチサイズ: 1回の重み更新に用いるサンプルの数
 BATCH_SIZE = 256
 # 最大エポック数: データセット全体を学習する回数
-MAX_EPOCHS = 20
+MAX_EPOCHS = 200
 # データロードに使用するサブプロセス数
 # CIFARのやつはオンメモリより0で
 # NUM_WORKERS = os.cpu_count() or 4
