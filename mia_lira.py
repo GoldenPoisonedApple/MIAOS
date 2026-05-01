@@ -51,6 +51,8 @@ class MIA_LIRA(MIA_Attack):
 			# 予測値の抽出
 			in_preds, in_labels = MIA_Attack.get_predictions(shadow_models[i], target_train_loader) # 訓練データ
 			out_preds, out_labels = MIA_Attack.get_predictions(shadow_models[i], target_test_loader) # テストデータ
+			shadow_models[i].to('cpu') # GPUメモリ節約
+
 			# 正解クラスの確率抽出
 			# torch.arange(len(target_l_in)): 0からlen(target_l_in)-1までのインデックスを作成
 			# → つまりそのインデックスに対応する正解クラスインデックスが[]内で作成

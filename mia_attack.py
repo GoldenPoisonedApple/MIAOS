@@ -68,6 +68,7 @@ class MIA_Attack(ABC):
 			shadow_model = model_factory().to(config.DEVICE)
 			# モデルを訓練
 			shadow_model = MIA_Attack.train_model(shadow_model, shadow_train_loader, config.MAX_EPOCHS)
+			shadow_model.to('cpu') # GPUメモリ節約
 			# リストを追加
 			shadow_models.append(shadow_model)
 			state_dicts.append(shadow_model.state_dict())
@@ -195,6 +196,7 @@ class MIA_Attack(ABC):
 			predictions: 予測結果確率(256*n, 100)
 			labels: 正解ラベル (256*n,)
 		"""
+		model = model.to(config.DEVICE)
 		model.eval() # 評価モード: 全結合、固定挙動
 		preds = []
 		labels_list = []

@@ -91,7 +91,7 @@ class dataset:
 			)
 			return target_train_loader, target_test_loader, len(self.target_train_idx), len(self.target_test_idx)
 
-	def get_shadow_dataloader(self, seed):
+	def get_shadow_dataloader(self, seed, shuffle=True):
 		# 毎回新しくシャドーモデルの学習用とテスト用のインデックスを分割
 		shadow_train_idx, remaining_idx = train_test_split(self.shadow_pool_indices, train_size=config.SHADOW_TRAIN_SIZE, random_state=config.SEED + seed)
 		shadow_test_idx, _ = train_test_split(remaining_idx, train_size=config.SHADOW_TEST_SIZE, random_state=config.SEED + seed)
@@ -99,7 +99,7 @@ class dataset:
 		# シャドーモデルの学習用とテスト用のDataLoaderを作成
 		shadow_train_loader = DataLoader(
 			Subset(self.full_dataset, shadow_train_idx), 
-			batch_size=config.BATCH_SIZE, shuffle=True, 
+			batch_size=config.BATCH_SIZE, shuffle=shuffle, 
 			num_workers=config.NUM_WORKERS,
 			pin_memory=True if config.DEVICE.type == 'cuda' else False
 		)

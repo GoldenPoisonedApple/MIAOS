@@ -21,10 +21,12 @@ class MIA_Shokri(MIA_Attack):
 		# ------------- 特徴量抽出 -------------
 		attack_x, attack_y, attack_classes = [], [], []
 		for i in trange(config.NUM_SHADOW_MODELS, desc="Feature Extraction with Shadow Models"):
-			shadow_train_loader, shadow_test_loader, _, _ = self.dataset.get_shadow_dataloader(seed=i)
+			# shuffle=False: デバッグを簡単にするため
+			shadow_train_loader, shadow_test_loader, _, _ = self.dataset.get_shadow_dataloader(seed=i, shuffle=False)
 			# 予測値の抽出
 			in_preds, in_labels = MIA_Attack.get_predictions(shadow_models[i], shadow_train_loader)
 			out_preds, out_labels = MIA_Attack.get_predictions(shadow_models[i], shadow_test_loader)
+			shadow_models[i].to('cpu') # GPUメモリ節約
    
 			# 特徴量追加
 			attack_x.append(in_preds.cpu())
