@@ -21,8 +21,8 @@ class MIA_Shokri(MIA_Attack):
 		# ------------- 特徴量抽出 -------------
 		attack_x, attack_y, attack_classes = [], [], []
 		for i in trange(config.NUM_SHADOW_MODELS, desc="Feature Extraction with Shadow Models"):
-			# shuffle=False: デバッグを簡単にするため
-			shadow_train_loader, shadow_test_loader, _, _ = self.dataset.get_shadow_dataloader(seed=i, shuffle=False)
+			# 評価用のデータローダーを取得
+			shadow_train_loader, shadow_test_loader, _, _ = self.dataset.get_eval_shadow_dataloader(seed=i)
 			# 予測値の抽出
 			in_preds, in_labels = MIA_Attack.get_predictions(shadow_models[i], shadow_train_loader)
 			out_preds, out_labels = MIA_Attack.get_predictions(shadow_models[i], shadow_test_loader)
@@ -57,7 +57,7 @@ class MIA_Shokri(MIA_Attack):
 			class_loader = torch.utils.data.DataLoader(class_dataset, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=config.NUM_WORKERS, pin_memory=True)
 			# 攻撃モデルの訓練
 			attack_model = AttackNet(input_dim=config.NUM_CLASSES).to(config.DEVICE)
-			attack_model = MIA_Attack.train_model(attack_model, class_loader, config.MAX_EPOCHS)
+			attack_model = MIA_Attack.train_model(attack_model, class_loader, config.ATTACK_MODEL_EPOCHS)
 			# 追加
 			attack_models[class_idx] = attack_model
 			state_dicts.append(attack_model.state_dict())

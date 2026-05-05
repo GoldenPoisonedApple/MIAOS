@@ -20,6 +20,7 @@ NUM_CLASSES = 100
 BATCH_SIZE = 256
 # 最大エポック数: データセット全体を学習する回数
 MAX_EPOCHS = 200
+ATTACK_MODEL_EPOCHS = 10
 # データロードに使用するサブプロセス数
 # CIFARのやつはオンメモリより0で
 # NUM_WORKERS = os.cpu_count() or 4
