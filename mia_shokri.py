@@ -57,7 +57,7 @@ class MIA_Shokri(MIA_Attack):
 			class_loader = torch.utils.data.DataLoader(class_dataset, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=config.NUM_WORKERS, pin_memory=True)
 			# 攻撃モデルの訓練
 			attack_model = AttackNet(input_dim=config.NUM_CLASSES).to(config.DEVICE)
-			attack_model = MIA_Attack.train_model(attack_model, class_loader, config.MAX_EPOCHS)
+			attack_model = MIA_Attack.train_model(attack_model, class_loader, config.ATTACK_MODEL_EPOCHS)
 			# 追加
 			attack_models[class_idx] = attack_model
 			state_dicts.append(attack_model.state_dict())
