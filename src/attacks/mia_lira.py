@@ -1,11 +1,12 @@
 import numpy as np
 import logging
-from mia_attack import MIA_Attack
-from dataset import dataset
+from src.attacks.mia_attack import MIA_Attack
+from src.data.dataset import dataset
 import torch
 import torch.nn as nn
 from tqdm import trange
-import config
+import src.core.config as cfg
+from src.core.config import ExperimentConfig
 
 # ROC曲線描画用に追加
 import matplotlib
@@ -16,8 +17,8 @@ import os
 
 # 最尤度攻撃(LiRA)
 class MIA_LIRA(MIA_Attack):
-	def __init__(self, dataset: dataset, MODEL_SAVE_DIR: str, logger: logging.Logger):
-		super().__init__(dataset, MODEL_SAVE_DIR, logger)
+	def __init__(self, dataset: dataset, MODEL_SAVE_DIR: str, logger: logging.Logger, config: ExperimentConfig):
+		super().__init__(dataset, MODEL_SAVE_DIR, logger, config)
 
   
 	# 正規分布に変換
@@ -47,7 +48,7 @@ class MIA_LIRA(MIA_Attack):
 		# ------------- 特徴量抽出 -------------
 		shadow_in_logits = []
 		shadow_out_logits = []
-		for i in trange(config.NUM_SHADOW_MODELS, desc="Feature Extraction with Shadow Models"):
+		for i in trange(self.config.num_shadow_models, desc="Feature Extraction with Shadow Models"):
 			# 予測値の抽出
 			in_preds, in_labels = MIA_Attack.get_predictions(shadow_models[i], target_train_loader) # 訓練データ
 			out_preds, out_labels = MIA_Attack.get_predictions(shadow_models[i], target_test_loader) # テストデータ
