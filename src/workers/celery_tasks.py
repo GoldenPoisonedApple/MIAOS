@@ -36,7 +36,7 @@ def execute_attack_task(params_json):
         run_experiment(config, work_dir=temp_dir)
         
         # 実行結果アップロード
-        minio_utils.upload_results_dir(temp_dir, remote_prefix=f"exp/{config.experiment_name}_{config.notes}")
+        minio_utils.upload_results_dir(temp_dir, remote_prefix=f"exp/{config.experiment_name}")
         
     
     
