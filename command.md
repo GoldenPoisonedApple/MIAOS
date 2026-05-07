@@ -1,7 +1,5 @@
 # ビルド
 docker build -t mia_ito .
-# ビルド(arm64)
-docker build -f Dockerfile.arm64 -t mia_ito .
 
 
 # 実行
