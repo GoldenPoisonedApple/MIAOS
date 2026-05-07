@@ -28,6 +28,7 @@ RUN pip install --no-cache-dir \
 		celery \
 		redis \
 		minio \
+		boto3 \
 		requests \
 		python-dotenv
 

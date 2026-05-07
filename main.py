@@ -19,9 +19,11 @@ def main():
 	# 保存ディレクトリの作成
 	work_dir = os.path.join(cfg.MODEL_DIR, datetime.now().strftime("%Y-%m-%d_%H-%M"))
 	os.makedirs(work_dir, exist_ok=True)
+	# 手動実行の場合 MODEL_DIR 配下に存在するはず
+	assigned_model_path = os.path.join(cfg.MODEL_DIR, args.assigned_model_path)
 	# Configオブジェクトを作成
 	config = ExperimentConfig(
-		assigned_model_path=args.assigned_model_path,
+		assigned_model_path=assigned_model_path,
 		notes=args.notes,
 		load_target_model=args.load_target_model,
 		load_shadow_models=args.load_shadow_models,

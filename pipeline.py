@@ -28,8 +28,6 @@ def run_experiment(config: ExperimentConfig, work_dir: str):
   
 	# パス整形
 	assigned_model_path = config.assigned_model_path.strip() # パスの前後の空白を削除
-	# 現時点では既存のモデルは cfg.MODEL_DIR の下にある前提とする
-	assigned_model_path = os.path.join(cfg.MODEL_DIR, assigned_model_path)
 	# 早期終了判定
 	if is_assigned_model_path:
 		# 指定されたパスのディレクトリが存在しない場合早期終了

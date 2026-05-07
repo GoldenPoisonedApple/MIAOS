@@ -9,6 +9,14 @@ load_dotenv()
 PC_NAME: str = os.getenv("PC_NAME")
 # RedisのURL
 REDIS_URL: str = os.getenv("REDIS_URL")
+# MinIOのURL
+MINIO_URL: str = os.getenv("MINIO_URL")
+# MinIOのアクセスキー
+MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY")
+# MinIOのシークレットキー
+MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY")
+# MinIOのバケット名
+MINIO_BUCKET_NAME: str = os.getenv("MINIO_BUCKET_NAME")
 
 # デバイス
 DEVICE: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -16,6 +24,8 @@ DEVICE: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cp
 DATA_DIR: str = './data'
 # モデルの保存先ディレクトリ
 MODEL_DIR: str = './models'
+# キャッシュ
+LOCAL_CACHE_DIR: str = './cache'
 # ターゲットモデルの保存名
 TARGET_MODEL_NAME: str = 'target_model.pth'	
 # シャドーモデルの保存名
@@ -30,6 +40,8 @@ class MIAMethod(Enum):
  
 @dataclass
 class ExperimentConfig:
+	# 実験名
+	experiment_name: str = ""
 	# 指定パスが存在する場合、そのパスを使用
 	assigned_model_path: str = ""
 	# ノート

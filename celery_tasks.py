@@ -8,7 +8,7 @@ import os
 from config import ExperimentConfig, MIAMethod
 import config as cfg
 from pipeline import run_experiment
-# import minio_utils (Phase3で作るMinIOアップロード用モジュール)
+import minio_utils
 
 app = Celery('mia_tasks', broker=cfg.REDIS_URL)
 
@@ -20,19 +20,23 @@ def execute_attack_task(params_json):
     # JSONからConfigオブジェクトを復元 指定されていない場合はデフォルト値が使用される
     config = ExperimentConfig(**params_json)
     
-    # # 2. 他のPCのNASと衝突しないよう、一時ディレクトリを生成 (例: /tmp/task_abcd1234)
-    # with tempfile.TemporaryDirectory(prefix="ito_research_") as temp_dir:
+    # 依存モデルが存在する場合
+    if config.assigned_model_path != "":
+        # ダウンロード
+		# MinIOから落としてきたローカルの絶対パスを取得し、設定を上書きする
+        local_model_path = minio_utils.download_model_dir(config.assigned_model_path)
+        config.assigned_model_path = local_model_path
+
+    
+    # 他のPCのNASと衝突しないよう、一時ディレクトリを生成
+    with tempfile.TemporaryDirectory(prefix="ito_research_") as temp_dir:
         
-    #     # 3. パイプライン実行 (結果は temp_dir に保存される)
-    #     run_experiment(config, work_dir=temp_dir)
+        # パイプライン実行 (結果は temp_dir に保存される)
+        run_experiment(config, work_dir=temp_dir)
         
-    #     # 4. Phase 3以降への布石: temp_dir の中身を丸ごと MinIO にアップロード
-    #     # minio_utils.upload_directory(temp_dir, bucket_name="results")
+        # 実行結果アップロード
+        minio_utils.upload_results_dir(temp_dir, remote_prefix=f"exp/{config.experiment_name}_{config.notes}")
         
-    #     # Tracking APIへの送信処理などもここで行う
-    temp_dir = os.path.join(cfg.MODEL_DIR, "celery_test_output")
-    os.makedirs(temp_dir, exist_ok=True)
-    run_experiment(config, work_dir=temp_dir)
     
     
     # withブロックを抜けると temp_dir は自動的に削除（クリーンアップ）される
