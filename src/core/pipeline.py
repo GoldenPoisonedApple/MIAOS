@@ -41,15 +41,18 @@ def run_experiment(config: ExperimentConfig, work_dir: str):
  
 	# ロガー
 	log_file_path = os.path.join(work_dir, "execution.log")
-	logging.basicConfig(
-		level=logging.INFO,
-		format='%(asctime)s [%(levelname)s] %(message)s',
-		handlers=[
-			logging.FileHandler(log_file_path), # ファイルへの出力
-			logging.StreamHandler(sys.stdout)   # 標準出力(ターミナル)への出力
-		]
-	)
-	logger = logging.getLogger(__name__)
+	
+	logger = logging.getLogger(f"experiment_{config.experiment_name}")
+	logger.setLevel(logging.INFO)
+	logger.handlers.clear() # 既存のハンドラをクリア
+
+	file_handler = logging.FileHandler(log_file_path)
+	file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+	stream_handler = logging.StreamHandler(sys.stdout)
+	stream_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+	
+	logger.addHandler(file_handler)
+	logger.addHandler(stream_handler)
  
 	# メタ情報表示
 	logger.info("Configurations:")
@@ -131,15 +134,6 @@ def run_experiment(config: ExperimentConfig, work_dir: str):
 	logger.info(f"Total time: {time.time() - p1_start_time:.2f} sec: {((time.time() - p1_start_time) / 60):.2f} min: {((time.time() - p1_start_time) / 3600):.2f} hr")
 
 	# ログをディスクに書き出してファイルを閉じる
-	close_logger()
-
-# ロガーを閉じる
-def close_logger():
-	"""
-	現在アクティブなすべてのロガーハンドラーをフラッシュし、ファイルを閉じる。
-	アップロード前にログファイルを完全に書き出すために必須。
-	"""
-	logger = logging.getLogger()
 	for handler in logger.handlers[:]:
 		handler.flush()
 		handler.close()

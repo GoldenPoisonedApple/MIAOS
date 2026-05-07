@@ -3,7 +3,7 @@ from celery import Celery
 import tempfile
 import shutil
 import os
-
+import time
 
 from src.core.config import ExperimentConfig, MIAMethod
 import src.core.config as cfg
@@ -34,6 +34,9 @@ def execute_attack_task(params_json):
         
         # パイプライン実行 (結果は temp_dir に保存される)
         run_experiment(config, work_dir=temp_dir)
+        
+        # OSのファイルシステム同期を確実に行うための待機
+        time.sleep(2)
         
         # 実行結果アップロード
         minio_utils.upload_results_dir(temp_dir, remote_prefix=f"exp/{config.experiment_name}")
