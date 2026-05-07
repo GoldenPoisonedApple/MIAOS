@@ -15,16 +15,16 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc
 import numpy as np
 
-import config
+from config import ExperimentConfig
+import config as cfg
 from dataset import dataset
 
 class MIA_Attack(ABC):
-	def __init__(self, dataset: dataset, MODEL_SAVE_DIR: str, logger: logging.Logger):
+	def __init__(self, dataset: dataset, MODEL_SAVE_DIR: str, logger: logging.Logger, config: ExperimentConfig):
 		self.dataset = dataset
 		self.MODEL_SAVE_DIR = MODEL_SAVE_DIR
 		self.logger = logger
-		# 保存ディレクトリの作成
-		os.makedirs(self.MODEL_SAVE_DIR, exist_ok=True)
+		self.config = config
 
 	# ターゲットモデルの訓練、評価
 	def train_target_model(self, target_model: nn.Module):
@@ -36,13 +36,13 @@ class MIA_Attack(ABC):
 			target_model: 訓練後のターゲットモデル
 		"""
 		# モデルをデバイスに転送
-		target_model = target_model.to(config.DEVICE)
+		target_model = target_model.to(cfg.DEVICE)
 		# 訓練
 		trainloader, testloader, num_train, num_test = self.dataset.get_target_dataloaders() # データ読み込み
 		self.logger.info(f"Train: {num_train}, Test: {num_test}")
-		target_model = MIA_Attack.train_model(target_model, trainloader, config.MAX_EPOCHS) # 訓練
+		target_model = MIA_Attack.train_model(target_model, trainloader, self.config.max_epochs) # 訓練
 		# モデルの保存
-		torch.save(target_model.state_dict(), os.path.join(self.MODEL_SAVE_DIR, config.TARGET_MODEL_NAME))
+		torch.save(target_model.state_dict(), os.path.join(self.MODEL_SAVE_DIR, cfg.TARGET_MODEL_NAME))
 
 		train_acc = MIA_Attack.get_accuracy(target_model, trainloader) # 訓練データに対する精度
 		test_acc = MIA_Attack.get_accuracy(target_model, testloader) # テストデータに対する精度
@@ -62,12 +62,12 @@ class MIA_Attack(ABC):
 		# シャドーモデルの訓練
 		shadow_models = []
 		state_dicts = []
-		for i in trange(config.NUM_SHADOW_MODELS, desc="Shadow Models"):
+		for i in trange(self.config.num_shadow_models, desc="Shadow Models"):
 			shadow_train_loader, shadow_test_loader, _, _ = self.dataset.get_shadow_dataloader(seed=i)
 			# モデルを作成
-			shadow_model = model_factory().to(config.DEVICE)
+			shadow_model = model_factory().to(cfg.DEVICE)
 			# モデルを訓練
-			shadow_model = MIA_Attack.train_model(shadow_model, shadow_train_loader, config.MAX_EPOCHS)
+			shadow_model = MIA_Attack.train_model(shadow_model, shadow_train_loader, self.config.max_epochs)
 			shadow_model.to('cpu') # GPUメモリ節約
 			# リストを追加
 			shadow_models.append(shadow_model)
@@ -75,8 +75,8 @@ class MIA_Attack(ABC):
 			# 評価
 			# 未実装
 		# モデルの保存
-		torch.save(state_dicts, os.path.join(self.MODEL_SAVE_DIR, config.SHADOW_MODEL_NAME))
-		self.logger.info(f"Shadow Models saved -> {os.path.join(self.MODEL_SAVE_DIR, config.SHADOW_MODEL_NAME)}")
+		torch.save(state_dicts, os.path.join(self.MODEL_SAVE_DIR, cfg.SHADOW_MODEL_NAME))
+		self.logger.info(f"Shadow Models saved -> {os.path.join(self.MODEL_SAVE_DIR, cfg.SHADOW_MODEL_NAME)}")
   
 		return shadow_models
  
@@ -102,7 +102,7 @@ class MIA_Attack(ABC):
 		roc_auc = auc(fpr, tpr)
 
 		plt.figure(figsize=(8, 8))
-		plt.plot(fpr, tpr, color='green', lw=1, marker='o', markersize=3, label=f'{config.MIA_METHOD.value} (AUC = {roc_auc:.4f})')
+		plt.plot(fpr, tpr, color='green', lw=1, marker='o', markersize=3, label=f'{self.config.mia_method.value} (AUC = {roc_auc:.4f})')
 		plt.plot([1e-5, 1], [1e-5, 1], color='navy', lw=2, linestyle='--', label='Random Guess')
 		plt.axvline(x=0.01, linestyle='--', linewidth=1, color='blue', label='1% FPR')
 		plt.axvline(x=0.001, linestyle='--', linewidth=1, color='blue', label='0.1% FPR')
@@ -118,13 +118,13 @@ class MIA_Attack(ABC):
 		plt.legend(loc="lower right")
 		plt.grid(True, which="both", ls="--", alpha=0.5)
 		# 保存
-		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, f"roc_curve_{config.MIA_METHOD.value}.png")
+		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, f"roc_curve_{self.config.mia_method.value}.png")
 		plt.savefig(roc_plot_path, dpi=300, bbox_inches='tight')
 		plt.close()
 		self.logger.info(f"Saved ROC curve plot to: {roc_plot_path}")
   
 		# ------- 総合評価 -------  
-		self.logger.info(f"--- {config.MIA_METHOD.value} Results ---")
+		self.logger.info(f"--- {self.config.mia_method.value} Results ---")
 		self.logger.info(f"Global AUC: {roc_auc:.4f}")
 	
 		tpr_at_1_fpr, threshold_at_1_fpr = MIA_Attack.get_tpr_and_threshold(fpr, tpr, thresholds, 0.01)
@@ -152,7 +152,7 @@ class MIA_Attack(ABC):
 			model: 訓練後のモデル
 		"""
 		# モデルの初期化
-		model = model.to(config.DEVICE)
+		model = model.to(cfg.DEVICE)
 		# 損失関数とオプティマイザの定義
 		criterion = nn.CrossEntropyLoss()
 		# lr (Learning Rate): 学習率
@@ -172,7 +172,7 @@ class MIA_Attack(ABC):
 				# data: (labels, inputs)
 				# to(device): データをGPUに転送
 				# non_blocking=True: 非同期にデータ転送、pin_memory=Trueとの組み合わせ
-				inputs, labels = inputs.to(config.DEVICE, non_blocking=True), labels.to(config.DEVICE, non_blocking=True)
+				inputs, labels = inputs.to(cfg.DEVICE, non_blocking=True), labels.to(cfg.DEVICE, non_blocking=True)
 				# 勾配の初期化
 				optimizer.zero_grad()
 				outputs = model(inputs) # 順伝播
@@ -196,13 +196,13 @@ class MIA_Attack(ABC):
 			predictions: 予測結果確率(256*n, 100)
 			labels: 正解ラベル (256*n,)
 		"""
-		model = model.to(config.DEVICE)
+		model = model.to(cfg.DEVICE)
 		model.eval() # 評価モード: 全結合、固定挙動
 		preds = []
 		labels_list = []
 		with torch.no_grad(): # 評価時は勾配計算を無効化しメモリ消費を抑える
 			for inputs, labels in loader:
-				inputs = inputs.to(config.DEVICE, non_blocking=True)
+				inputs = inputs.to(cfg.DEVICE, non_blocking=True)
 				outputs = torch.softmax(model(inputs), dim=1) # 出力を確率に変換
 				preds.append(outputs.cpu()) # outputsはGPUにあるんで、確率はCPUに転送してリストに追加
 				labels_list.append(labels) # ラベルもリストに追加
@@ -224,7 +224,7 @@ class MIA_Attack(ABC):
 		model.eval() # 評価モード: 全結合、固定挙動
 		with torch.no_grad(): # 評価時は勾配計算を無効化しメモリ消費を抑える
 			for inputs, labels in test_loader:
-				inputs, labels = inputs.to(config.DEVICE, non_blocking=True), labels.to(config.DEVICE, non_blocking=True)
+				inputs, labels = inputs.to(cfg.DEVICE, non_blocking=True), labels.to(cfg.DEVICE, non_blocking=True)
 				outputs = model(inputs) # 推論
 				_, predicted = torch.max(outputs.data, 1) # 出力の最大値のインデックス取得
 				# 正解数と総数を更新

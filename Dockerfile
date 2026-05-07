@@ -24,7 +24,12 @@ RUN pip install --no-cache-dir \
     matplotlib \
     tqdm \
     pandas \
-    jupyterlab
+    jupyterlab \
+		celery \
+		redis \
+		minio \
+		requests \
+		python-dotenv
 
 ENV TORCH_HOME=/workspace/.cache/torch
 

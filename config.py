@@ -1,61 +1,70 @@
 import os
 import torch
 from enum import Enum
+from dataclasses import dataclass
+from dotenv import load_dotenv
+
+load_dotenv()
+# ワーカーのPC名
+PC_NAME: str = os.getenv("PC_NAME")
+# RedisのURL
+REDIS_URL: str = os.getenv("REDIS_URL")
+
+# デバイス
+DEVICE: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# データセットの保存先ディレクトリ
+DATA_DIR: str = './data'
+# モデルの保存先ディレクトリ
+MODEL_DIR: str = './models'
+# ターゲットモデルの保存名
+TARGET_MODEL_NAME: str = 'target_model.pth'	
+# シャドーモデルの保存名
+SHADOW_MODEL_NAME: str = 'shadow_models.pth'
+# 攻撃モデルの保存名
+ATTACK_MODEL_NAME: str = 'attack_models.pth'
 
 # 攻撃手法の列挙型
-class mia_method(Enum):
+class MIAMethod(Enum):
 	OFFLINE_LIRA = "Offline LiRA"
 	SHOKRI = "Shokri"
  
-# 攻撃手法の選択
-MIA_METHOD = mia_method.SHOKRI
+@dataclass
+class ExperimentConfig:
+	# 指定パスが存在する場合、そのパスを使用
+	assigned_model_path: str = ""
+	# ノート
+	notes: str = ""
+	# ターゲットモデルを読み込むかどうか
+	load_target_model: bool = False
+	# シャドーモデルを読み込むかどうか
+	load_shadow_models: bool = False
+	# 攻撃モデルを読み込むかどうか
+	load_attack_models: bool = False
+	# 攻撃手法
+	mia_method: MIAMethod = MIAMethod.OFFLINE_LIRA
+	# シャドーモデルの数
+	num_shadow_models: int = 10
+	# クラス数
+	num_classes: int = 100
+	# バッチサイズ
+	batch_size: int = 256
+	# 最大エポック数
+	max_epochs: int = 20
+	# 攻撃モデルのエポック数
+	attack_model_epochs: int = 10
+	# データロードに使用するサブプロセス数
+	num_workers: int = 0
+	# データセットの数
+	# 各モデルの訓練データとテストデータは重複無し、同サイズ
+	# → メンバと非メンバを同数にすることでBaseを50%にする
+	# → ターゲットとシャドーでの数を同数にすることで、挙動を近づける: 類似したデータレコードで訓練された類似のモデルは同様に振る舞う
+	# ターゲットモデルとシャドーモデルのデータプールは重複無し → 最悪ケースを想定
+	# シャドーモデル間のデータセットは重複許容
+	target_train_size: int = 10520
+	target_test_size: int = 10520
+	shadow_train_size: int = 10520
+	shadow_test_size: int = 10520
+	# シード値
+	seed: int = 42
 
 
-# シャドーモデルの数
-NUM_SHADOW_MODELS = 100
-# クラス数
-NUM_CLASSES = 100
-
-# バッチサイズ: 1回の重み更新に用いるサンプルの数
-BATCH_SIZE = 256
-# 最大エポック数: データセット全体を学習する回数
-MAX_EPOCHS = 200
-ATTACK_MODEL_EPOCHS = 10
-# データロードに使用するサブプロセス数
-# CIFARのやつはオンメモリより0で
-# NUM_WORKERS = os.cpu_count() or 4
-NUM_WORKERS = 0
-
-# デバイスの設定 (GPUが利用可能であればCUDA、そうでなければCPU)
-# CUDA: Compute Unified Device Architecture (NVIDIAの並列計算プラットフォーム)
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# データセットの保存先ディレクトリ
-DATA_DIR = './data'
-
-# モデルデータの保存先ディレクトリ
-MODEL_DIR = './models'
-
-# モデル保存名
-TARGET_MODEL_NAME = "target_model.pth"
-SHADOW_MODEL_NAME = "shadow_models.pth"
-ATTACK_MODEL_NAME = "attack_models.pth"
-
-# データセットの数
-# 各モデルの訓練データとテストデータは重複無し、同サイズ
-# → メンバと非メンバを同数にすることでBaseを50%にする
-# → ターゲットとシャドーでの数を同数にすることで、挙動を近づける: 類似したデータレコードで訓練された類似のモデルは同様に振る舞う
-# ターゲットモデルとシャドーモデルのデータプールは重複無し → 最悪ケースを想定
-# シャドーモデル間のデータセットは重複許容
-TARGET_TRAIN_SIZE = 10520
-TARGET_TEST_SIZE = 10520
-SHADOW_TRAIN_SIZE = 10520
-SHADOW_TEST_SIZE = 10520
-
-# シード値の設定 (再現性の確保のため)
-SEED = 42
-torch.manual_seed(SEED)
-if torch.cuda.is_available():
-	torch.cuda.manual_seed_all(SEED)
- 
- 
