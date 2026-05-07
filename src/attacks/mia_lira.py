@@ -1,6 +1,6 @@
 import numpy as np
 import logging
-from mia_attack import MIA_Attack
+from src.attacks.mia_attack import MIA_Attack
 from src.data.dataset import dataset
 import torch
 import torch.nn as nn
