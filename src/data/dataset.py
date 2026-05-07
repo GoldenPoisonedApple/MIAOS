@@ -1,8 +1,8 @@
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Subset, ConcatDataset, Dataset
-import config as cfg
-from config import ExperimentConfig
+import src.core.config as cfg
+from src.core.config import ExperimentConfig
 import numpy as np
 from sklearn.model_selection import train_test_split
 import json

@@ -1,7 +1,7 @@
 # minio_utils.py の実装イメージ
 import os
 import boto3
-import config as cfg
+import src.core.config as cfg
 
 def get_s3_client():
     return boto3.client(

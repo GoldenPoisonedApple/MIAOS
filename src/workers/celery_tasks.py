@@ -5,10 +5,10 @@ import shutil
 import os
 
 
-from config import ExperimentConfig, MIAMethod
-import config as cfg
-from pipeline import run_experiment
-import minio_utils
+from src.core.config import ExperimentConfig, MIAMethod
+import src.core.config as cfg
+from src.core.pipeline import run_experiment
+import src.utils.minio_utils as minio_utils
 
 app = Celery('mia_tasks', broker=cfg.REDIS_URL)
 

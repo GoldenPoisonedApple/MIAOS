@@ -1,8 +1,8 @@
 # main.py の推奨例
 import argparse
-from config import ExperimentConfig
-import config as cfg
-from pipeline import run_experiment
+from src.core.config import ExperimentConfig
+import src.core.config as cfg
+from src.core.pipeline import run_experiment
 import os
 from datetime import datetime
 

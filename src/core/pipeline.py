@@ -11,12 +11,12 @@ import sys
 import matplotlib
 matplotlib.use('Agg') # GUIを持たないDocker環境での描画用バックエンド
 
-from config import ExperimentConfig, MIAMethod
-import config as cfg
-from dataset import dataset
-from target_model import TargetCNN
-from mia_lira import MIA_LIRA
-from mia_shokri import MIA_Shokri
+from src.core.config import ExperimentConfig, MIAMethod
+import src.core.config as cfg
+from src.data.dataset import dataset
+from src.models.target_model import TargetCNN
+from src.attacks.mia_lira import MIA_LIRA
+from src.attacks.mia_shokri import MIA_Shokri
 
 def run_experiment(config: ExperimentConfig, work_dir: str):
 	is_assigned_model_path = (config.assigned_model_path != "")

@@ -15,9 +15,9 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc
 import numpy as np
 
-from config import ExperimentConfig
-import config as cfg
-from dataset import dataset
+from src.core.config import ExperimentConfig
+import src.core.config as cfg
+from src.data.dataset import dataset
 
 class MIA_Attack(ABC):
 	def __init__(self, dataset: dataset, MODEL_SAVE_DIR: str, logger: logging.Logger, config: ExperimentConfig):
