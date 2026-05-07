@@ -29,6 +29,7 @@ def execute_attack_task(params_json):
 
     
     # 他のPCのNASと衝突しないよう、一時ディレクトリを生成
+    # ここにおける一時ディレクトリはコンテナ内の /tmp/ 配下に作成される
     with tempfile.TemporaryDirectory(prefix="ito_research_") as temp_dir:
         
         # パイプライン実行 (結果は temp_dir に保存される)

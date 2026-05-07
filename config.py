@@ -78,5 +78,11 @@ class ExperimentConfig:
 	shadow_test_size: int = 10520
 	# シード値
 	seed: int = 42
+ 
+
+	def __post_init__(self):
+		# JSON(文字列)で渡ってきた場合、Enumオブジェクトに変換する
+		if isinstance(self.mia_method, str):
+			self.mia_method = MIAMethod(self.mia_method)
 
 
