@@ -60,7 +60,6 @@ def upload_results_dir(local_dir: str, remote_prefix: str):
     """
     ローカルのディレクトリ(一時ディレクトリ)の中身をすべてMinIOにアップロードする。
     """
-    s3 = get_s3_client()
     for root, _, files in os.walk(local_dir):
         for file in files:
             local_file_path = os.path.join(root, file)
@@ -70,4 +69,5 @@ def upload_results_dir(local_dir: str, remote_prefix: str):
             remote_file_path = os.path.join(remote_prefix, relative_path)
             
             print(f"[{cfg.PC_NAME}] Uploading: {local_file_path} -> {remote_file_path}")
+            s3 = get_s3_client()
             s3.upload_file(local_file_path, cfg.MINIO_BUCKET_NAME, remote_file_path)
