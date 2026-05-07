@@ -1,12 +1,12 @@
 import numpy as np
 import logging
 from mia_attack import MIA_Attack
-from dataset import dataset
+from src.data.dataset import dataset
 import torch
 import torch.nn as nn
 from tqdm import trange
-import config as cfg
-from config import ExperimentConfig
+import src.core.config as cfg
+from src.core.config import ExperimentConfig
 
 # ROC曲線描画用に追加
 import matplotlib

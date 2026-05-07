@@ -1,15 +1,15 @@
 import numpy as np
 import logging
-from mia_attack import MIA_Attack
-from dataset import dataset
+from src.attacks.mia_attack import MIA_Attack
+from src.data.dataset import dataset
 import torch
 import torch.nn as nn
 from tqdm import trange
-import config as cfg
-from config import ExperimentConfig
+import src.core.config as cfg
+from src.core.config import ExperimentConfig
 import os
 
-from attack_model import AttackNet
+from src.models.attack_model import AttackNet
 
 # 攻撃用のモデルを作成し、攻撃
 class MIA_Shokri(MIA_Attack):
