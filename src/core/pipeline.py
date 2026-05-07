@@ -129,3 +129,18 @@ def run_experiment(config: ExperimentConfig, work_dir: str):
 	# 終了メッセージ
 	logger.info("All phases completed successfully!")
 	logger.info(f"Total time: {time.time() - p1_start_time:.2f} sec: {((time.time() - p1_start_time) / 60):.2f} min: {((time.time() - p1_start_time) / 3600):.2f} hr")
+
+	# ログをディスクに書き出してファイルを閉じる
+	close_logger()
+
+# ロガーを閉じる
+def close_logger():
+	"""
+	現在アクティブなすべてのロガーハンドラーをフラッシュし、ファイルを閉じる。
+	アップロード前にログファイルを完全に書き出すために必須。
+	"""
+	logger = logging.getLogger()
+	for handler in logger.handlers[:]:
+		handler.flush()
+		handler.close()
+		logger.removeHandler(handler)
