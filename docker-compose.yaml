@@ -1,5 +1,5 @@
 services:
-  # 1. タスク管理用キュー (Redis)
+  # タスク管理用キュー (Redis)
   redis:
     image: redis:7-alpine
     container_name: task_queue
@@ -9,8 +9,10 @@ services:
     command: redis-server --save 60 1 --loglevel warning
     volumes:
       - redis_data:/data
+    networks:
+      - default
 
-  # 2. ファイル共有ストレージ (MinIO)
+  # ファイル共有ストレージ (MinIO)
   minio:
     image: minio/minio:latest
     container_name: data_storage
@@ -25,21 +27,82 @@ services:
     volumes:
       - /mnt/kslib/minio_data:/data
     command: server /data --console-address ":9001"
+    networks:
+      - default
 
-  # 3. 実行結果・メタデータ管理用 (PostgreSQL)
+
+  # 実行結果・メタデータ管理用 (PostgreSQL)
   db:
     image: postgres:15-alpine
     container_name: metadata_db
     restart: unless-stopped
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes: # DBのデータ領域。NASに置くとI/O遅延で壊れる可能性があるためVMのローカルに作成
       - db_data:/var/lib/postgresql/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+
+  frontend:
+    build:
+      context: ./frontend   # ./frontend の Dockerfile を使用
+      target: dev  # ビルドステージ指定
+    container_name: tracking_frontend
+    # restart: unless-stopped は設けない: エラーログを残す、chargo watch でのホットリロードとの競合を避ける
+    environment:
+      - APP_ENV=dev                 # アプリ側で開発モードを認識させる
+      - CHOKIDAR_USEPOLLING=true    # ファイル変更検知を確実にする
+    volumes:
+      - ./frontend:/app             # ホストのソースコードを同期
+      - /app/node_modules           # コンテナ内の依存関係を守る(ホスト側で上書きしない)
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+
+  backend:
+    container_name: tracking_backend
+    build:
+      context: ./backend  # ./backend の Dockerfile を使用
+      target: dev
+    working_dir: /app
+    environment:
+      - APP_ENV=dev
+      - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - REDIS_URL=${REDIS_URL}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy  # DBのヘルスチェック待機
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+      - target_cache:/app/target # ビルドキャッシュを永続化して、ビルド時間短縮、 cargo watch競合回避
+      - cargo_cache:/usr/local/cargo/registry # Cargoの依存キャッシュも永続化
+    ports:
+      - "3000:3000"
+    networks:
+      - default
+
+
 
 volumes:
   redis_data:
   db_data:
+  target_cache:
+  cargo_cache:
