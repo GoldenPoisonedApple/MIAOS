@@ -3,6 +3,8 @@ from celery import Celery
 import tempfile
 import time
 import requests
+from dataclasses import asdict
+import os
 
 from src.core.config import ExperimentConfig
 import src.core.config as cfg
@@ -38,13 +40,27 @@ def execute_attack_task(params_json):
 		time.sleep(2)
 		
 		# 実行結果アップロード
-		minio_utils.upload_results_dir(temp_dir, remote_prefix=f"exp/{config.experiment_name}")
+		remote_prefix = f"exp/{config.experiment_name}"
+		minio_utils.upload_results_dir(temp_dir, remote_prefix=remote_prefix)
 		
-		# Tracking APIへの送信処理
+		# ------- Tracking APIへの送信処理 -------
+		# 実行条件 辞書変換
+		config_dict = asdict(config)
+		config_dict["mia_method"] = config.mia_method.value # Enumを文字列に変換
+		# artifacts リスト作成
+		artifacts = []
+		for root, _, files in os.walk(temp_dir):
+			for file in files:
+				# temp_dirを起点とした相対パスを計算
+				rel_path = os.path.relpath(os.path.join(root, file), temp_dir)
+				artifacts.append(rel_path)		
+		# ペイロード作成
 		payload = {
+			"minio_path": remote_prefix,
 			"worker_id": cfg.PC_NAME,
-			"metrics": metrics,       # 先ほど pipeline.py から返ってきた辞書
-			"parameters": params_json # 実行に使った元のパラメータも送っておくと便利
+			"artifacts": artifacts,	# 実行結果のファイルパスリスト
+			"metrics": metrics,       # 実行結果
+			"parameters": config_dict # 実行条件
 		}
 		try:
 			# RustのTracking APIへPOST送信
