@@ -1,0 +1,45 @@
+services:
+  # 1. タスク管理用キュー (Redis)
+  redis:
+    image: redis:7-alpine
+    container_name: task_queue
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+
+  # 2. ファイル共有ストレージ (MinIO)
+  minio:
+    image: minio/minio:latest
+    container_name: data_storage
+    restart: unless-stopped
+    ports:
+      - "9000:9000" # API用ポート
+      - "9001:9001" # Web管理コンソール用ポート
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    # kslibをマウントしたディレクトリをMinIOの保存領域として指定
+    volumes:
+      - /mnt/kslib/minio_data:/data
+    command: server /data --console-address ":9001"
+
+  # 3. 実行結果・メタデータ管理用 (PostgreSQL)
+  db:
+    image: postgres:15-alpine
+    container_name: metadata_db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes: # DBのデータ領域。NASに置くとI/O遅延で壊れる可能性があるためVMのローカルに作成
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  redis_data:
+  db_data:
