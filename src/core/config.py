@@ -17,6 +17,8 @@ MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY")
 # MinIOのバケット名
 MINIO_BUCKET_NAME: str = os.getenv("MINIO_BUCKET_NAME")
+# Tracking APIのURL
+TRACKING_API_URL: str = os.getenv("TRACKING_API_URL")
 
 # デバイス
 DEVICE: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

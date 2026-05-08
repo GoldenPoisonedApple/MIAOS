@@ -126,15 +126,20 @@ def run_experiment(config: ExperimentConfig, work_dir: str):
 	# ----------------------------------
 	logger.info("[Phase 5] Comprehensive evaluation...")
 	p5_start_time = time.time()
-	mia_class.comprehensive_evaluate(member_trues, member_scores)
+	metrics = mia_class.comprehensive_evaluate(member_trues, member_scores)
 	logger.info(f"-> {time.time() - p5_start_time:.2f} sec: {((time.time() - p5_start_time) / 60):.2f} min")
 
 	# 終了メッセージ
 	logger.info("All phases completed successfully!")
-	logger.info(f"Total time: {time.time() - p1_start_time:.2f} sec: {((time.time() - p1_start_time) / 60):.2f} min: {((time.time() - p1_start_time) / 3600):.2f} hr")
+	total_time = time.time() - p1_start_time
+	logger.info(f"Total time: {total_time:.2f} sec: {((total_time) / 60):.2f} min: {((total_time) / 3600):.2f} hr")
 
 	# ログをディスクに書き出してファイルを閉じる
 	for handler in logger.handlers[:]:
 		handler.flush()
 		handler.close()
 		logger.removeHandler(handler)
+  
+	# ▼Celeryタスクへ結果を返す▼
+	metrics["total_time_sec"] = float(total_time)
+	return metrics
