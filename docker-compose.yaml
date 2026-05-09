@@ -65,6 +65,7 @@ services:
 
 
   frontend:
+    restart: unless-stopped
     build:
       context: ./frontend   # ./frontend の Dockerfile を使用
       target: dev  # ビルドステージ指定
@@ -83,6 +84,7 @@ services:
 
 
   backend:
+    restart: unless-stopped
     container_name: tracking_backend
     build:
       context: ./backend  # ./backend の Dockerfile を使用
