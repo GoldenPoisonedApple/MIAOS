@@ -11,6 +11,12 @@ services:
       - redis_data:/data
     networks:
       - default
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   # ファイル共有ストレージ (MinIO)
   minio:
@@ -29,7 +35,12 @@ services:
     command: server /data --console-address ":9001"
     networks:
       - default
-
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   # 実行結果・メタデータ管理用 (PostgreSQL)
   db:
@@ -37,6 +48,7 @@ services:
     container_name: metadata_db
     restart: unless-stopped
     environment:
+      TZ: Asia/Tokyo
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -77,6 +89,7 @@ services:
       target: dev
     working_dir: /app
     environment:
+      - TZ=Asia/Tokyo
       - APP_ENV=dev
       - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       - REDIS_URL=${REDIS_URL}
@@ -87,9 +100,9 @@ services:
       db:
         condition: service_healthy  # DBのヘルスチェック待機
       redis:
-        condition: service_started
+        condition: service_healthy # Redisのヘルスチェック待機
       minio:
-        condition: service_started
+        condition: service_healthy # MinIOのヘルスチェック待機
     volumes:
       - ./backend:/app
       - target_cache:/app/target # ビルドキャッシュを永続化して、ビルド時間短縮、 cargo watch競合回避
