@@ -35,6 +35,10 @@ backshell:
 frontshell:
 	docker compose exec frontend /bin/sh
 
+# redisコンテナに入る
+redisshell:
+	docker compose exec redis /bin/sh
+
 
 # ------------------------------
 # Migration

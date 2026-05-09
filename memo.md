@@ -1,7 +1,7 @@
-テーブル設計
 
-condisionとexecutionとresultを分割する案で2時間位悩んだが、結局1条件1実行の方針のため統合
-ジョブキューパターン
+
+実験はidで管理することに
+<- わざわざ名前にしなくても良い、idでも一意性が付く、検索容易性がある、覚えやすく入力しやすい
 
 ## バックエンド
 なんかcargoが効かないので応急処置
@@ -41,6 +41,13 @@ noteが backend_test のデータはテスト用とするカスの手法
 
 
 ## DB
+
+テーブル設計
+
+condisionとexecutionとresultを分割する案で2時間位悩んだが、結局1条件1実行の方針のため統合
+ジョブキューパターン
+
+
 - 基本操作
 - 基本操作
 ```postgreSQL
@@ -57,3 +64,23 @@ noteが backend_test のデータはテスト用とするカスの手法
 -- whoami
 SELECT current_user;
 ```
+
+## Redis
+
+```bash
+# redisのcli起動
+redis-cli
+# キー確認
+KEYS *
+# キューの中身確認 0(最初)から-1(最後まで)
+LRANGE celery 0 -1
+```
+
+ToDo
+redisの型を用意
+
+こういうの見れたらいいよね
+[Pending]  12件
+[Running]   3件
+[Success] 120件
+[Failed]    2件

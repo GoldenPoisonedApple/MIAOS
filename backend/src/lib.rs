@@ -4,3 +4,5 @@ mod dto;
 mod config;
 mod handlers;
 mod services;
+
+mod test;
