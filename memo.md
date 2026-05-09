@@ -30,6 +30,15 @@ sea-orm-cli migrate up
 sea-orm-cli migrate down
 ```
 
+- DBのテストは順次実行にしたい
+```
+cargo test -- --test-threads=1
+```
+
+色々考えたがいい方法が無かったので
+noteが backend_test のデータはテスト用とするカスの手法
+削除されるので注意
+
 
 ## DB
 - 基本操作

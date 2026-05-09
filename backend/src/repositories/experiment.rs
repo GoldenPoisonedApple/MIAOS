@@ -1,5 +1,6 @@
 use async_trait::async_trait;
-use sea_orm::{DatabaseConnection, Set, ActiveModelTrait};
+use sea_orm::{DatabaseConnection, ActiveModelTrait, Database, ConnectOptions};
+use std::time::Duration;
 
 use crate::dto::experiment::CreateExperimentRequest;
 use crate::entities::experiment::{ActiveModel, Model};
@@ -30,26 +31,15 @@ impl ExperimentRepository {
 #[async_trait]
 impl ExperimentRepositoryTrait for ExperimentRepository {
   /// 新規実験の作成 (INSERT)
-  ///
-  /// 引数
-  /// * `id` - 実験ID
-  /// * `name` - 実験名
-  /// * `notes` - 備考
-  /// * `method` - 攻撃手法
-  /// * `batch_size` - バッチサイズ
-  /// * `max_epochs` - 最大エポック数
-  /// * `num_shadow_models` - シャドウモデル数
-  /// * `target_train_size` - ターゲットモデルのトレーニングサイズ
-  /// * `target_test_size` - ターゲットモデルのテストサイズ
-  /// * `shadow_train_size` - シャドウモデルのトレーニングサイズ
-  /// * `shadow_test_size` - シャドウモデルのテストサイズ
+	/// * request: CreateExperimentRequest - 実験の作成リクエスト
+	/// * 戻り値: Result<Model, sea_orm::DbErr> - 実験の作成結果
   async fn create(
-    &self,
-    request: CreateExperimentRequest,
-  ) -> Result<Model, sea_orm::DbErr> {
+		&self,
+		request: CreateExperimentRequest,
+	) -> Result<Model, sea_orm::DbErr> {
     // DTOをActiveModelに変換
     let active_model = ActiveModel::from(request);
-    // データベースに保存 戻り値はResult<Model, sea_orm::DbErr>
+    // データベースに保存 戻り値はResult<Model, sea_orm::DbErr> 戻り値はResult<Model, sea_orm::DbErr>
     active_model.insert(&self.conn).await
   }
 
@@ -102,4 +92,67 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
 
   //   Ok(result.rows_affected())
   // }
+}
+
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+	use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
+  use crate::entities::experiment::{MiaMethod, ExperimentStatus, Entity, Column};
+
+	/// DBテストの前処理
+	async fn setup() -> ExperimentRepository {
+		// DB接続
+		let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+		let mut connect_options = ConnectOptions::new(database_url);
+		connect_options.max_connections(1)
+			.min_connections(1)
+			.acquire_timeout(Duration::from_secs(10))
+			.connect_timeout(Duration::from_secs(10))
+			.idle_timeout(Duration::from_secs(10))
+			.max_lifetime(Duration::from_secs(10))
+			.sqlx_logging(true);	// 実行されたSQLのログ出力
+		let conn = Database::connect(connect_options).await.unwrap();
+		tracing::info!("Connected to database via SeaORM");
+		// テストデータの削除
+		Entity::delete_many()
+			.filter(Column::Notes.eq("backend_test"))
+			.exec(&conn).await.unwrap();
+		// リポジトリインスタンス作成
+		let repository = ExperimentRepository::new(conn);
+
+
+		repository
+	}
+
+  #[tokio::test]
+  async fn test_create_experiment() {
+
+		// Arrange
+		let repository = setup().await;
+		let request = CreateExperimentRequest {
+			name: "test_experiment".to_string(),
+			notes: Some("backend_test".to_string()),
+			method: MiaMethod::OfflineLira,
+			batch_size: 10,
+			max_epochs: 10,
+			num_shadow_models: 10,
+			target_train_size: 10,
+			target_test_size: 10,
+			shadow_train_size: 10,
+			shadow_test_size: 10,
+			seed: 10,
+			hyperparameters: serde_json::json!({}),
+			base_experiment_id: None,
+			load_target_model: false,
+			load_shadow_model: false,
+			load_attack_model: false,
+		};
+		// Act
+		let result = repository.create(request).await.unwrap();
+		// Assert
+		assert_eq!(result.name, "test_experiment");
+		assert_eq!(result.status, ExperimentStatus::Waiting);
+  }
 }
