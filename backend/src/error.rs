@@ -8,7 +8,7 @@ use thiserror::Error;
 pub enum ServerError {
   /// DBエラー
   #[error("Database error: {0}")]
-  DatabaseError(#[from] sqlx::Error),
+  DatabaseError(#[from] sea_orm::DbErr),
 
   /// Redisエラー
   #[error("Redis error: {0}")]

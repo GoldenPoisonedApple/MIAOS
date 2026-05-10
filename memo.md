@@ -44,6 +44,13 @@ cargo test repositories::task -- --nocapture
 noteが backend_test のデータはテスト用とするカスの手法
 削除されるので注意
 
+リポジトリのこの処理はserviceかなと一瞬考えたが、sea_ormの知識をrepository以外に流出させるのは良くないのでそのままに
+```rust
+// DTOをActiveModelに変換
+let active_model = ActiveModel::from(request);
+```
+
+
 
 ## DB
 

@@ -1,7 +1,6 @@
 use crate::error::ServerError;
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
-use celery::prelude::*;
 use deadpool_redis::Pool;
 use redis::AsyncCommands;
 use serde_json::Value;
@@ -9,10 +8,8 @@ use uuid::Uuid;
 
 use crate::dto::task::CreateTaskRequest;
 use crate::entities::task::Task;
+use crate::infrastructure::run_attack;
 
-/// 追加するタスク
-#[celery::task(name = "mia_tasks.run_attack")]
-async fn run_attack(params: CreateTaskRequest) {}
 
 #[async_trait]
 pub trait TaskRepositoryTrait: Send + Sync {
@@ -153,25 +150,16 @@ impl TaskRepositoryTrait for TaskRepository {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use deadpool_redis::{Config, Runtime};
 	use crate::entities::experiment::MiaMethod;
+	use crate::infrastructure::{establish_redis_connection, establish_celery_app};
 
 	/// テストの前処理
   async fn setup() -> TaskRepository {
     // Redis接続
-    let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
-    let cfg = Config::from_url(&redis_url);
-    let pool = cfg.create_pool(Some(Runtime::Tokio1)).unwrap();
-    println!("Redis Pool created successfully");
+    let pool = establish_redis_connection().await;
     // Celeryアプリの初期化
-    let celery_app = celery::app!(
-      broker = RedisBroker { redis_url },
-      tasks = [run_attack],
-      task_routes = []
-    )
-    .await
-    .unwrap();
-    println!("Celery App created successfully");
+    let celery_app = establish_celery_app().await;
+		// リポジトリ作成
     let task_repository = TaskRepository::new(pool, celery_app);
 
 		// テストデータの削除
@@ -184,7 +172,7 @@ mod tests {
 	async fn teardown(task_repository: &TaskRepository) {
 		let tasks = task_repository.find_all_tasks().await.unwrap();
 		for task in tasks {
-			if task.args_keyword["params"]["notes"].as_str().unwrap() == "backend_test" {
+			if task.args_keyword["_params"]["notes"].as_str().unwrap() == "backend_test" {
 				task_repository.delete_by_id(task.id).await.unwrap();
 			}
 		}

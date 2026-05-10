@@ -5,47 +5,9 @@ use serde_json::Value;
 use crate::config::default::*;
 use crate::entities::experiment::{ActiveModel, MiaMethod};
 
-// --- デフォルト値 ---
-fn default_load_target_model() -> bool {
-  LOAD_TARGET_MODEL
-}
-fn default_load_shadow_model() -> bool {
-  LOAD_SHADOW_MODEL
-}
-fn default_load_attack_model() -> bool {
-  LOAD_ATTACK_MODEL
-}
-fn default_batch_size() -> i32 {
-  BATCH_SIZE
-}
-fn default_max_epochs() -> i32 {
-  MAX_EPOCHS
-}
-fn default_num_shadow_models() -> i32 {
-  NUM_SHADOW_MODELS
-}
-fn default_target_train_size() -> i32 {
-  TARGET_TRAIN_SIZE
-}
-fn default_target_test_size() -> i32 {
-  TARGET_TEST_SIZE
-}
-fn default_shadow_train_size() -> i32 {
-  SHADOW_TRAIN_SIZE
-}
-fn default_shadow_test_size() -> i32 {
-  SHADOW_TEST_SIZE
-}
-fn default_seed() -> i32 {
-  SEED
-}
-
-fn default_hyperparameters() -> Value {
-  serde_json::json!({})
-}
-
 /// 実験の作成リクエスト
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(default)] // 欠損値はデフォルト値(Default::default())を使用する
 pub struct CreateExperimentRequest {
   /// 実験名
   pub name: String,
@@ -56,48 +18,61 @@ pub struct CreateExperimentRequest {
 
   // -- 条件 --
   /// バッチサイズ
-  #[serde(default = "default_batch_size")]
   pub batch_size: i32,
   /// 最大エポック数
-  #[serde(default = "default_max_epochs")]
   pub max_epochs: i32,
   /// シャドウモデル数
-  #[serde(default = "default_num_shadow_models")]
   pub num_shadow_models: i32,
   /// ターゲットモデルのトレーニングサイズ
-  #[serde(default = "default_target_train_size")]
   pub target_train_size: i32,
   /// ターゲットモデルのテストサイズ
-  #[serde(default = "default_target_test_size")]
   pub target_test_size: i32,
   /// シャドウモデルのトレーニングサイズ
-  #[serde(default = "default_shadow_train_size")]
   pub shadow_train_size: i32,
   /// シャドウモデルのテストサイズ
-  #[serde(default = "default_shadow_test_size")]
   pub shadow_test_size: i32,
   /// シード値
-  #[serde(default = "default_seed")]
   pub seed: i32,
   /// その他のハイパーパラメータ
-  #[serde(default = "default_hyperparameters")]
   pub hyperparameters: Value,
 
   // -- データ流用 --
   /// 既存実験結果を流用する実験結果
-  #[serde(default)] // デフォルト値はNone
   pub base_experiment_id: Option<i64>,
   /// ターゲットモデルを読み込むかどうか
-  #[serde(default = "default_load_target_model")]
   pub load_target_model: bool,
   /// シャドウモデルを読み込むかどうか
-  #[serde(default = "default_load_shadow_model")]
   pub load_shadow_model: bool,
   /// 攻撃モデルを読み込むかどうか
-  #[serde(default = "default_load_attack_model")]
   pub load_attack_model: bool,
 }
 
+/// デフォルト
+/// 各種設定値は config/default.rs から引っ張る
+impl Default for CreateExperimentRequest {
+  fn default() -> Self {
+    Self {
+      name: EXPERIMENT_NAME(),
+      notes: EXPERIMENT_NOTES,
+      method: MIA_METHOD,
+      // 条件
+      batch_size: BATCH_SIZE,
+      max_epochs: MAX_EPOCHS,
+      num_shadow_models: NUM_SHADOW_MODELS,
+      target_train_size: TARGET_TRAIN_SIZE,
+      target_test_size: TARGET_TEST_SIZE,
+      shadow_train_size: SHADOW_TRAIN_SIZE,
+      shadow_test_size: SHADOW_TEST_SIZE,
+      seed: SEED,
+      hyperparameters: serde_json::json!({}),
+      // データ流用
+      base_experiment_id: None,
+      load_target_model: LOAD_TARGET_MODEL,
+      load_shadow_model: LOAD_SHADOW_MODEL,
+      load_attack_model: LOAD_ATTACK_MODEL,
+    }
+  }
+}
 
 // CreateExperimentRequest から ActiveModel への変換を定義
 impl From<CreateExperimentRequest> for ActiveModel {
@@ -131,14 +106,13 @@ impl From<CreateExperimentRequest> for ActiveModel {
   }
 }
 
-
 /// 実験の結果更新リクエスト
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateResultsRequest {
   /// 実験ID
   pub experiment_id: i64,
-	/// 作業PC名
-	pub worker_name: String,
+  /// 作業PC名
+  pub worker_name: String,
 
   /// 全体のAUC
   pub global_auc: f64,
@@ -146,27 +120,27 @@ pub struct UpdateResultsRequest {
   pub tpr_at_1_fpr: f64,
   /// 0.1%FPRでのTPR
   pub tpr_at_01_fpr: f64,
-	/// 拡張メトリクス
-	pub other_metrics: Value,
+  /// 拡張メトリクス
+  pub other_metrics: Value,
 
-	/// トータルの実行時間(秒)
-	pub total_time: f64,
+  /// トータルの実行時間(秒)
+  pub total_time: f64,
 
-	/// MINIOでのベースパス
-	pub minio_path: String,
-	/// データセットのパス
-	pub dataset_json_path: String,
-	/// 実行ログのパス
-	pub execution_log_path: String,
-	/// その他のファイルのパス
-	pub other_files: Value,
+  /// MINIOでのベースパス
+  pub minio_path: String,
+  /// データセットのパス
+  pub dataset_json_path: String,
+  /// 実行ログのパス
+  pub execution_log_path: String,
+  /// その他のファイルのパス
+  pub other_files: Value,
 }
 
 // UpdateResultsRequest から ActiveModel への変換を定義
 impl From<UpdateResultsRequest> for ActiveModel {
   fn from(req: UpdateResultsRequest) -> Self {
     Self {
-			id: Set(req.experiment_id),
+      id: Set(req.experiment_id),
       worker_name: Set(Some(req.worker_name)),
 
       global_auc: Set(Some(req.global_auc)),
@@ -181,8 +155,8 @@ impl From<UpdateResultsRequest> for ActiveModel {
       execution_log_path: Set(Some(req.execution_log_path)),
       other_files: Set(Some(req.other_files)),
 
-			// 他パラメータは上書きしないので空
-      ..Default::default() 
+      // 他パラメータは上書きしないので空
+      ..Default::default()
     }
   }
 }

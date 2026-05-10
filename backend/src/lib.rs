@@ -5,5 +5,6 @@ mod config;
 mod handlers;
 mod services;
 mod error;
+mod infrastructure;
 
 mod test;

@@ -4,13 +4,14 @@ use time::OffsetDateTime;
 
 use crate::dto::experiment::{CreateExperimentRequest, UpdateResultsRequest};
 use crate::entities::experiment::{ActiveModel, Model, Entity, ExperimentStatus};
+use crate::error::ServerError;
 
 #[async_trait] // 非同期関数を含むトレイト用のマクロ
 pub trait ExperimentRepositoryTrait: Send + Sync {
-  async fn create(&self, request: CreateExperimentRequest) -> Result<Model, sea_orm::DbErr>;
-	async fn update_results(&self, request: UpdateResultsRequest) -> Result<Model, sea_orm::DbErr>;
-	async fn find_all(&self) -> Result<Vec<Model>, sea_orm::DbErr>;
-	async fn delete_from_id(&self, id: i64) -> Result<u64, sea_orm::DbErr>;
+  async fn create(&self, request: CreateExperimentRequest) -> Result<Model, ServerError>;
+	async fn update_results(&self, request: UpdateResultsRequest) -> Result<Model, ServerError>;
+	async fn find_all(&self) -> Result<Vec<Model>, ServerError>;
+	async fn delete_from_id(&self, id: i64) -> Result<u64, ServerError>;
 }
 
 /// Experimentsテーブルへのアクセスを担当するリポジトリ
@@ -31,25 +32,26 @@ impl ExperimentRepository {
 impl ExperimentRepositoryTrait for ExperimentRepository {
   /// 新規実験の作成 (INSERT)
 	/// * request: CreateExperimentRequest - 実験の作成リクエスト
-	/// * 戻り値: Result<Model, sea_orm::DbErr> - 実験の作成結果
+	/// * 戻り値: Result<Model, ServerError> - 実験の作成結果
   async fn create(
 		&self,
 		request: CreateExperimentRequest,
-	) -> Result<Model, sea_orm::DbErr> {
+	) -> Result<Model, ServerError> {
     // DTOをActiveModelに変換
     let active_model = ActiveModel::from(request);
-    // データベースに保存 戻り値はResult<Model, sea_orm::DbErr> 戻り値はResult<Model, sea_orm::DbErr>
-    active_model.insert(&self.conn).await
+    // データベースに保存 Okの場合Modelが返る
+    let result = active_model.insert(&self.conn).await?;
+
+		Ok(result)
   }
 
 	/// 実験の結果を更新
 	/// * request: UpdateResultsRequest - 実験の結果更新リクエスト
-	/// * 戻り値: Result<Model, sea_orm::DbErr> - 実験の結果更新結果
+	/// * 戻り値: Result<Model, ServerError> - 実験の結果更新結果
 	async fn update_results(
 		&self,
 		request: UpdateResultsRequest,
-	) -> Result<Model, sea_orm::DbErr> {
-		let experiment_id = request.experiment_id; // 実験IDをキープ
+	) -> Result<Model, ServerError> {
 		// DTOをActiveModelに変換
 		let mut active_model = ActiveModel::from(request);
 		// ステータスをSucceededに更新
@@ -57,32 +59,25 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
 		// 完了時刻セット
 		active_model.completed_at = Set(Some(OffsetDateTime::now_utc()));
 		// リクエストのIDに合致する実験を更新
-		let result = active_model.update(&self.conn).await;
-		match result {
-			Ok(model) => Ok(model),
-			Err(sea_orm::DbErr::RecordNotUpdated) => {
-					// 更新対象が見つからなかった場合のエラーハンドリング
-					Err(sea_orm::DbErr::RecordNotFound(format!("Experiment with id {} not found", experiment_id)))
-			}
-			Err(e) => Err(e),
-		}
+		let result = active_model.update(&self.conn).await?;
+		Ok(result)
 	}
 
 	/// すべての実験を取得
-	/// * 戻り値: Result<Vec<Model>, sea_orm::DbErr> - 実験の一覧取得結果
-	async fn find_all(&self) -> Result<Vec<Model>, sea_orm::DbErr> {
+	/// * 戻り値: Result<Vec<Model>, ServerError> - 実験の一覧取得結果
+	async fn find_all(&self) -> Result<Vec<Model>, ServerError> {
 		let experiments = Entity::find().all(&self.conn).await?;
 		Ok(experiments)
 	}
 
 	/// 指定されたIDの実験を削除
 	/// * id: i64 - 削除する実験のID
-	/// * 戻り値: Result<u64, sea_orm::DbErr> - 実験の削除件数
-	async fn delete_from_id(&self, id: i64) -> Result<u64, sea_orm::DbErr> {
+	/// * 戻り値: Result<u64, ServerError> - 実験の削除件数
+	async fn delete_from_id(&self, id: i64) -> Result<u64, ServerError> {
 		let result = Entity::delete_by_id(id).exec(&self.conn).await?;
 		// 削除件数が0件の場合はエラーを返す
 		if result.rows_affected == 0 {
-			return Err(sea_orm::DbErr::RecordNotFound("Experiment not found".to_string()));
+			return Err(ServerError::NotFound(format!("Experiment with id {} not found", id)));
 		}
 		Ok(result.rows_affected)
 	}
@@ -92,26 +87,14 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
 #[cfg(test)]
 mod tests {
   use super::*;
-	use sea_orm::{Database, ConnectOptions};
-	use std::time::Duration;
-
-  use crate::entities::experiment::{MiaMethod, ExperimentStatus, Column};
+  use crate::entities::experiment::{ExperimentStatus, Column};
+	use crate::infrastructure::establish_db_connection;
 
 
 	/// DBテストの前処理
 	async fn setup() -> ExperimentRepository {
 		// DB接続
-		let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-		let mut connect_options = ConnectOptions::new(database_url);
-		connect_options.max_connections(1)
-			.min_connections(1)
-			.acquire_timeout(Duration::from_secs(10))
-			.connect_timeout(Duration::from_secs(10))
-			.idle_timeout(Duration::from_secs(10))
-			.max_lifetime(Duration::from_secs(10))
-			.sqlx_logging(true);	// 実行されたSQLのログ出力
-		let conn = Database::connect(connect_options).await.unwrap();
-		tracing::info!("Connected to database via SeaORM");
+		let conn = establish_db_connection().await;
 		// リポジトリインスタンス作成
 		let repository = ExperimentRepository::new(conn);
 		// テストデータの削除
@@ -132,20 +115,7 @@ mod tests {
 		let request = CreateExperimentRequest {
 			name: name.to_string(),
 			notes: Some("backend_test".to_string()),
-			method: MiaMethod::OfflineLira,
-			batch_size: 10,
-			max_epochs: 10,
-			num_shadow_models: 10,
-			target_train_size: 10,
-			target_test_size: 10,
-			shadow_train_size: 10,
-			shadow_test_size: 10,
-			seed: 10,
-			hyperparameters: serde_json::json!({}),
-			base_experiment_id: None,
-			load_target_model: false,
-			load_shadow_model: false,
-			load_attack_model: false,
+			..Default::default()
 		};
 
 		request
