@@ -1,29 +1,36 @@
+use crate::error::ServerError;
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
-use deadpool_redis::Pool;
-use redis::{AsyncCommands, RedisError};
-use serde_json::Value;
 use celery::prelude::*;
-use crate::error::ServerError;
+use deadpool_redis::Pool;
+use redis::AsyncCommands;
+use serde_json::Value;
+use uuid::Uuid;
 
 use crate::dto::task::CreateTaskRequest;
 use crate::entities::task::Task;
 
+/// 追加するタスク
+#[celery::task(name = "mia_tasks.run_attack")]
+async fn run_attack(params: CreateTaskRequest) {}
+
 #[async_trait]
 pub trait TaskRepositoryTrait: Send + Sync {
-  // async fn create_task(&self, request: CreateTaskRequest) -> Result<(), RedisError>;
+  async fn create_task(&self, request: CreateTaskRequest) -> Result<Uuid, ServerError>;
   async fn find_all_tasks(&self) -> Result<Vec<Task>, ServerError>;
+	async fn delete_by_id(&self, id: Uuid) -> Result<i64, ServerError>;
 }
 
 #[derive(Clone)]
 pub struct TaskRepository {
-  pool: Pool,
+  pool: Pool,                                 // Redis接続
+  celery_app: std::sync::Arc<celery::Celery>, // create_task のエンキュー用
 }
 
 impl TaskRepository {
   /// コンストラクタ
-  pub fn new(pool: Pool) -> Self {
-    Self { pool }
+  pub fn new(pool: Pool, celery_app: std::sync::Arc<celery::Celery>) -> Self {
+    Self { pool, celery_app }
   }
 
   /// ボディをデコード
@@ -32,83 +39,225 @@ impl TaskRepository {
     let json = String::from_utf8(decoded)?;
     let parsed = serde_json::from_str(&json)?;
 
-		Ok(parsed)
+    Ok(parsed)
   }
 }
 
 /// TaskRepositoryの実装
 #[async_trait]
 impl TaskRepositoryTrait for TaskRepository {
-  // /// タスクの作成
-  // async fn create_task(&self, request: CreateTaskRequest) -> Result<(), RedisError> {
-  //   let task = Task::from(request);
-  //   let mut conn = self
-  //     .pool
-  //     .get()
-  //     .await
-  //     .map_err(|e| RedisError::from((redis::ErrorKind::Io, "Pool error", e.to_string())))?;
-  //   let serialized = serde_json::to_string(&task).unwrap();
-  //   conn.set(task.id, serialized).await?;
-  //   Ok(())
-  // }
+  /// タスクを作成（Celery経由でエンキュー）
+	/// * request: CreateTaskRequest - 作成するタスクのリクエスト
+	/// * 戻り値: Result<Uuid, ServerError> - タスクのUUID
+  async fn create_task(&self, request: CreateTaskRequest) -> Result<Uuid, ServerError> {
+    let result = self.celery_app.send_task(run_attack::new(request)).await?;
+    let id = Uuid::parse_str(&result.task_id)?;
+    Ok(id)
+  }
 
   /// すべてのタスクを取得
+	/// * 戻り値: Result<Vec<Task>, ServerError> - タスクの一覧取得結果
   async fn find_all_tasks(&self) -> Result<Vec<Task>, ServerError> {
-		// Redis接続 複雑なエラーを返すため、Stringとして返す
-    let mut conn = self.pool.get().await.map_err(|e| ServerError::PoolError(e.to_string()))?;
-		// タスクの取得
+    // Redis接続 複雑なエラーを返すため、Stringとして返す
+    let mut conn = self
+      .pool
+      .get()
+      .await
+      .map_err(|e| ServerError::PoolError(e.to_string()))?;
+    // タスクの取得
     let results: Vec<String> = conn.lrange("celery", 0, -1).await?;
 
-		// タスクの解析 取得
+    // タスクの解析 取得
     let mut tasks: Vec<Task> = Vec::new();
     for result in results {
-      let json: Value = serde_json::from_str(&result)?;
+      let json: Value = serde_json::from_str(&result)?;	// Jsonに変換
       let body = match json["body"].as_str() {
         Some(body) => body,
-        None => return Err(ServerError::DataFormatError("Missing or invalid 'body'".to_string())),
+        None => {
+          return Err(ServerError::DataFormatError(
+            "Missing or invalid 'body'".to_string(),
+          ))
+        }
       };
-      let args: Value = Self::decode_body(body)?;
 
-			// idとtaskを取得
-			let headers = &json["headers"];
-			let id = match headers["id"].as_str() {
-				Some(id) => id.to_string(),
-				None => return Err(ServerError::DataFormatError("Missing or invalid 'id'".to_string())),
-			};
-			let task = match headers["task"].as_str() {
-				Some(task) => task.to_string(),
-				None => return Err(ServerError::DataFormatError("Missing or invalid 'task'".to_string())),
-			};
-			// タスクを作成
-      let task = Task {
-        id,
-        task,
-        args,
+      // idとtaskを取得
+      let headers = &json["headers"];
+      let id = match headers["id"].as_str() {
+        Some(id) => Uuid::parse_str(id)?,
+        None => {
+          return Err(ServerError::DataFormatError(
+            "Missing or invalid 'id'".to_string(),
+          ))
+        }
       };
-      tasks.push(task);
+      let task = match headers["task"].as_str() {
+        Some(task) => task.to_string(),
+        None => {
+          return Err(ServerError::DataFormatError(
+            "Missing or invalid 'task'".to_string(),
+          ))
+        }
+      };
+      // ボディをデコード
+      let args: Value = Self::decode_body(body)?;
+			let (positional, params, control) = match args.as_array().map(|array| array.as_slice()) {
+				Some([p0, p1, p2]) => (p0, p1, p2),
+				_ => return Err(ServerError::DataFormatError(
+					"invalid Celery args format".to_string(),
+				)),
+			};
+      // タスクを作成
+      let task_entity = Task {
+					id,
+					task,
+					args_positional: positional.clone(),
+					args_keyword: params.clone(),
+					args_control: control.clone(),
+				};
+      tasks.push(task_entity);
     }
 
     Ok(tasks)
   }
-}
 
+
+  /// 指定されたIDのタスクを削除
+	/// * id: Uuid - 削除するタスクのID
+	/// * 戻り値: Result<i64, ServerError> - 削除されたタスクの件数
+  async fn delete_by_id(&self, id: Uuid) -> Result<i64, ServerError> {
+    let mut conn = self.pool.get().await.map_err(|e| ServerError::PoolError(e.to_string()))?;
+		// タスクの取得
+		let results: Vec<String> = conn.lrange("celery", 0, -1).await?;
+		let mut total_deleted = 0;
+		for result in results {
+			let json: Value = serde_json::from_str(&result)?;
+			let headers = &json["headers"];
+			let task_id = match headers["id"].as_str() {
+				Some(task_id) => task_id.to_string(),
+				None => continue,
+			};
+			if task_id == id.to_string() {
+				// タスクの削除 完全一致のみ削除可能
+				let lrem_result: i64 = conn.lrem("celery", 0, result).await?;
+				if lrem_result == 0 {
+					return Err(ServerError::NotFound(format!("Task with id {} not found", id)));
+				}
+				total_deleted += lrem_result;
+			}
+		}
+
+    Ok(total_deleted)
+  }
+}
 
 #[cfg(test)]
 mod tests {
   use super::*;
-	use deadpool_redis::{Config, Runtime};
+  use deadpool_redis::{Config, Runtime};
+	use crate::entities::experiment::MiaMethod;
 
+	/// テストの前処理
+  async fn setup() -> TaskRepository {
+    // Redis接続
+    let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
+    let cfg = Config::from_url(&redis_url);
+    let pool = cfg.create_pool(Some(Runtime::Tokio1)).unwrap();
+    println!("Redis Pool created successfully");
+    // Celeryアプリの初期化
+    let celery_app = celery::app!(
+      broker = RedisBroker { redis_url },
+      tasks = [run_attack],
+      task_routes = []
+    )
+    .await
+    .unwrap();
+    println!("Celery App created successfully");
+    let task_repository = TaskRepository::new(pool, celery_app);
+
+		// テストデータの削除
+		teardown(&task_repository).await;
+
+		task_repository
+  }
+
+	/// 後処理
+	async fn teardown(task_repository: &TaskRepository) {
+		let tasks = task_repository.find_all_tasks().await.unwrap();
+		for task in tasks {
+			if task.args_keyword["params"]["notes"].as_str().unwrap() == "backend_test" {
+				task_repository.delete_by_id(task.id).await.unwrap();
+			}
+		}
+	}
+
+	/// taskファクトリー
+	fn create_request(notes: &str) -> CreateTaskRequest {
+		CreateTaskRequest {
+			experiment_id: 1,
+			name: "test".to_string(),
+			notes: Some(notes.to_string()),
+			method: MiaMethod::OfflineLira,
+			batch_size: 10,
+			max_epochs: 10,
+			num_shadow_models: 10,
+			target_train_size: 10,
+			target_test_size: 10,
+			shadow_train_size: 10,
+			shadow_test_size: 10,
+			seed: 10,
+			hyperparameters: serde_json::json!({}),
+			base_experiment_id: None,
+			load_target_model: false,
+			load_shadow_model: false,
+			load_attack_model: false,
+		}
+	}
+
+	/// タスクの一覧取得テスト
   #[tokio::test]
   async fn test_find_all_tasks() {
-		// Redis接続
-		let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
-		println!("Redis URL: {}", redis_url);
-		let cfg = Config::from_url(redis_url);
-		let pool = cfg.create_pool(Some(Runtime::Tokio1)).unwrap();
-		println!("Pool created");
-		let task_repository = TaskRepository::new(pool);
-		// タスクの取得
-		let tasks = task_repository.find_all_tasks().await.unwrap();
+		// Arrange
+		let task_repository = setup().await;
+    // Act
+    let tasks = task_repository.find_all_tasks().await.unwrap();
+		// Assert
     println!("Tasks: {:?}", tasks);
+		teardown(&task_repository).await;
   }
+
+	/// タスクの作成テスト
+  #[tokio::test]
+  async fn test_create_task() {
+		// Arrange
+		let task_repository = setup().await;
+    let request = create_request("backend_test");
+		let total = task_repository.find_all_tasks().await.unwrap().len();
+		// Act
+		let id = task_repository.create_task(request).await.unwrap();
+		// Assert
+		let tasks = task_repository.find_all_tasks().await.unwrap();
+		let created_total = tasks.len();
+		assert_eq!(created_total, total + 1);	// タスクの数が1増えている事
+		assert_eq!(tasks[created_total - 1].id, id); // 末尾に追加されている事
+		teardown(&task_repository).await;
+	}
+
+	/// タスクの削除テスト
+  #[tokio::test]
+  async fn test_delete_by_id() {
+		// Arrange
+		let task_repository = setup().await;
+		let request = create_request("backend_test");
+		let id = task_repository.create_task(request).await.unwrap();
+		let total = task_repository.find_all_tasks().await.unwrap().len();
+		// Act
+		let result = task_repository.delete_by_id(id).await.unwrap();
+		// Assert
+		assert_eq!(result, 1); // 削除されたタスクの数が1件である事
+		let tasks = task_repository.find_all_tasks().await.unwrap();
+		let deleted_total = tasks.len();
+		assert_eq!(deleted_total, total - 1); // タスクの数が1減っている事
+		assert!(!tasks.iter().any(|task| task.id == id)); // 削除されたタスクが存在しない事
+		teardown(&task_repository).await;
+	}
 }

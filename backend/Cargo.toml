@@ -26,6 +26,7 @@ deadpool-redis = "0.23.0"
 celery = "0.5.5"
 # error
 thiserror = "2.0.18"
+uuid = "1.23.1"
 
 [dev-dependencies]
 # for the test

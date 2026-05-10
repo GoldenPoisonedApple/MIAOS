@@ -87,14 +87,19 @@ mod tests {
 			.sqlx_logging(true);	// 実行されたSQLのログ出力
 		let conn = Database::connect(connect_options).await.unwrap();
 		tracing::info!("Connected to database via SeaORM");
-		// テストデータの削除
-		Entity::delete_many()
-			.filter(Column::Notes.eq("backend_test"))
-			.exec(&conn).await.unwrap();
 		// リポジトリインスタンス作成
 		let repository = ExperimentRepository::new(conn);
+		// テストデータの削除
+		teardown(&repository).await;
 
 		repository
+	}
+
+	/// 後処理
+	async fn teardown(repository: &ExperimentRepository) {
+		Entity::delete_many()
+			.filter(Column::Notes.eq("backend_test"))
+			.exec(&repository.conn).await.unwrap();
 	}
 
 	/// requestファクトリー
@@ -128,11 +133,15 @@ mod tests {
 		// Arrange
 		let repository = setup().await;
 		let request = create_request("test_experiment");
+		let total = repository.find_all().await.unwrap().len();
 		// Act
 		let result = repository.create(request).await.unwrap();
 		// Assert
-		assert_eq!(result.name, "test_experiment");
-		assert_eq!(result.status, ExperimentStatus::Waiting);
+		assert_eq!(result.name, "test_experiment"); // 実験名が一致する事
+		assert_eq!(result.status, ExperimentStatus::Waiting); // デフォルトステータスがWAITINGである事
+		let created_total = repository.find_all().await.unwrap().len();
+		assert_eq!(created_total, total + 1); // 実験の数が1増えている事
+		teardown(&repository).await;
   }
 
 	/// 実験の一覧取得テスト
@@ -145,11 +154,19 @@ mod tests {
 		repository.create(request1).await.unwrap();
 		repository.create(request2).await.unwrap();
     // Act
-    let result = repository.find_all().await.unwrap();
+    let results = repository.find_all().await.unwrap();
     // Assert
-    assert_eq!(result.len(), 2);
-    assert_eq!(result[0].name, "test_experiment1");
-    assert_eq!(result[1].name, "test_experiment2");
+		// テストデータのみ抽出
+		let mut verifications = Vec::new();
+		for result in results {
+			if result.notes == Some("backend_test".to_string()) {
+				verifications.push(result);
+			}
+		}
+    assert_eq!(verifications.len(), 2); // テストデータの数が2件である事
+    assert_eq!(verifications[0].name, "test_experiment1"); // 1件目の実験名が一致する事
+    assert_eq!(verifications[1].name, "test_experiment2"); // 2件目の実験名が一致する事
+		teardown(&repository).await;
   }
 
 	/// 実験の削除テスト
@@ -159,9 +176,15 @@ mod tests {
     let repository = setup().await;
     let request = create_request("test_experiment");
     let result = repository.create(request).await.unwrap();
+		let total = repository.find_all().await.unwrap().len();
     // Act
-    let result = repository.delete_from_id(result.id).await.unwrap();
+    let deleted_total = repository.delete_from_id(result.id).await.unwrap();
     // Assert
-    assert_eq!(result, 1);
+    assert_eq!(deleted_total, 1); // 削除された実験の数が1件である事
+		let experiments = repository.find_all().await.unwrap();
+		let deleted_total = experiments.len();
+		assert_eq!(deleted_total, total - 1); // 実験の数が1減っている事
+		assert!(!experiments.iter().any(|experiment| experiment.id == result.id)); // 削除された実験が存在しない事
+		teardown(&repository).await;
   }
 }
