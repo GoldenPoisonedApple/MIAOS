@@ -50,6 +50,7 @@ noteが backend_test のデータはテスト用とするカスの手法
 let active_model = ActiveModel::from(request);
 ```
 
+本当はテスト用の環境と本番用の環境を分けたいよ
 
 
 ## DB
@@ -112,3 +113,5 @@ redisの型を用意
 [Failed]    2件
 
 認証を入れられたらいいいね
+
+トランザクション ロールバック

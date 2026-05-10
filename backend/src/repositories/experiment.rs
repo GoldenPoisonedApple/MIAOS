@@ -87,8 +87,9 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::entities::experiment::{ExperimentStatus, Column};
+  use crate::entities::experiment::{ExperimentStatus};
 	use crate::infrastructure::establish_db_connection;
+	use crate::test_utils::remove_test_experiments;
 
 
 	/// DBテストの前処理
@@ -96,18 +97,11 @@ mod tests {
 		// DB接続
 		let conn = establish_db_connection().await;
 		// リポジトリインスタンス作成
-		let repository = ExperimentRepository::new(conn);
+		let repository = ExperimentRepository::new(conn.clone());
 		// テストデータの削除
-		teardown(&repository).await;
+		remove_test_experiments(&repository).await;
 
 		repository
-	}
-
-	/// 後処理
-	async fn teardown(repository: &ExperimentRepository) {
-		Entity::delete_many()
-			.filter(Column::Notes.eq("backend_test"))
-			.exec(&repository.conn).await.unwrap();
 	}
 
 	/// requestファクトリー
@@ -153,7 +147,7 @@ mod tests {
 		assert_eq!(result.status, ExperimentStatus::Waiting); // デフォルトステータスがWAITINGである事
 		let created_total = repository.find_all().await.unwrap().len();
 		assert_eq!(created_total, total + 1); // 実験の数が1増えている事
-		teardown(&repository).await;
+		remove_test_experiments(&repository).await;
   }
 
 	/// 実験の結果更新テスト
@@ -170,7 +164,7 @@ mod tests {
 		assert_eq!(result.status, ExperimentStatus::Succeeded); // ステータスがSUCCEEDEDである事
 		assert!(result.completed_at.is_some()); // 完了時刻がセットされている事
 		assert_eq!(result.worker_name, Some("test_worker".to_string())); // パラメータが更新されていること
-		teardown(&repository).await;
+		remove_test_experiments(&repository).await;
   }
 
 	/// 実験の一覧取得テスト
@@ -195,7 +189,7 @@ mod tests {
     assert_eq!(verifications.len(), 2); // テストデータの数が2件である事
     assert_eq!(verifications[0].name, "test_experiment1"); // 1件目の実験名が一致する事
     assert_eq!(verifications[1].name, "test_experiment2"); // 2件目の実験名が一致する事
-		teardown(&repository).await;
+		remove_test_experiments(&repository).await;
   }
 
 	/// 実験の削除テスト
@@ -214,6 +208,6 @@ mod tests {
 		let deleted_total = experiments.len();
 		assert_eq!(deleted_total, total - 1); // 実験の数が1減っている事
 		assert!(!experiments.iter().any(|experiment| experiment.id == result.id)); // 削除された実験が存在しない事
-		teardown(&repository).await;
+		remove_test_experiments(&repository).await;
   }
 }

@@ -152,6 +152,7 @@ mod tests {
   use super::*;
 	use crate::entities::experiment::MiaMethod;
 	use crate::infrastructure::{establish_redis_connection, establish_celery_app};
+	use crate::test_utils::remove_test_tasks;
 
 	/// テストの前処理
   async fn setup() -> TaskRepository {
@@ -163,20 +164,10 @@ mod tests {
     let task_repository = TaskRepository::new(pool, celery_app);
 
 		// テストデータの削除
-		teardown(&task_repository).await;
+		remove_test_tasks(&task_repository).await;
 
 		task_repository
   }
-
-	/// 後処理
-	async fn teardown(task_repository: &TaskRepository) {
-		let tasks = task_repository.find_all_tasks().await.unwrap();
-		for task in tasks {
-			if task.args_keyword["_params"]["notes"].as_str().unwrap() == "backend_test" {
-				task_repository.delete_by_id(task.id).await.unwrap();
-			}
-		}
-	}
 
 	/// taskファクトリー
 	fn create_request(notes: &str) -> CreateTaskRequest {
@@ -210,7 +201,7 @@ mod tests {
     let tasks = task_repository.find_all_tasks().await.unwrap();
 		// Assert
     println!("Tasks: {:?}", tasks);
-		teardown(&task_repository).await;
+		remove_test_tasks(&task_repository).await;
   }
 
 	/// タスクの作成テスト
@@ -227,7 +218,7 @@ mod tests {
 		let created_total = tasks.len();
 		assert_eq!(created_total, total + 1);	// タスクの数が1増えている事
 		assert_eq!(tasks[created_total - 1].id, id); // 末尾に追加されている事
-		teardown(&task_repository).await;
+		remove_test_tasks(&task_repository).await;
 	}
 
 	/// タスクの削除テスト
@@ -246,6 +237,6 @@ mod tests {
 		let deleted_total = tasks.len();
 		assert_eq!(deleted_total, total - 1); // タスクの数が1減っている事
 		assert!(!tasks.iter().any(|task| task.id == id)); // 削除されたタスクが存在しない事
-		teardown(&task_repository).await;
+		remove_test_tasks(&task_repository).await;
 	}
 }
