@@ -5,7 +5,9 @@
 
 ## バックエンド
 なんかcargoが効かないので応急処置
+```bash
 export PATH="/usr/local/cargo/bin:/usr/local/rustup/bin:$PATH"
+```
 
 実験デフォルト値は
 src/dto/experiment.rs
@@ -30,9 +32,12 @@ sea-orm-cli migrate up
 sea-orm-cli migrate down
 ```
 
-- DBのテストは順次実行にしたい
-```
+- テスト
+```bash
+# DBのテストは順次実行にしたい
 cargo test -- --test-threads=1
+# 特定のものだけ実行 ログも見る
+cargo test repositories::task -- --nocapture
 ```
 
 色々考えたがいい方法が無かったので
@@ -78,9 +83,18 @@ LRANGE celery 0 -1
 
 ToDo
 redisの型を用意
+ロガーの位置がおかしいらしい mainじゃなさそう
 
 こういうの見れたらいいよね
 [Pending]  12件
 [Running]   3件
 [Success] 120件
 [Failed]    2件
+
+Array [
+	Array [
+		Object {"experiment_name": String("2026-05-09_20-02-41"), "max_epochs": Number(10), "mia_method": String("Offline LiRA"), "notes": String("test"), "num_shadow_models": Number(10), "shadow_test_size": Number(10520), "shadow_train_size": Number(10520), "target_test_size": Number(10520), "target_train_size": Number(10520)}
+	],
+	Object {},
+	Object {"callbacks": Null, "chain": Null, "chord": Null, "errbacks": Null}
+]

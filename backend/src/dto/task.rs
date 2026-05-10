@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::entities::experiment::MiaMethod;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CreateTaskRequest {
 	/// 実験ID
 	pub experiment_id: i64,

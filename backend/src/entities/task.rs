@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// タスク
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Task {
 	/// id
 	pub id: String,
