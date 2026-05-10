@@ -48,7 +48,6 @@ CREATE TABLE experiments (
 	-- ----------------------------
 	status experiment_status NOT NULL DEFAULT 'WAITING', -- ステータス
 	worker_name TEXT, -- 作業PC名
-	start_at TIMESTAMPTZ, -- 開始日時
 	completed_at TIMESTAMPTZ, -- 完了日時
 	error_message TEXT, -- エラーメッセージ
 

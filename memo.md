@@ -104,10 +104,4 @@ redisの型を用意
 [Success] 120件
 [Failed]    2件
 
-Array [
-	Array [
-		Object {"experiment_name": String("2026-05-09_20-02-41"), "max_epochs": Number(10), "mia_method": String("Offline LiRA"), "notes": String("test"), "num_shadow_models": Number(10), "shadow_test_size": Number(10520), "shadow_train_size": Number(10520), "target_test_size": Number(10520), "target_train_size": Number(10520)}
-	],
-	Object {},
-	Object {"callbacks": Null, "chain": Null, "chord": Null, "errbacks": Null}
-]
+認証を入れられたらいいいね

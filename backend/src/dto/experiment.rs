@@ -130,3 +130,59 @@ impl From<CreateExperimentRequest> for ActiveModel {
     }
   }
 }
+
+
+/// 実験の結果更新リクエスト
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateResultsRequest {
+  /// 実験ID
+  pub experiment_id: i64,
+	/// 作業PC名
+	pub worker_name: String,
+
+  /// 全体のAUC
+  pub global_auc: f64,
+  /// 1%FPRでのTPR
+  pub tpr_at_1_fpr: f64,
+  /// 0.1%FPRでのTPR
+  pub tpr_at_01_fpr: f64,
+	/// 拡張メトリクス
+	pub other_metrics: Value,
+
+	/// トータルの実行時間(秒)
+	pub total_time: f64,
+
+	/// MINIOでのベースパス
+	pub minio_path: String,
+	/// データセットのパス
+	pub dataset_json_path: String,
+	/// 実行ログのパス
+	pub execution_log_path: String,
+	/// その他のファイルのパス
+	pub other_files: Value,
+}
+
+// UpdateResultsRequest から ActiveModel への変換を定義
+impl From<UpdateResultsRequest> for ActiveModel {
+  fn from(req: UpdateResultsRequest) -> Self {
+    Self {
+			id: Set(req.experiment_id),
+      worker_name: Set(Some(req.worker_name)),
+
+      global_auc: Set(Some(req.global_auc)),
+      tpr_at_1_fpr: Set(Some(req.tpr_at_1_fpr)),
+      tpr_at_01_fpr: Set(Some(req.tpr_at_01_fpr)),
+      other_metrics: Set(Some(req.other_metrics)),
+
+      total_time: Set(Some(req.total_time)),
+
+      minio_path: Set(Some(req.minio_path)),
+      dataset_json_path: Set(Some(req.dataset_json_path)),
+      execution_log_path: Set(Some(req.execution_log_path)),
+      other_files: Set(Some(req.other_files)),
+
+			// 他パラメータは上書きしないので空
+      ..Default::default() 
+    }
+  }
+}

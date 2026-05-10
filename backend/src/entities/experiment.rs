@@ -75,12 +75,9 @@ pub struct Model {
   pub status: ExperimentStatus,
   /// 作業PC名
   pub worker_name: Option<String>,
-  /// 開始日時
-  #[serde(with = "time::serde::iso8601::option")]
-  pub start_at: Option<TimeDateTimeWithTimeZone>, // SeaORMのTime型
 	/// 完了日時
   #[serde(with = "time::serde::iso8601::option")]
-  pub completed_at: Option<TimeDateTimeWithTimeZone>,
+  pub completed_at: Option<TimeDateTimeWithTimeZone>, // SeaORMのTime型
   /// エラーメッセージ
   pub error_message: Option<String>,
 
