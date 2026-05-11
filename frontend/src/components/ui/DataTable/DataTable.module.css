@@ -23,7 +23,7 @@
   width: 100%;
   border-collapse: collapse;
   text-align: left;
-  table-layout: fixed; /* Better for column resizing/dragging */
+  /* Removed table-layout: fixed; to allow columns to naturally fit content */
 }
 
 .dataTable th,
@@ -46,6 +46,13 @@
 
 .dataTable tr:hover td {
   background: var(--social-bg);
+}
+
+.thSelect {
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  text-align: center;
 }
 
 .noData {

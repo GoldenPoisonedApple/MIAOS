@@ -13,7 +13,8 @@ import {
   DndContext,
   closestCenter,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -45,24 +46,23 @@ function DraggableHeader<TData, TValue>({ header }: { header: Header<TData, TVal
   const style = {
     opacity: isDragging ? 0.8 : 1,
     position: "relative" as const,
-    transform: CSS.Translate.toString(transform), // Translate instead of Transform to keep other styling
+    transform: CSS.Translate.toString(transform),
     transition,
     whiteSpace: "nowrap" as const,
-    width: header.column.getSize(),
     zIndex: isDragging ? 2 : 1,
   };
 
   // Do not make the select column draggable
   if (header.column.id === "select") {
     return (
-      <th key={header.id} colSpan={header.colSpan}>
+      <th key={header.id} colSpan={header.colSpan} className={styles.thSelect}>
         {flexRender(header.column.columnDef.header, header.getContext())}
       </th>
     );
   }
 
   return (
-    <th key={header.id} colSpan={header.colSpan} ref={setNodeRef} style={style}>
+    <th key={header.id} colSpan={header.colSpan} ref={setNodeRef} style={style} className={styles.th}>
       <div className={styles.headerContent}>
         <div {...attributes} {...listeners} className={styles.dragHandle}>
           ⋮⋮
@@ -105,9 +105,15 @@ export function DataTable<TData, TValue>({
 
   // Setup DnD sensors
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: {
         distance: 5, // Start dragging after moving 5px (prevents accidental drag when clicking)
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
       },
     }),
     useSensor(KeyboardSensor)
@@ -158,9 +164,9 @@ export function DataTable<TData, TValue>({
                 table.getRowModel().rows.map((row) => (
                   <tr key={row.id}>
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
+  <td key={cell.id} style={{ textAlign: cell.column.id === "select" ? "center" : "left" }}>
+    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+  </td>
                     ))}
                   </tr>
                 ))
