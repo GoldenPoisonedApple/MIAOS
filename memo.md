@@ -179,6 +179,8 @@ Tasks: [Task { id: 1107cc26-b460-4405-8b07-96ff7007f7d2, task: "mia_tasks.run_at
 ToDo
 CORS設定とか
 
+フィルタ、順番情報をバックエンドに記録
+
 こういうの見れたらいいよね
 [Pending]  12件
 [Running]   3件

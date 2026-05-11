@@ -7,7 +7,6 @@ import {
   type VisibilityState,
   type ColumnOrderState,
   type Header,
-  type Cell,
 } from "@tanstack/react-table";
 import { useState } from "react";
 import {
@@ -74,35 +73,8 @@ function DraggableHeader<TData, TValue>({ header }: { header: Header<TData, TVal
   );
 }
 
-// Draggable Body Cell Component (To follow column order visually)
-function SortableCell<TData, TValue>({ cell }: { cell: Cell<TData, TValue> }) {
-  const { isDragging, setNodeRef, transform, transition } = useSortable({
-    id: cell.column.id,
-  });
-
-  const style = {
-    opacity: isDragging ? 0.8 : 1,
-    position: "relative" as const,
-    transform: CSS.Translate.toString(transform),
-    transition,
-    width: cell.column.getSize(),
-    zIndex: isDragging ? 2 : 1,
-  };
-
-  if (cell.column.id === "select") {
-    return (
-      <td key={cell.id}>
-        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-      </td>
-    );
-  }
-
-  return (
-    <td key={cell.id} ref={setNodeRef} style={style}>
-      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-    </td>
-  );
-}
+// Removed SortableCell to prevent duplicate useSortable IDs in DndContext.
+// Body cells will be naturally reordered by TanStack Table after drag ends.
 
 
 export function DataTable<TData, TValue>({
@@ -112,11 +84,7 @@ export function DataTable<TData, TValue>({
   onRowSelectionChange,
 }: DataTableProps<TData, TValue>) {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
-  
-  // Set initial column order based on the provided columns
-  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(
-    columns.map((c) => c.id as string)
-  );
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
 
   const table = useReactTable({
     data,
@@ -133,6 +101,8 @@ export function DataTable<TData, TValue>({
     getCoreRowModel: getCoreRowModel(),
   });
 
+  const currentColumnIds = table.getAllLeafColumns().map((c) => c.id);
+
   // Setup DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -147,10 +117,10 @@ export function DataTable<TData, TValue>({
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (active && over && active.id !== over.id) {
-      setColumnOrder((columnOrder) => {
-        const oldIndex = columnOrder.indexOf(active.id as string);
-        const newIndex = columnOrder.indexOf(over.id as string);
-        return arrayMove(columnOrder, oldIndex, newIndex); // Reorder the array
+      setColumnOrder(() => {
+        const oldIndex = currentColumnIds.indexOf(active.id as string);
+        const newIndex = currentColumnIds.indexOf(over.id as string);
+        return arrayMove(currentColumnIds, oldIndex, newIndex); // Reorder the array
       });
     }
   }
@@ -173,7 +143,7 @@ export function DataTable<TData, TValue>({
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   <SortableContext
-                    items={columnOrder}
+                    items={currentColumnIds}
                     strategy={horizontalListSortingStrategy}
                   >
                     {headerGroup.headers.map((header) => (
@@ -187,14 +157,11 @@ export function DataTable<TData, TValue>({
               {table.getRowModel().rows.length > 0 ? (
                 table.getRowModel().rows.map((row) => (
                   <tr key={row.id}>
-                    <SortableContext
-                      items={columnOrder}
-                      strategy={horizontalListSortingStrategy}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <SortableCell key={cell.id} cell={cell} />
-                      ))}
-                    </SortableContext>
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
                   </tr>
                 ))
               ) : (
