@@ -37,6 +37,9 @@
 	RUN apt-get update && apt-get install -y \
 		curl \
 		&& rm -rf /var/lib/apt/lists/*
+
+	RUN rustup component add rustfmt
+
 	
 	# SQLx CLI: データベースマイグレーション用
 	RUN cargo install --locked sqlx-cli --no-default-features --features postgres
