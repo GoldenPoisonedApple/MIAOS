@@ -42,15 +42,19 @@ export const useExperiments = () => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const { error, response } = await apiClient.DELETE("/api/experiments/{id}", {
-        params: { path: { id } },
-      });
-      if (error !== undefined) {
-        const serverError = error as { message?: string; detail?: string };
-        const errorMessage = serverError?.message || serverError?.detail || `削除エラー (${response.status} ${response.statusText})`;
-        throw new Error(errorMessage);
-      }
+    mutationFn: async (ids: number[]) => {
+      await Promise.all(
+        ids.map(async (id) => {
+          const { error, response } = await apiClient.DELETE("/api/experiments/{id}", {
+            params: { path: { id } },
+          });
+          if (error !== undefined) {
+            const serverError = error as { message?: string; detail?: string };
+            const errorMessage = serverError?.message || serverError?.detail || `削除エラー (${response.status} ${response.statusText})`;
+            throw new Error(errorMessage);
+          }
+        })
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["experiments"] });
@@ -69,7 +73,8 @@ export const useExperiments = () => {
       await createMutation.mutateAsync(req);
     },
     isCreating: createMutation.isPending,
-    deleteExperiment: (id: number) => deleteMutation.mutate(id),
+    deleteExperiments: (ids: number[], options?: Parameters<typeof deleteMutation.mutate>[1]) => deleteMutation.mutate(ids, options),
+    isDeleting: deleteMutation.isPending,
     refetch: () => queryClient.invalidateQueries({ queryKey: ["experiments"] }),
   };
 };

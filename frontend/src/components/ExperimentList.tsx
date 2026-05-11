@@ -1,23 +1,60 @@
 import { useState } from "react";
 import { useExperiments } from "../hooks/useExperiments";
 import { CreateExperimentModal } from "./CreateExperimentModal";
+import { ConfirmModal } from "./ConfirmModal";
 
 export const ExperimentList = () => {
-  const { experiments, loading, error, deleteExperiment, createExperiment, isCreating } = useExperiments();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { experiments, loading, error, deleteExperiments, createExperiment, isCreating, isDeleting } = useExperiments();
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   if (loading) return <div className="loading">実験情報を読み込み中...</div>;
   if (error) return <div className="error">エラー: {error.message}</div>;
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedIds(new Set(experiments.map((exp) => exp.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectOne = (id: number, checked: boolean) => {
+    const newSet = new Set(selectedIds);
+    if (checked) {
+      newSet.add(id);
+    } else {
+      newSet.delete(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const handleDeleteConfirm = () => {
+    deleteExperiments(Array.from(selectedIds), {
+      onSuccess: () => {
+        setSelectedIds(new Set());
+        setIsDeleteModalOpen(false);
+      },
+    });
+  };
 
   return (
     <div className="table-container">
       <div className="list-header">
         <h2>実験一覧</h2>
-        <button className="button create-button" onClick={() => setIsModalOpen(true)}>
-          新しい実験を作成
-        </button>
+        <div className="list-actions">
+          {selectedIds.size > 0 && (
+            <button className="button delete-button" onClick={() => setIsDeleteModalOpen(true)}>
+              選択した項目を削除 ({selectedIds.size})
+            </button>
+          )}
+          <button className="button create-button" onClick={() => setIsCreateModalOpen(true)}>
+            新しい実験を作成
+          </button>
+        </div>
       </div>
-      
+
       {experiments.length === 0 ? (
         <p>実験データがありません</p>
       ) : (
@@ -25,6 +62,13 @@ export const ExperimentList = () => {
           <table className="data-table">
             <thead>
               <tr>
+                <th style={{ width: "40px", textAlign: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={experiments.length > 0 && selectedIds.size === experiments.length}
+                    onChange={handleSelectAll}
+                  />
+                </th>
                 <th>ID</th>
                 <th>名前</th>
                 <th>手法</th>
@@ -57,12 +101,18 @@ export const ExperimentList = () => {
                 <th>ハイパーパラメータ</th>
                 <th>その他のファイル</th>
                 <th>その他のメトリクス</th>
-                <th>アクション</th>
               </tr>
             </thead>
             <tbody>
               {experiments.map((exp) => (
                 <tr key={exp.id}>
+                  <td style={{ textAlign: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(exp.id)}
+                      onChange={(e) => handleSelectOne(exp.id, e.target.checked)}
+                    />
+                  </td>
                   <td>{exp.id}</td>
                   <td>{exp.name}</td>
                   <td>{exp.method}</td>
@@ -105,18 +155,6 @@ export const ExperimentList = () => {
                   <td>
                     {exp.other_metrics ? <code>{JSON.stringify(exp.other_metrics)}</code> : "-"}
                   </td>
-                  <td>
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`実験 ID:${exp.id} を本当に削除しますか？`)) {
-                          deleteExperiment(exp.id);
-                        }
-                      }}
-                      className="button delete-button"
-                    >
-                      削除
-                    </button>
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -125,10 +163,19 @@ export const ExperimentList = () => {
       )}
 
       <CreateExperimentModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
         onSubmit={createExperiment}
         isCreating={isCreating}
+      />
+
+      <ConfirmModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        title="実験の削除"
+        message={`選択した ${selectedIds.size} 件の実験を本当に削除しますか？この操作は取り消せません。`}
+        isConfirming={isDeleting}
       />
     </div>
   );

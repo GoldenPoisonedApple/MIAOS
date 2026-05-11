@@ -18,15 +18,19 @@ export const useTasks = () => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error, response } = await apiClient.DELETE("/api/tasks/{id}", {
-        params: { path: { id } },
-      });
-      if (error !== undefined) {
-        const serverError = error as { message?: string; detail?: string };
-        const errorMessage = serverError?.message || serverError?.detail || `削除エラー (${response.status} ${response.statusText})`;
-        throw new Error(errorMessage);
-      }
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(
+        ids.map(async (id) => {
+          const { error, response } = await apiClient.DELETE("/api/tasks/{id}", {
+            params: { path: { id } },
+          });
+          if (error !== undefined) {
+            const serverError = error as { message?: string; detail?: string };
+            const errorMessage = serverError?.message || serverError?.detail || `削除エラー (${response.status} ${response.statusText})`;
+            throw new Error(errorMessage);
+          }
+        })
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -41,7 +45,8 @@ export const useTasks = () => {
     tasks,
     loading: isLoading,
     error,
-    deleteTask: (id: string) => deleteMutation.mutate(id),
+    deleteTasks: (ids: string[], options?: Parameters<typeof deleteMutation.mutate>[1]) => deleteMutation.mutate(ids, options),
+    isDeleting: deleteMutation.isPending,
     refetch: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
   };
 };

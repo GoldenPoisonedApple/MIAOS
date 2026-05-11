@@ -68,6 +68,11 @@
   align-items: center;
 }
 
+.list-actions {
+  display: flex;
+  gap: 12px;
+}
+
 .table-container h2 {
   margin: 0;
   font-size: 24px;
