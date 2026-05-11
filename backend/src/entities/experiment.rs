@@ -157,12 +157,12 @@ impl Model {
   }
 
 	// SeaORMの仕様のせいでつくってる変換 Updateを通知してあげる
-	pub fn into_active_model_for_update(&self) -> ActiveModel {
+	pub fn into_active_model_for_update(self) -> ActiveModel {
 		ActiveModel {
 			id: Unchanged(self.id),	// 更新対象ではないのでUnchanged
-			name: Set(self.name.clone()),
-			notes: Set(self.notes.clone()),
-			method: Set(self.method.clone()),
+			name: Set(self.name),
+			notes: Set(self.notes),
+			method: Set(self.method),
 			batch_size: Set(self.batch_size),
 			max_epochs: Set(self.max_epochs),
 			num_shadow_models: Set(self.num_shadow_models),
@@ -171,26 +171,103 @@ impl Model {
 			shadow_train_size: Set(self.shadow_train_size),
 			shadow_test_size: Set(self.shadow_test_size),
 			seed: Set(self.seed),
-			hyperparameters: Set(self.hyperparameters.clone()),
+			hyperparameters: Set(self.hyperparameters),
 			base_experiment_id: Set(self.base_experiment_id),
 			load_target_model: Set(self.load_target_model),
 			load_shadow_model: Set(self.load_shadow_model),
 			load_attack_model: Set(self.load_attack_model),
-			status: Set(self.status.clone()),
-			worker_name: Set(self.worker_name.clone()),
+			status: Set(self.status),
+			worker_name: Set(self.worker_name),
 			completed_at: Set(self.completed_at),
-			error_message: Set(self.error_message.clone()),
+			error_message: Set(self.error_message),
 			global_auc: Set(self.global_auc),
 			tpr_at_1_fpr: Set(self.tpr_at_1_fpr),
 			tpr_at_01_fpr: Set(self.tpr_at_01_fpr),
 			tpr_at_001_fpr: Set(self.tpr_at_001_fpr),
-			other_metrics: Set(self.other_metrics.clone()),
+			other_metrics: Set(self.other_metrics),
 			total_time: Set(self.total_time),
-			minio_path: Set(self.minio_path.clone()),
-			dataset_json_path: Set(self.dataset_json_path.clone()),
-			execution_log_path: Set(self.execution_log_path.clone()),
-			other_files: Set(self.other_files.clone()),
+			minio_path: Set(self.minio_path),
+			dataset_json_path: Set(self.dataset_json_path),
+			execution_log_path: Set(self.execution_log_path),
+			other_files: Set(self.other_files),
 			created_at: Unchanged(self.created_at),	// 作成日時は更新対象ではないのでUnchanged
 		}
+	}
+}
+
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// モデルファクトリ
+	fn create_model() -> Model {
+		let model = Model {
+			id: 1,
+			name: "test_experiment".to_string(),
+			notes: Some("backend_test".to_string()),
+			method: MiaMethod::OfflineLira,
+			batch_size: 10,
+			max_epochs: 10,
+			num_shadow_models: 10,
+			target_train_size: 10,
+			target_test_size: 10,
+			shadow_train_size: 10,
+			shadow_test_size: 10,
+			seed: 10,
+			hyperparameters: serde_json::json!({}),
+			base_experiment_id: None,
+			load_target_model: false,
+			load_shadow_model: false,
+			load_attack_model: false,
+			status: ExperimentStatus::Waiting,
+			worker_name: None,
+			completed_at: None,
+			error_message: None,
+			global_auc: None,
+			tpr_at_1_fpr: None,
+			tpr_at_01_fpr: None,
+			tpr_at_001_fpr: None,
+			other_metrics: None,
+			total_time: None,
+			minio_path: None,
+			dataset_json_path: None,
+			execution_log_path: None,
+			other_files: None,
+			created_at: TimeDateTimeWithTimeZone::from(OffsetDateTime::now_utc()),
+		};
+		model
+	}
+	/// requestファクトリー
+	fn update_request(worker_name: &str) -> UpdateResultsRequest {
+		let request = UpdateResultsRequest {
+			experiment_id: 1,
+			worker_name: worker_name.to_string(),
+			global_auc: 0.5,
+			tpr_at_1_fpr: 0.5,
+			tpr_at_01_fpr: 0.5,
+			other_metrics: serde_json::json!({}),
+			total_time: 10.0,
+			minio_path: "test_minio_path".to_string(),
+			dataset_json_path: "test_dataset_json_path".to_string(),
+			execution_log_path: "test_execution_log_path".to_string(),
+			other_files: serde_json::json!({}),
+		};
+		request
+	}
+	
+	/// 実験を完了状態にし、結果を反映するテスト
+	#[test]
+	fn test_complete() {
+		// Arrange
+		let mut experiment = create_model();
+		let request = update_request("test_worker");
+		let completed_at = OffsetDateTime::now_utc();
+		// Act
+		experiment.complete(request, completed_at);
+		// Assert
+		assert_eq!(experiment.status, ExperimentStatus::Succeeded); // ステータスがSUCCEEDEDである事
+		assert_eq!(experiment.completed_at, Some(completed_at)); // 完了時刻がセットされている事
+		assert_eq!(experiment.worker_name, Some("test_worker".to_string())); // 結果が反映されていること
 	}
 }

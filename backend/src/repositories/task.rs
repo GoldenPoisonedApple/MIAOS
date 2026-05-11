@@ -38,6 +38,56 @@ impl TaskRepository {
 
     Ok(parsed)
   }
+
+	/// 取得文字列をパースしてTaskに変換
+	fn parse_task(result: String) -> Result<Task, ServerError> {
+		let json: Value = serde_json::from_str(&result)?;	// Jsonに変換
+		let body = match json["body"].as_str() {
+			Some(body) => body,
+			None => {
+				return Err(ServerError::DataFormatError(
+					"Missing or invalid 'body'".to_string(),
+				))
+			}
+		};
+
+		// idとtaskを取得
+		let headers = &json["headers"];
+		let id = match headers["id"].as_str() {
+			Some(id) => Uuid::parse_str(id)?,
+			None => {
+				return Err(ServerError::DataFormatError(
+					"Missing or invalid 'id'".to_string(),
+				))
+			}
+		};
+		let task = match headers["task"].as_str() {
+			Some(task) => task.to_string(),
+			None => {
+				return Err(ServerError::DataFormatError(
+					"Missing or invalid 'task'".to_string(),
+				))
+			}
+		};
+		// ボディをデコード
+		let args: Value = Self::decode_body(body)?;
+		let (positional, params, control) = match args.as_array().map(|array| array.as_slice()) {
+			Some([p0, p1, p2]) => (p0, p1, p2),
+			_ => return Err(ServerError::DataFormatError(
+				"invalid Celery args format".to_string(),
+			)),
+		};
+		// タスクを作成
+		let task_entity = Task {
+				id,
+				task,
+				args_positional: positional.clone(),
+				args_keyword: params.clone(),
+				args_control: control.clone(),
+				error_message: None,
+			};
+		Ok(task_entity)
+	}
 }
 
 /// TaskRepositoryの実装
@@ -67,51 +117,23 @@ impl TaskRepositoryTrait for TaskRepository {
     // タスクの解析 取得
     let mut tasks: Vec<Task> = Vec::new();
     for result in results {
-      let json: Value = serde_json::from_str(&result)?;	// Jsonに変換
-      let body = match json["body"].as_str() {
-        Some(body) => body,
-        None => {
-          return Err(ServerError::DataFormatError(
-            "Missing or invalid 'body'".to_string(),
-          ))
+      match Self::parse_task(result) {
+				// タスクの解析に成功: タスクを追加
+        Ok(task_entity) => tasks.push(task_entity),
+				// タスクの解析に失敗: エラータスクとして追加
+        Err(e) => {
+          tracing::error!("Failed to parse task: {}", e);
+          let error_task = Task {
+            id: Uuid::nil(),
+            task: "error".to_string(),
+            args_positional: serde_json::Value::Null,
+            args_keyword: serde_json::Value::Null,
+            args_control: serde_json::Value::Null,
+            error_message: Some(e.to_string()),
+          };
+          tasks.push(error_task);
         }
-      };
-
-      // idとtaskを取得
-      let headers = &json["headers"];
-      let id = match headers["id"].as_str() {
-        Some(id) => Uuid::parse_str(id)?,
-        None => {
-          return Err(ServerError::DataFormatError(
-            "Missing or invalid 'id'".to_string(),
-          ))
-        }
-      };
-      let task = match headers["task"].as_str() {
-        Some(task) => task.to_string(),
-        None => {
-          return Err(ServerError::DataFormatError(
-            "Missing or invalid 'task'".to_string(),
-          ))
-        }
-      };
-      // ボディをデコード
-      let args: Value = Self::decode_body(body)?;
-			let (positional, params, control) = match args.as_array().map(|array| array.as_slice()) {
-				Some([p0, p1, p2]) => (p0, p1, p2),
-				_ => return Err(ServerError::DataFormatError(
-					"invalid Celery args format".to_string(),
-				)),
-			};
-      // タスクを作成
-      let task_entity = Task {
-					id,
-					task,
-					args_positional: positional.clone(),
-					args_keyword: params.clone(),
-					args_control: control.clone(),
-				};
-      tasks.push(task_entity);
+      }
     }
 
     Ok(tasks)
@@ -152,7 +174,7 @@ mod tests {
   use super::*;
 	use crate::entities::experiment::MiaMethod;
 	use crate::infrastructure::{establish_redis_connection, establish_celery_app};
-	use crate::test_utils::remove_test_tasks;
+	use crate::test_utils::{init_test_logger, remove_test_tasks};
 
 	/// テストの前処理
   async fn setup() -> TaskRepository {
@@ -195,12 +217,13 @@ mod tests {
 	/// タスクの一覧取得テスト
   #[tokio::test]
   async fn test_find_all_tasks() {
+		init_test_logger();
 		// Arrange
 		let task_repository = setup().await;
     // Act
     let tasks = task_repository.find_all_tasks().await.unwrap();
 		// Assert
-    println!("Tasks: {:?}", tasks);
+    tracing::info!("Tasks: {:?}", tasks);
 		remove_test_tasks(&task_repository).await;
   }
 

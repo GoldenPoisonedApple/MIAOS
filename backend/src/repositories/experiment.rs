@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sea_orm::{DatabaseConnection, ActiveModelTrait, ColumnTrait, QueryFilter, EntityTrait};
+use sea_orm::{DatabaseConnection, ActiveModelTrait, EntityTrait};
 
 use crate::dto::experiment::{CreateExperimentRequest};
 use crate::entities::experiment::{ActiveModel, Model, Entity};
@@ -16,15 +16,16 @@ pub trait ExperimentRepositoryTrait: Send + Sync {
 
 /// Experimentsテーブルへのアクセスを担当するリポジトリ
 /// DatabaseConnectionは内部でArc(参照カウント)を使用しているため、Cloneコストは低い
+/// つまりconnというよりかはpoolと言った方が正しい
 #[derive(Clone)]
 pub struct ExperimentRepository {
-  conn: DatabaseConnection,
+  pool: DatabaseConnection,
 }
 
 impl ExperimentRepository {
   /// コンストラクタ
-  pub fn new(conn: DatabaseConnection) -> Self {
-    Self { conn }
+  pub fn new(pool: DatabaseConnection) -> Self {
+    Self { pool }
   }
 }
 
@@ -40,7 +41,7 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
     // DTOをActiveModelに変換
     let active_model = ActiveModel::from(request);
     // データベースに保存 Okの場合Modelが返る
-    let result = active_model.insert(&self.conn).await?;
+    let result = active_model.insert(&self.pool).await?;
 
 		Ok(result)
   }
@@ -55,7 +56,7 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
 		// ModelをActiveModelに変換 変更を通知してやらんと変更されない仕様なので
 		let active_model = model.into_active_model_for_update();
 		// IDに合致する実験を更新
-		let result = active_model.update(&self.conn).await?;
+		let result = active_model.update(&self.pool).await?;
 		Ok(result)
 	}
 
@@ -63,7 +64,7 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
 	/// * id: i64 - 取得する実験のID
 	/// * 戻り値: Result<Model, ServerError> - 実験の取得結果
 	async fn find_by_id(&self, id: i64) -> Result<Model, ServerError> {
-		match Entity::find_by_id(id).one(&self.conn).await? {
+		match Entity::find_by_id(id).one(&self.pool).await? {
 			Some(experiment) => Ok(experiment),
 			None => Err(ServerError::NotFound(format!("Experiment with id {} not found", id))),
 		}
@@ -72,7 +73,7 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
 	/// すべての実験を取得
 	/// * 戻り値: Result<Vec<Model>, ServerError> - 実験の一覧取得結果
 	async fn find_all(&self) -> Result<Vec<Model>, ServerError> {
-		let experiments = Entity::find().all(&self.conn).await?;
+		let experiments = Entity::find().all(&self.pool).await?;
 		Ok(experiments)
 	}
 
@@ -80,7 +81,7 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
 	/// * id: i64 - 削除する実験のID
 	/// * 戻り値: Result<u64, ServerError> - 実験の削除件数
 	async fn delete_from_id(&self, id: i64) -> Result<u64, ServerError> {
-		let result = Entity::delete_by_id(id).exec(&self.conn).await?;
+		let result = Entity::delete_by_id(id).exec(&self.pool).await?;
 		// 削除件数が0件の場合はエラーを返す
 		if result.rows_affected == 0 {
 			return Err(ServerError::NotFound(format!("Experiment with id {} not found", id)));
@@ -101,9 +102,9 @@ mod tests {
 	/// DBテストの前処理
 	async fn setup() -> ExperimentRepository {
 		// DB接続
-		let conn = establish_db_connection().await;
+		let pool = establish_db_connection().await;
 		// リポジトリインスタンス作成
-		let repository = ExperimentRepository::new(conn.clone());
+		let repository = ExperimentRepository::new(pool.clone());
 		// テストデータの削除
 		remove_test_experiments(&repository).await;
 

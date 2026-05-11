@@ -12,12 +12,16 @@ use server::routes::experiment::app_routes;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-	// インフラの初期化
-	let conn = establish_db_connection().await;
+	// ロガー
+	tracing_subscriber::fmt::init();
+	tracing::info!("Starting server...");
+	
+	// DB
+	let pool = establish_db_connection().await;
+  let experiment_repository = ExperimentRepository::new(pool);
+	// Redis
   let pool = establish_redis_connection().await;
   let celery_app = establish_celery_app().await;
-	// リポジトリ組み立て
-  let experiment_repository = ExperimentRepository::new(conn);
   let task_repository = TaskRepository::new(pool, celery_app);
 	// サービス組み立て
   let service = Arc::new(ExperimentService::new(

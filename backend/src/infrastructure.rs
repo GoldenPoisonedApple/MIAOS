@@ -4,6 +4,8 @@ use deadpool_redis::{Config, Runtime, Pool};
 use crate::dto::task::CreateTaskRequest;
 use std::sync::Arc;
 
+const MAX_CONNECTIONS: u32 = 5;
+
 /// DB接続を確立する
 /// * 戻り値: DatabaseConnection - DB接続
 pub async fn establish_db_connection() -> DatabaseConnection {
@@ -12,7 +14,7 @@ pub async fn establish_db_connection() -> DatabaseConnection {
 	// 接続設定
   let mut connect_options = ConnectOptions::new(database_url);
   connect_options
-    .max_connections(1)
+    .max_connections(MAX_CONNECTIONS)
     .min_connections(1)
     .acquire_timeout(Duration::from_secs(10))
     .connect_timeout(Duration::from_secs(10))
@@ -20,9 +22,9 @@ pub async fn establish_db_connection() -> DatabaseConnection {
     .max_lifetime(Duration::from_secs(10))
     .sqlx_logging(true); // 実行されたSQLのログ出力
 	// 接続確立
-  let conn = Database::connect(connect_options).await.unwrap();
+  let pool = Database::connect(connect_options).await.unwrap();
   tracing::info!("Connected to database via SeaORM");
-  conn
+  pool
 }
 
 /// Redis接続を確立する
