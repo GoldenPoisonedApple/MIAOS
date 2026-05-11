@@ -65,6 +65,8 @@ let active_model = ActiveModel::from(request);
 - sea_ormのせいで綺麗なアーキテクチャにできない
 ActiveModelをサービスに流出させられないし、Rich Domain modelにしようとしたら、Updateの所で変更を通知しないとUpdateされないとかいう謎仕様があるので、専用にModel -> ActiveModel変換仕様を作ってるし、結局Serviceに流出させなくてもEntityがやられてるから意味ない
 綺麗にしようとしても良いがボイラープレートが大量に発生するので、変更が多いと考えるとやらないほうが良い
+Rich Domain Modelの痕跡
+entities/experimentのcomplete
 
 - エクストラクタ
 URLのパスから？（例: /experiments/123） → Path<i64> を使う
@@ -84,7 +86,6 @@ curl -X GET http://localhost:3000/api/experiments
 curl -X POST http://localhost:3000/api/experiments -H "Content-Type: application/json" -d '{"name":"test"}'
 # 取得
 curl -X GET http://localhost:3000/api/tasks
-
 ```
 
 - utoipa APIの仕様書とかを勝手に書いてくれるやつ
@@ -92,6 +93,36 @@ curl -X GET http://localhost:3000/api/tasks
 http://localhost:3000/docs/
 機械用
 http://localhost:3000/api-docs/openapi.json
+
+## フロントエンド
+utoipaとの連携
+
+- openapi-typescript + openapi-fetch: 堅実、人間多め
+- orval + TanStack Query: 楽、自動化
+
+どちらもかなり拮抗、かなり悩むところだが前者を
+仕様変更が予想されるので前者を
+
+- 導入
+```bash
+npm install openapi-fetch @tanstack/react-query
+# npm install -D openapi-typescript が怒られたので
+npm install -D typescript@~5.8.0 openapi-typescript
+```
+package.jsonのscripts追記
+```json
+"scripts": {
+	# 追記
+	"gen:api": "openapi-typescript http://backend:3000/api-docs/openapi.json -o src/api/schema.d.ts",
+	"gen:api:local": "openapi-typescript ./openapi.json -o src/api/schema.d.ts"
+	...
+}
+```
+
+- 生成
+```bash
+npm run gen:api
+```
 
 ## DB
 
