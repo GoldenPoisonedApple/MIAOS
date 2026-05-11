@@ -1,11 +1,13 @@
-mod repositories;
-mod entities;
-mod dto;
-mod config;
-mod handlers;
-mod services;
-mod error;
-mod infrastructure;
+pub mod repositories;
+pub mod entities;
+pub mod dto;
+pub mod config;
+pub mod handlers;
+pub mod services;
+pub mod error;
+pub mod infrastructure;
+pub mod routes;
+pub mod state;
 
-mod test;
+#[cfg(test)]
 mod test_utils;

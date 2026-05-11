@@ -136,27 +136,3 @@ pub struct UpdateResultsRequest {
   pub other_files: Value,
 }
 
-// UpdateResultsRequest から ActiveModel への変換を定義
-impl From<UpdateResultsRequest> for ActiveModel {
-  fn from(req: UpdateResultsRequest) -> Self {
-    Self {
-      id: Set(req.experiment_id),
-      worker_name: Set(Some(req.worker_name)),
-
-      global_auc: Set(Some(req.global_auc)),
-      tpr_at_1_fpr: Set(Some(req.tpr_at_1_fpr)),
-      tpr_at_01_fpr: Set(Some(req.tpr_at_01_fpr)),
-      other_metrics: Set(Some(req.other_metrics)),
-
-      total_time: Set(Some(req.total_time)),
-
-      minio_path: Set(Some(req.minio_path)),
-      dataset_json_path: Set(Some(req.dataset_json_path)),
-      execution_log_path: Set(Some(req.execution_log_path)),
-      other_files: Set(Some(req.other_files)),
-
-      // 他パラメータは上書きしないので空
-      ..Default::default()
-    }
-  }
-}

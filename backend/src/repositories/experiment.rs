@@ -1,15 +1,15 @@
 use async_trait::async_trait;
-use sea_orm::{DatabaseConnection, ActiveModelTrait, ColumnTrait, QueryFilter, EntityTrait, Set};
-use time::OffsetDateTime;
+use sea_orm::{DatabaseConnection, ActiveModelTrait, ColumnTrait, QueryFilter, EntityTrait};
 
-use crate::dto::experiment::{CreateExperimentRequest, UpdateResultsRequest};
-use crate::entities::experiment::{ActiveModel, Model, Entity, ExperimentStatus};
+use crate::dto::experiment::{CreateExperimentRequest};
+use crate::entities::experiment::{ActiveModel, Model, Entity};
 use crate::error::ServerError;
 
 #[async_trait] // 非同期関数を含むトレイト用のマクロ
 pub trait ExperimentRepositoryTrait: Send + Sync {
   async fn create(&self, request: CreateExperimentRequest) -> Result<Model, ServerError>;
-	async fn update_results(&self, request: UpdateResultsRequest) -> Result<Model, ServerError>;
+	async fn update(&self, model: Model) -> Result<Model, ServerError>;
+	async fn find_by_id(&self, id: i64) -> Result<Model, ServerError>;
 	async fn find_all(&self) -> Result<Vec<Model>, ServerError>;
 	async fn delete_from_id(&self, id: i64) -> Result<u64, ServerError>;
 }
@@ -46,21 +46,27 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
   }
 
 	/// 実験の結果を更新
-	/// * request: UpdateResultsRequest - 実験の結果更新リクエスト
+	/// * model: Model - 更新する実験モデル
 	/// * 戻り値: Result<Model, ServerError> - 実験の結果更新結果
-	async fn update_results(
+	async fn update(
 		&self,
-		request: UpdateResultsRequest,
+		model: Model,
 	) -> Result<Model, ServerError> {
-		// DTOをActiveModelに変換
-		let mut active_model = ActiveModel::from(request);
-		// ステータスをSucceededに更新
-		active_model.status = Set(ExperimentStatus::Succeeded);
-		// 完了時刻セット
-		active_model.completed_at = Set(Some(OffsetDateTime::now_utc()));
-		// リクエストのIDに合致する実験を更新
+		// ModelをActiveModelに変換 変更を通知してやらんと変更されない仕様なので
+		let active_model = model.into_active_model_for_update();
+		// IDに合致する実験を更新
 		let result = active_model.update(&self.conn).await?;
 		Ok(result)
+	}
+
+	/// 指定されたIDの実験を取得
+	/// * id: i64 - 取得する実験のID
+	/// * 戻り値: Result<Model, ServerError> - 実験の取得結果
+	async fn find_by_id(&self, id: i64) -> Result<Model, ServerError> {
+		match Entity::find_by_id(id).one(&self.conn).await? {
+			Some(experiment) => Ok(experiment),
+			None => Err(ServerError::NotFound(format!("Experiment with id {} not found", id))),
+		}
 	}
 
 	/// すべての実験を取得
@@ -114,23 +120,6 @@ mod tests {
 
 		request
 	}
-	/// requestファクトリ
-	fn update_request(experiment_id: i64) -> UpdateResultsRequest {
-		let request = UpdateResultsRequest {
-			experiment_id: experiment_id,
-			worker_name: "test_worker".to_string(),
-			global_auc: 0.5,
-			tpr_at_1_fpr: 0.5,
-			tpr_at_01_fpr: 0.5,
-			other_metrics: serde_json::json!({}),
-			total_time: 10.0,
-			minio_path: "test_minio_path".to_string(),
-			dataset_json_path: "test_dataset_json_path".to_string(),
-			execution_log_path: "test_execution_log_path".to_string(),
-			other_files: serde_json::json!({}),
-		};
-		request
-	}
 
 	/// 実験の作成テスト
   #[tokio::test]
@@ -152,19 +141,31 @@ mod tests {
 
 	/// 実験の結果更新テスト
   #[tokio::test]
-  async fn test_update_results() {
+  async fn test_update() {
     // Arrange
     let repository = setup().await;
 		let request = create_request("test_experiment"); // 実験を作成
-		let result = repository.create(request).await.unwrap();
-    let request = update_request(result.id); // リクエスト作成
+		let mut model = repository.create(request).await.unwrap();
+    model.name = "test_experiment_updated".to_string();	// 実験名を更新
     // Act
-    let result = repository.update_results(request).await.unwrap();
+    let result = repository.update(model).await.unwrap();
 		// Assert
-		assert_eq!(result.status, ExperimentStatus::Succeeded); // ステータスがSUCCEEDEDである事
-		assert!(result.completed_at.is_some()); // 完了時刻がセットされている事
-		assert_eq!(result.worker_name, Some("test_worker".to_string())); // パラメータが更新されていること
+		assert_eq!(result.name, "test_experiment_updated"); // 実験名が更新されている事
 		remove_test_experiments(&repository).await;
+  }
+
+	/// 実験の取得テスト
+  #[tokio::test]
+  async fn test_find_by_id() {
+    // Arrange
+    let repository = setup().await;
+    let request = create_request("test_experiment");
+    let result = repository.create(request).await.unwrap();
+    // Act
+		let result = repository.find_by_id(result.id).await.unwrap();
+    // Assert
+    assert_eq!(result.name, "test_experiment"); // 実験名が一致する事
+    remove_test_experiments(&repository).await;
   }
 
 	/// 実験の一覧取得テスト

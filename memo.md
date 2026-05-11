@@ -57,6 +57,18 @@ let active_model = ActiveModel::from(request);
 異なるデータストア（PostgreSQLとRedis）をまたぐ処理の場合、単一のDBトランザクションでロールバックすることはできません。そのため、**後続の処理が失敗した場合は、先行して成功した処理を取り消す（Undoする）**というアプローチが一般的です。
 らしいので補償トランザクション
 
+// createの処理については idがないのでどうしようもない 新規作成時に複雑なビジネスロジックがないのでDTOをそのままrepositoryにねじ込む構造
+// 複雑なロジックがある場合は、serviceとrepositoryの間のDTOを作成するのが良いかと
+
+- sea_ormのせいで綺麗なアーキテクチャにできない
+ActiveModelをサービスに流出させられないし、Rich Domain modelにしようとしたら、Updateの所で変更を通知しないとUpdateされないとかいう謎仕様があるので、専用にModel -> ActiveModel変換仕様を作ってるし、結局Serviceに流出させなくてもEntityがやられてるから意味ない
+綺麗にしようとしても良いがボイラープレートが大量に発生するので、変更が多いと考えるとやらないほうが良い
+
+- エクストラクタ
+URLのパスから？（例: /experiments/123） → Path<i64> を使う
+URLのクエリ文字列から？（例: /experiments?id=123） → Query<T> を使う
+リクエストのボディ（JSON）から？（例: {"id": 123}） → Json<T> を使う
+HTTPヘッダーから？ → HeaderMap などを使い
 
 ## DB
 
@@ -64,6 +76,9 @@ let active_model = ActiveModel::from(request);
 
 condisionとexecutionとresultを分割する案で2時間位悩んだが、結局1条件1実行の方針のため統合
 ジョブキューパターン
+
+IDはsignedなのでby_id指定はi64で良い、u64だとオーバーフローリスクも存在する
+マイナス値が存在しないはずである場合は、id > 0 みたいな制約でやってあげればよい
 
 
 - 基本操作

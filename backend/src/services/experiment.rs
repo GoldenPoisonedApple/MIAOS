@@ -5,6 +5,7 @@ use crate::entities::task::Task;
 use crate::error::ServerError;
 use crate::repositories::experiment::ExperimentRepositoryTrait;
 use crate::repositories::task::TaskRepositoryTrait;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 /// ビジネスロジックを担当するサービス
@@ -47,7 +48,12 @@ impl<E: ExperimentRepositoryTrait, T: TaskRepositoryTrait> ExperimentService<E, 
 	/// * request: UpdateResultsRequest - 実験の結果更新リクエスト
 	/// * 戻り値: Result<Model, ServerError> - 実験の結果更新結果
 	pub async fn reflect_experiment_results(&self, request: UpdateResultsRequest) -> Result<Model, ServerError> {
-		self.experiment_repository.update_results(request).await
+		// 更新対象取得
+		let mut model = self.experiment_repository.find_by_id(request.experiment_id).await?;
+		// 結果反映
+		model.complete(request, OffsetDateTime::now_utc());
+		// 更新
+		self.experiment_repository.update(model).await
 	}
 
 	/// 実験の一覧取得
@@ -86,8 +92,7 @@ mod tests {
   use crate::test_utils::{remove_test_experiments, remove_test_tasks};
   use crate::repositories::experiment::ExperimentRepository;
   use crate::repositories::task::TaskRepository;
-
-
+  use crate::entities::experiment::ExperimentStatus;
 
 
   /// テストの前処理
@@ -158,6 +163,24 @@ mod tests {
     request
   }
 
+	/// requestファクトリー
+	fn update_request(experiment_id: i64) -> UpdateResultsRequest {
+		let request = UpdateResultsRequest {
+			experiment_id: experiment_id,
+			worker_name: "test_worker".to_string(),
+			global_auc: 0.5,
+			tpr_at_1_fpr: 0.5,
+			tpr_at_01_fpr: 0.5,
+			other_metrics: serde_json::json!({}),
+			total_time: 10.0,
+			minio_path: "test_minio_path".to_string(),
+			dataset_json_path: "test_dataset_json_path".to_string(),
+			execution_log_path: "test_execution_log_path".to_string(),
+			other_files: serde_json::json!({}),
+		};
+		request
+	}
+
   /// 実験の作成テスト
   #[tokio::test]
   async fn test_create() {
@@ -201,6 +224,23 @@ mod tests {
 		assert!(result.is_err()); // エラー時
 		let experiments = service.experiment_repository.find_all().await.unwrap();
 		assert!(!experiments.iter().any(|experiment| experiment.name == request.name)); // リクエストの実験が存在しない事
+		remove_test_experiments(&service.experiment_repository).await;
+	}
+
+	/// 実験の結果反映テスト
+	#[tokio::test]
+	async fn test_reflect_experiment_results() {
+		// Arrange
+		let service = setup().await;
+		let experiment = service.experiment_repository.create(create_request("test_experiment")).await.unwrap(); // 実験を作成
+		let request = update_request(experiment.id);
+		// Act
+		let result = service.reflect_experiment_results(request).await.unwrap();
+		// Assert
+		assert_eq!(result.name, "test_experiment"); // 実験名が一致する事
+		assert_eq!(result.status, ExperimentStatus::Succeeded); // ステータスがSUCCEEDEDである事
+		assert!(result.completed_at.is_some()); // 完了時刻がセットされている事
+		assert_eq!(result.worker_name, Some("test_worker".to_string())); // パラメータが更新されていること
 		remove_test_experiments(&service.experiment_repository).await;
 	}
 }
