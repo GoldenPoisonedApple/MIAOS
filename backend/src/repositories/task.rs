@@ -15,7 +15,7 @@ use crate::infrastructure::run_attack;
 pub trait TaskRepositoryTrait: Send + Sync {
   async fn create_task(&self, request: CreateTaskRequest) -> Result<Uuid, ServerError>;
   async fn find_all_tasks(&self) -> Result<Vec<Task>, ServerError>;
-	async fn delete_by_id(&self, id: Uuid) -> Result<i64, ServerError>;
+	async fn delete_by_id(&self, id: Uuid) -> Result<u64, ServerError>;
 }
 
 #[derive(Clone)]
@@ -120,8 +120,8 @@ impl TaskRepositoryTrait for TaskRepository {
 
   /// 指定されたIDのタスクを削除
 	/// * id: Uuid - 削除するタスクのID
-	/// * 戻り値: Result<i64, ServerError> - 削除されたタスクの件数
-  async fn delete_by_id(&self, id: Uuid) -> Result<i64, ServerError> {
+	/// * 戻り値: Result<u64, ServerError> - 削除されたタスクの件数
+  async fn delete_by_id(&self, id: Uuid) -> Result<u64, ServerError> {
     let mut conn = self.pool.get().await.map_err(|e| ServerError::PoolError(e.to_string()))?;
 		// タスクの取得
 		let results: Vec<String> = conn.lrange("celery", 0, -1).await?;
@@ -135,7 +135,7 @@ impl TaskRepositoryTrait for TaskRepository {
 			};
 			if task_id == id.to_string() {
 				// タスクの削除 完全一致のみ削除可能
-				let lrem_result: i64 = conn.lrem("celery", 0, result).await?;
+				let lrem_result: u64 = conn.lrem("celery", 0, result).await?;
 				if lrem_result == 0 {
 					return Err(ServerError::NotFound(format!("Task with id {} not found", id)));
 				}

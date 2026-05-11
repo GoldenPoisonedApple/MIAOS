@@ -6,7 +6,7 @@ use crate::config::default::*;
 use crate::entities::experiment::{ActiveModel, MiaMethod};
 
 /// 実験の作成リクエスト
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(default)] // 欠損値はデフォルト値(Default::default())を使用する
 pub struct CreateExperimentRequest {
   /// 実験名
