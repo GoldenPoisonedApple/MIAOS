@@ -1,50 +1,47 @@
-import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
-import type { components } from "../api/schema";
-
-type Experiment = components["schemas"]["Model"];
 
 export const useExperiments = () => {
-  const [experiments, setExperiments] = useState<Experiment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchExperiments = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error } = await apiClient.GET("/api/experiments");
-      if (error) {
-        throw new Error(error);
+  const { data: experiments = [], isLoading, error } = useQuery({
+    queryKey: ["experiments"],
+    queryFn: async () => {
+      const { data, error, response } = await apiClient.GET("/api/experiments");
+      if (error !== undefined) {
+        const serverError = error as { message?: string; detail?: string };
+        const errorMessage = serverError?.message || serverError?.detail || `エラー (${response.status} ${response.statusText})`;
+        throw new Error(errorMessage);
       }
-      if (data) {
-        setExperiments(data);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error("Failed to fetch experiments"));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      return data || [];
+    },
+  });
 
-  const deleteExperiment = async (id: number) => {
-    try {
-      const { error } = await apiClient.DELETE("/api/experiments/{id}", {
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const { error, response } = await apiClient.DELETE("/api/experiments/{id}", {
         params: { path: { id } },
       });
-      if (error) {
-        throw new Error(error);
+      if (error !== undefined) {
+        const serverError = error as { message?: string; detail?: string };
+        const errorMessage = serverError?.message || serverError?.detail || `削除エラー (${response.status} ${response.statusText})`;
+        throw new Error(errorMessage);
       }
-      await fetchExperiments(); // Refresh list after deletion
-    } catch (err) {
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["experiments"] });
+    },
+    onError: (err) => {
       console.error(err);
-      alert("Failed to delete experiment");
-    }
+      alert(err instanceof Error ? err.message : "Failed to delete experiment");
+    },
+  });
+
+  return {
+    experiments,
+    loading: isLoading,
+    error,
+    deleteExperiment: (id: number) => deleteMutation.mutate(id),
+    refetch: () => queryClient.invalidateQueries({ queryKey: ["experiments"] }),
   };
-
-  useEffect(() => {
-    fetchExperiments();
-  }, [fetchExperiments]);
-
-  return { experiments, loading, error, deleteExperiment, refetch: fetchExperiments };
 };

@@ -1,50 +1,47 @@
-import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
-import type { components } from "../api/schema";
-
-type Task = components["schemas"]["Task"];
 
 export const useTasks = () => {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchTasks = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error } = await apiClient.GET("/api/tasks");
-      if (error) {
-        throw new Error(error);
+  const { data: tasks = [], isLoading, error } = useQuery({
+    queryKey: ["tasks"],
+    queryFn: async () => {
+      const { data, error, response } = await apiClient.GET("/api/tasks");
+      if (error !== undefined) {
+        const serverError = error as { message?: string; detail?: string };
+        const errorMessage = serverError?.message || serverError?.detail || `エラー (${response.status} ${response.statusText})`;
+        throw new Error(errorMessage);
       }
-      if (data) {
-        setTasks(data);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error("Failed to fetch tasks"));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      return data || [];
+    },
+  });
 
-  const deleteTask = async (id: string) => {
-    try {
-      const { error } = await apiClient.DELETE("/api/tasks/{id}", {
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error, response } = await apiClient.DELETE("/api/tasks/{id}", {
         params: { path: { id } },
       });
-      if (error) {
-        throw new Error(error);
+      if (error !== undefined) {
+        const serverError = error as { message?: string; detail?: string };
+        const errorMessage = serverError?.message || serverError?.detail || `削除エラー (${response.status} ${response.statusText})`;
+        throw new Error(errorMessage);
       }
-      await fetchTasks(); // Refresh list after deletion
-    } catch (err) {
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+    onError: (err) => {
       console.error(err);
-      alert("Failed to delete task");
-    }
+      alert(err instanceof Error ? err.message : "Failed to delete task");
+    },
+  });
+
+  return {
+    tasks,
+    loading: isLoading,
+    error,
+    deleteTask: (id: string) => deleteMutation.mutate(id),
+    refetch: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
   };
-
-  useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
-
-  return { tasks, loading, error, deleteTask, refetch: fetchTasks };
 };
