@@ -3,6 +3,8 @@
 実験はidで管理することに
 <- わざわざ名前にしなくても良い、idでも一意性が付く、検索容易性がある、覚えやすく入力しやすい
 
+sudo chown -R $USER:$USER .
+
 ## バックエンド
 なんかcargoが効かないので応急処置
 ```bash
@@ -138,7 +140,7 @@ Tasks: [Task { id: 1107cc26-b460-4405-8b07-96ff7007f7d2, task: "mia_tasks.run_at
 
 
 ToDo
-ロガーの位置がおかしいらしい mainじゃなさそう
+CORS設定とか
 
 こういうの見れたらいいよね
 [Pending]  12件

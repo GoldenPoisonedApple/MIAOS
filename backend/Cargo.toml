@@ -27,6 +27,9 @@ celery = "0.5.5"
 # error
 thiserror = "2.0.18"
 uuid = "1.23.1"
+# utoipa
+utoipa = { version = "5.5.0", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 
 [dev-dependencies]
 # for the test
