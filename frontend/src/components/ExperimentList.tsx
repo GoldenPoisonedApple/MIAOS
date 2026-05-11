@@ -1,14 +1,23 @@
+import { useState } from "react";
 import { useExperiments } from "../hooks/useExperiments";
+import { CreateExperimentModal } from "./CreateExperimentModal";
 
 export const ExperimentList = () => {
-  const { experiments, loading, error, deleteExperiment } = useExperiments();
+  const { experiments, loading, error, deleteExperiment, createExperiment, isCreating } = useExperiments();
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   if (loading) return <div className="loading">実験情報を読み込み中...</div>;
   if (error) return <div className="error">エラー: {error.message}</div>;
 
   return (
     <div className="table-container">
-      <h2>実験一覧</h2>
+      <div className="list-header">
+        <h2>実験一覧</h2>
+        <button className="button create-button" onClick={() => setIsModalOpen(true)}>
+          新しい実験を作成
+        </button>
+      </div>
+      
       {experiments.length === 0 ? (
         <p>実験データがありません</p>
       ) : (
@@ -114,6 +123,13 @@ export const ExperimentList = () => {
           </table>
         </div>
       )}
+
+      <CreateExperimentModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={createExperiment}
+        isCreating={isCreating}
+      />
     </div>
   );
 };

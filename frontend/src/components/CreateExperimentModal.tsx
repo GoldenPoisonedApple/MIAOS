@@ -1,0 +1,168 @@
+import { useState } from "react";
+import type { CreateExperimentRequest } from "../hooks/useExperiments";
+
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (req: CreateExperimentRequest) => Promise<void>;
+  isCreating: boolean;
+}
+
+export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }: Props) => {
+  const getDefaultDateName = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}_${String(d.getHours()).padStart(2, "0")}-${String(d.getMinutes()).padStart(2, "0")}-${String(d.getSeconds()).padStart(2, "0")}`;
+  };
+
+  const [formData, setFormData] = useState<CreateExperimentRequest>({
+    name: getDefaultDateName(),
+    method: "OfflineLira",
+    notes: null,
+    seed: 42,
+    batch_size: 256,
+    max_epochs: 200,
+    num_shadow_models: 100,
+    shadow_train_size: 10520,
+    shadow_test_size: 10520,
+    target_train_size: 10520,
+    target_test_size: 10520,
+    base_experiment_id: null,
+    load_attack_model: false,
+    load_shadow_model: false,
+    load_target_model: false,
+		hyperparameters: {},
+  });
+
+  if (!isOpen) return null;
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+
+    setFormData((prev) => {
+      if (type === "checkbox") {
+        return { ...prev, [name]: (e.target as HTMLInputElement).checked };
+      }
+      if (type === "number") {
+        return { ...prev, [name]: value === "" ? 0 : Number(value) };
+      }
+      return { ...prev, [name]: value };
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onSubmit(formData);
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content">
+        <h2>新しい実験を作成</h2>
+        <form onSubmit={handleSubmit} className="modal-form">
+          <div className="form-group">
+            <label>実験名</label>
+            <input type="text" name="name" value={formData.name} onChange={handleChange} required />
+          </div>
+
+          <div className="form-group">
+            <label>手法 (Method)</label>
+            <select name="method" value={formData.method} onChange={handleChange}>
+              <option value="OfflineLira">OfflineLira</option>
+              <option value="Shokri">Shokri</option>
+            </select>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>バッチサイズ</label>
+              <input type="number" name="batch_size" value={formData.batch_size} onChange={handleChange} required />
+            </div>
+            <div className="form-group">
+              <label>最大エポック数</label>
+              <input type="number" name="max_epochs" value={formData.max_epochs} onChange={handleChange} required />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>シード値</label>
+              <input type="number" name="seed" value={formData.seed} onChange={handleChange} required />
+            </div>
+            <div className="form-group">
+              <label>シャドウモデル数</label>
+              <input type="number" name="num_shadow_models" value={formData.num_shadow_models} onChange={handleChange} required />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Shadow Train Size</label>
+              <input type="number" name="shadow_train_size" value={formData.shadow_train_size} onChange={handleChange} required />
+            </div>
+            <div className="form-group">
+              <label>Shadow Test Size</label>
+              <input type="number" name="shadow_test_size" value={formData.shadow_test_size} onChange={handleChange} required />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Target Train Size</label>
+              <input type="number" name="target_train_size" value={formData.target_train_size} onChange={handleChange} required />
+            </div>
+            <div className="form-group">
+              <label>Target Test Size</label>
+              <input type="number" name="target_test_size" value={formData.target_test_size} onChange={handleChange} required />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>ベース実験ID (任意)</label>
+            <input
+              type="number"
+              name="base_experiment_id"
+              value={formData.base_experiment_id || ""}
+              onChange={(e) => setFormData((prev) => ({ ...prev, base_experiment_id: e.target.value ? Number(e.target.value) : null }))}
+            />
+          </div>
+          <div className="form-checkbox-group">
+            <label>
+              <input type="checkbox" name="load_attack_model" checked={formData.load_attack_model} onChange={handleChange} />
+              Load Attack Model
+            </label>
+            <label>
+              <input type="checkbox" name="load_shadow_model" checked={formData.load_shadow_model} onChange={handleChange} />
+              Load Shadow Model
+            </label>
+            <label>
+              <input type="checkbox" name="load_target_model" checked={formData.load_target_model} onChange={handleChange} />
+              Load Target Model
+            </label>
+          </div>
+					<div className="form-group">
+            <label>ハイパーパラメータ</label>
+            <input type="text" name="hyperparameters" value={JSON.stringify(formData.hyperparameters || {})} onChange={handleChange} />
+          </div>
+
+          <div className="form-group">
+            <label>備考 (Notes)</label>
+            <textarea
+              name="notes"
+              value={formData.notes || ""}
+              onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value || null }))}
+              rows={3}
+            />
+          </div>
+
+          <div className="modal-actions">
+            <button type="button" onClick={onClose} className="button cancel-button" disabled={isCreating}>
+              キャンセル
+            </button>
+            <button type="submit" className="button submit-button" disabled={isCreating}>
+              {isCreating ? "作成中..." : "作成する"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
