@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useTasks } from "../../hooks/useTasks";
+import { useDynamicColumns } from "../../hooks/useDynamicColumns";
 import { ConfirmModal } from "../../components/ui/ConfirmModal/ConfirmModal";
 import { Button } from "../../components/ui/Button/Button";
 import { DataTable } from "../../components/ui/DataTable/DataTable";
@@ -13,6 +14,12 @@ export const TaskList = () => {
   const { tasks, loading, error, deleteTasks, isDeleting } = useTasks();
   const [rowSelection, setRowSelection] = useState({});
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  const { dynamicColumns, defaultHiddenColumns } = useDynamicColumns<Task>(tasks, [
+    { key: "args_control", prefix: "Ctrl" },
+    { key: "args_keyword", prefix: "Kwarg" },
+    { key: "args_positional", prefix: "Arg" },
+  ]);
 
   const columns = useMemo<ColumnDef<Task>[]>(
     () => [
@@ -36,23 +43,9 @@ export const TaskList = () => {
       { accessorKey: "id", header: "ID" },
       { accessorKey: "task", header: "タスク名" },
       { accessorKey: "error_message", header: "エラーメッセージ" },
-      {
-        accessorKey: "args_control",
-        header: "制御情報 (args_control)",
-        cell: ({ row }) => <code>{JSON.stringify(row.original.args_control)}</code>,
-      },
-      {
-        accessorKey: "args_keyword",
-        header: "キーワード引数 (args_keyword)",
-        cell: ({ row }) => <code>{JSON.stringify(row.original.args_keyword)}</code>,
-      },
-      {
-        accessorKey: "args_positional",
-        header: "位置引数 (args_positional)",
-        cell: ({ row }) => <code>{JSON.stringify(row.original.args_positional)}</code>,
-      },
+      ...dynamicColumns,
     ],
-    []
+    [dynamicColumns]
   );
 
   if (loading) return <div>タスク情報を読み込み中...</div>;
@@ -88,6 +81,9 @@ export const TaskList = () => {
         columns={columns}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
+        initialColumnVisibility={{
+          ...defaultHiddenColumns,
+        }}
       />
 
       <ConfirmModal

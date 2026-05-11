@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useExperiments } from "../../hooks/useExperiments";
+import { useDynamicColumns } from "../../hooks/useDynamicColumns";
 import { CreateExperimentModal } from "./components/CreateExperimentModal";
 import { ConfirmModal } from "../../components/ui/ConfirmModal/ConfirmModal";
 import { Button } from "../../components/ui/Button/Button";
@@ -16,6 +17,12 @@ export const ExperimentList = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState({});
+
+  const { dynamicColumns, defaultHiddenColumns } = useDynamicColumns<Experiment>(experiments, [
+    { key: "hyperparameters", prefix: "HP" },
+    { key: "other_metrics", prefix: "Metric" },
+    { key: "other_files", prefix: "File" },
+  ]);
 
   const columns = useMemo<ColumnDef<Experiment>[]>(
     () => [
@@ -89,23 +96,9 @@ export const ExperimentList = () => {
       { accessorKey: "execution_log_path", header: "実行ログパス" },
       { accessorKey: "minio_path", header: "MinIOパス" },
       { accessorKey: "notes", header: "備考" },
-      {
-        accessorKey: "hyperparameters",
-        header: "ハイパーパラメータ",
-        cell: ({ row }) => <code>{JSON.stringify(row.original.hyperparameters)}</code>,
-      },
-      {
-        accessorKey: "other_files",
-        header: "その他のファイル",
-        cell: ({ row }) => (row.original.other_files ? <code>{JSON.stringify(row.original.other_files)}</code> : "-"),
-      },
-      {
-        accessorKey: "other_metrics",
-        header: "その他のメトリクス",
-        cell: ({ row }) => (row.original.other_metrics ? <code>{JSON.stringify(row.original.other_metrics)}</code> : "-"),
-      },
+      ...dynamicColumns,
     ],
-    []
+    [dynamicColumns]
   );
 
   if (loading) return <div>実験情報を読み込み中...</div>;
@@ -144,6 +137,9 @@ export const ExperimentList = () => {
         columns={columns}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
+        initialColumnVisibility={{
+          ...defaultHiddenColumns,
+        }}
       />
 
       <CreateExperimentModal

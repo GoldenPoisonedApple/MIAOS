@@ -35,6 +35,7 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: import("@tanstack/react-table").OnChangeFn<RowSelectionState>;
+  initialColumnVisibility?: VisibilityState;
 }
 
 // Draggable Header Cell Component
@@ -82,8 +83,9 @@ export function DataTable<TData, TValue>({
   data,
   rowSelection,
   onRowSelectionChange,
+  initialColumnVisibility = {},
 }: DataTableProps<TData, TValue>) {
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
 
   const table = useReactTable({

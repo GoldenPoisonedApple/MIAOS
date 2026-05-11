@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { CreateExperimentRequest } from "../../../hooks/useExperiments";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Button } from "../../../components/ui/Button/Button";
+import { KeyValueEditor } from "../../../components/ui/KeyValueEditor/KeyValueEditor";
 import styles from "./CreateExperimentModal.module.css";
 
 interface Props {
@@ -33,6 +34,7 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
     load_attack_model: false,
     load_shadow_model: false,
     load_target_model: false,
+    hyperparameters: {} as Record<string, never>,
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -69,16 +71,6 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
             <option value="OfflineLira">OfflineLira</option>
             <option value="Shokri">Shokri</option>
           </select>
-        </div>
-
-        <div className={styles.formGroup}>
-          <label>ベース実験ID (任意)</label>
-          <input
-            type="number"
-            name="base_experiment_id"
-            value={formData.base_experiment_id || ""}
-            onChange={(e) => setFormData((prev) => ({ ...prev, base_experiment_id: e.target.value ? Number(e.target.value) : null }))}
-          />
         </div>
 
         <div className={styles.formRow}>
@@ -125,6 +117,16 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
           </div>
         </div>
 
+				<div className={styles.formGroup}>
+          <label>ベース実験ID (任意)</label>
+          <input
+            type="number"
+            name="base_experiment_id"
+            value={formData.base_experiment_id || ""}
+            onChange={(e) => setFormData((prev) => ({ ...prev, base_experiment_id: e.target.value ? Number(e.target.value) : null }))}
+          />
+        </div>
+
         <div className={styles.formCheckboxGroup}>
           <label>
             <input type="checkbox" name="load_attack_model" checked={formData.load_attack_model} onChange={handleChange} />
@@ -139,6 +141,14 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
             Load Target Model
           </label>
         </div>
+
+				<div className={styles.formGroup}>
+					<label>Hyperparameters</label>
+					<KeyValueEditor
+            value={formData.hyperparameters}
+            onChange={(val) => setFormData((prev) => ({ ...prev, hyperparameters: val }))}
+          />
+				</div>
 
         <div className={styles.formGroup}>
           <label>備考 (Notes)</label>
