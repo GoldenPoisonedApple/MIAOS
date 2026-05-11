@@ -1,0 +1,32 @@
+.badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.waiting {
+  background: #fdf6b2;
+  color: #854d0e;
+}
+
+.running {
+  background: #c3ddfd;
+  color: #1e429f;
+}
+
+.succeeded {
+  background: #def7ec;
+  color: #03543f;
+}
+
+.failed {
+  background: #fde8e8;
+  color: #9b1c1c;
+}
+
+.default {
+  background: var(--social-bg);
+  color: var(--text);
+}

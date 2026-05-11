@@ -185,6 +185,9 @@ CORS設定とか
 [Success] 120件
 [Failed]    2件
 
+タスクに実験idを
+実験を削除したら自動的にそのタスクを削除
+
 認証を入れられたらいいいね
 
 MIAOS(Membership Infference Attack Orchestration System)

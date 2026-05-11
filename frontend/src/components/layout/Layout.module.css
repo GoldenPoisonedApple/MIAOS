@@ -1,0 +1,56 @@
+.appContainer {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 24px;
+}
+
+.appHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.appHeader h1 {
+  margin: 0;
+  font-size: 32px;
+  color: var(--text-h);
+}
+
+.tabNavigation {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid var(--border);
+  width: 100%;
+}
+
+.tabButton {
+  background: none;
+  border: none;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px; /* Overlap the border-bottom */
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.tabButton:hover {
+  color: var(--accent);
+}
+
+.tabButton.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.appMain {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}

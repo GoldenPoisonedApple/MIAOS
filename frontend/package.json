@@ -8,14 +8,16 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-		"gen:api": "openapi-typescript http://backend:3000/api-docs/openapi.json -o src/api/schema.d.ts",
+    "gen:api": "openapi-typescript http://backend:3000/api-docs/openapi.json -o src/api/schema.d.ts",
     "gen:api:local": "openapi-typescript ./openapi.json -o src/api/schema.d.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.10",
+    "@tanstack/react-table": "^8.21.3",
     "openapi-fetch": "^0.17.0",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "react-router-dom": "^7.15.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
