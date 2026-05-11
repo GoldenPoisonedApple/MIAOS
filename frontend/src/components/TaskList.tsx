@@ -19,6 +19,9 @@ export const TaskList = () => {
                 <th>ID</th>
                 <th>タスク名</th>
                 <th>エラーメッセージ</th>
+                <th>制御情報 (args_control)</th>
+                <th>キーワード引数 (args_keyword)</th>
+                <th>位置引数 (args_positional)</th>
                 <th>アクション</th>
               </tr>
             </thead>
@@ -28,6 +31,15 @@ export const TaskList = () => {
                   <td>{task.id}</td>
                   <td>{task.task}</td>
                   <td className="error-text">{task.error_message || "-"}</td>
+                  <td>
+                    <code>{JSON.stringify(task.args_control)}</code>
+                  </td>
+                  <td>
+                    <code>{JSON.stringify(task.args_keyword)}</code>
+                  </td>
+                  <td>
+                    <code>{JSON.stringify(task.args_positional)}</code>
+                  </td>
                   <td>
                     <button
                       onClick={() => {
