@@ -146,7 +146,7 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
 					<label>Hyperparameters</label>
 					<KeyValueEditor
             value={formData.hyperparameters}
-            onChange={(val) => setFormData((prev) => ({ ...prev, hyperparameters: val }))}
+            onChange={(val) => setFormData((prev) => ({ ...prev, hyperparameters: val as Record<string, never> }))}
           />
 				</div>
 
