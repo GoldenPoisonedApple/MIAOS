@@ -8,7 +8,7 @@ use server::repositories::experiment::ExperimentRepository;
 use server::repositories::task::TaskRepository;
 use server::services::experiment::ExperimentService;
 use server::state::AppState;
-use server::routes::experiment::app_routes;
+use server::routes::app_routes;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

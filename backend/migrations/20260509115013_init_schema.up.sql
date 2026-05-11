@@ -14,7 +14,7 @@ CREATE TYPE mia_method AS ENUM (
 -- 実験条件
 CREATE TABLE experiments (
 	id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-	name TEXT NOT NULL UNIQUE, -- 実験名
+	name TEXT NOT NULL, -- 実験名
 	notes TEXT, -- 備考
 	method mia_method NOT NULL, -- 攻撃手法
 

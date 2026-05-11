@@ -65,11 +65,12 @@ services:
 
 
   frontend:
+    init: true  # ゾンビプロセスを防ぐ
     restart: unless-stopped
     build:
       context: ./frontend   # ./frontend の Dockerfile を使用
       target: dev  # ビルドステージ指定
-    container_name: tracking_frontend
+    container_name: miaos_frontend
     # restart: unless-stopped は設けない: エラーログを残す、chargo watch でのホットリロードとの競合を避ける
     environment:
       - APP_ENV=dev                 # アプリ側で開発モードを認識させる
@@ -84,8 +85,9 @@ services:
 
 
   backend:
+    init: true  # ゾンビプロセスを防ぐ
     restart: unless-stopped
-    container_name: tracking_backend
+    container_name: miaos_backend
     build:
       context: ./backend  # ./backend の Dockerfile を使用
       target: dev

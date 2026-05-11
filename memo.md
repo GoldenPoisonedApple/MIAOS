@@ -77,11 +77,11 @@ HTTPヘッダーから？ → HeaderMap などを使い
 - サーバー動作確認
 ```bash
 # 取得
-curl -X GET http://backend:3000/api/experiments
+curl -X GET http://localhost:3000/api/experiments
 # 作成
-curl -X POST http://backend:3000/api/experiments
+curl -X POST http://localhost:3000/api/experiments -H "Content-Type: application/json" -d '{"name":"test"}'
 # 取得
-curl -X GET http://backend:3000/api/tasks
+curl -X GET http://localhost:3000/api/tasks
 
 ```
 
@@ -147,3 +147,5 @@ ToDo
 [Failed]    2件
 
 認証を入れられたらいいいね
+
+MIAOS(Membership Infference Attack Orchestration System)
