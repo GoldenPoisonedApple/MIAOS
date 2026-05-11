@@ -74,6 +74,17 @@ HTTPヘッダーから？ → HeaderMap などを使い
 将来的にしたいときのために、ServiceをTraitにしても良いが、最適化の問題だったり、面倒だったりするので、E2Eテストと割り切ることもできる。
 まぁモックいらん側の考えでやれば、今回は外部が存在しないのでモックいらんからそのままやればいいんだけどさ
 
+- サーバー動作確認
+```bash
+# 取得
+curl -X GET http://backend:3000/api/experiments
+# 作成
+curl -X POST http://backend:3000/api/experiments
+# 取得
+curl -X GET http://backend:3000/api/tasks
+
+```
+
 ## DB
 
 テーブル設計

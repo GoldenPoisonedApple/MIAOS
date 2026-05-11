@@ -22,7 +22,7 @@ pub fn app_routes(state: AppState) -> Router {
       get(get_all_experiments).post(create_experiment).put(reflect_experiment_results),
     )
     .route(
-      "/experiments/:id",
+      "/experiments/{id}",
       delete(delete_experiment),
     )
     .route(
@@ -30,7 +30,7 @@ pub fn app_routes(state: AppState) -> Router {
       get(get_all_tasks).delete(delete_task),
     )
     .route(
-      "/tasks/:id",
+      "/tasks/{id}",
       delete(delete_task),
     )
     .with_state(state.experiment_service)

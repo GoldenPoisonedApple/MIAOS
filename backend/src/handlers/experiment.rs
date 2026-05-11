@@ -42,7 +42,7 @@ pub async fn get_all_experiments(
 }
 
 /// 実験の削除
-/// Path: /experiments/:id のような指定の場合 idを取ってこれるエクストラクタ
+/// Path: /experiments/{id} のような指定の場合 idを取ってこれるエクストラクタ
 pub async fn delete_experiment(
 	State(service): State<Arc<ExperimentService<ExperimentRepository, TaskRepository>>>,
 	Path(id): Path<i64>
