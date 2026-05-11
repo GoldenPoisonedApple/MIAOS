@@ -34,9 +34,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		experiment_service: service,
 	};
 
-	// ルーティング /api 以下のルーティングを設定
-	let app = Router::new()
-		.nest("/api", app_routes(state));
+	// ルーティング
+	let app = app_routes(state);
 
   // サーバ起動
 	const SERVER_PORT: u16 = 3000;

@@ -1,12 +1,13 @@
 use sea_orm::Set;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use utoipa::ToSchema;
 
 use crate::config::default::*;
 use crate::entities::experiment::{ActiveModel, MiaMethod};
 
 /// 実験の作成リクエスト
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(default)] // 欠損値はデフォルト値(Default::default())を使用する
 pub struct CreateExperimentRequest {
   /// 実験名
@@ -34,6 +35,7 @@ pub struct CreateExperimentRequest {
   /// シード値
   pub seed: i32,
   /// その他のハイパーパラメータ
+  #[schema(value_type = Object)]
   pub hyperparameters: Value,
 
   // -- データ流用 --
@@ -107,7 +109,7 @@ impl From<CreateExperimentRequest> for ActiveModel {
 }
 
 /// 実験の結果更新リクエスト
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UpdateResultsRequest {
   /// 実験ID
   pub experiment_id: i64,
@@ -121,6 +123,7 @@ pub struct UpdateResultsRequest {
   /// 0.1%FPRでのTPR
   pub tpr_at_01_fpr: f64,
   /// 拡張メトリクス
+  #[schema(value_type = Object)]
   pub other_metrics: Value,
 
   /// トータルの実行時間(秒)
@@ -133,6 +136,7 @@ pub struct UpdateResultsRequest {
   /// 実行ログのパス
   pub execution_log_path: String,
   /// その他のファイルのパス
+  #[schema(value_type = Object)]
   pub other_files: Value,
 }
 

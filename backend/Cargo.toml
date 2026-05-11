@@ -6,6 +6,9 @@ edition = "2021"
 [dependencies]
 # Web App
 axum = "0.8.9"
+# utoipa
+utoipa = { version = "5.3", features = ["axum_extras", "uuid", "time"] }
+utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
 # データシリアライズ
 serde = "1.0.228"
 serde_json = "1.0.149"
@@ -27,9 +30,6 @@ celery = "0.5.5"
 # error
 thiserror = "2.0.18"
 uuid = "1.23.1"
-# utoipa
-utoipa = { version = "5.5.0", features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 
 [dev-dependencies]
 # for the test

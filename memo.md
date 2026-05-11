@@ -87,6 +87,12 @@ curl -X GET http://localhost:3000/api/tasks
 
 ```
 
+- utoipa APIの仕様書とかを勝手に書いてくれるやつ
+人用
+http://localhost:3000/docs/
+機械用
+http://localhost:3000/api-docs/openapi.json
+
 ## DB
 
 テーブル設計
