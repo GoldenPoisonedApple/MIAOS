@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// タスク
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct Task {
 	/// id
 	pub id: Uuid,
@@ -10,10 +11,13 @@ pub struct Task {
 	pub task: String,
 	// ---- 引数 ----
 	/// 位置引数
+	#[schema(value_type = Object)]
 	pub args_positional: serde_json::Value,
 	/// キーワード引数
+	#[schema(value_type = Object)]
 	pub args_keyword: serde_json::Value,
 	/// 制御情報
+	#[schema(value_type = Object)]
 	pub args_control: serde_json::Value,
 	// ----- エラー情報 ----
 	/// エラーメッセージ

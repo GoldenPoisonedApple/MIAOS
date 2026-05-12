@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # 開発に必要なツールのインストール
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl bash
 
 RUN npm ci
 

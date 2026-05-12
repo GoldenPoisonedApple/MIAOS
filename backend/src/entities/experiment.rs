@@ -3,10 +3,11 @@ use sea_orm::ActiveValue::{Set, Unchanged};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
+use utoipa::ToSchema;
 
 use crate::dto::experiment::UpdateResultsRequest;
 
-#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "experiment_status")]
 pub enum ExperimentStatus {
   #[sea_orm(string_value = "WAITING")]
@@ -19,7 +20,7 @@ pub enum ExperimentStatus {
   Failed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "mia_method")]
 pub enum MiaMethod {
   #[sea_orm(string_value = "offline_lira")]
@@ -30,7 +31,7 @@ pub enum MiaMethod {
 
 // DBの1行と1対1で対応する構造体
 // 名前はModelにしておくと、SeaORMのデフォルトの挙動になる
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize, ToSchema)]
 #[sea_orm(table_name = "experiments")]
 pub struct Model {
   /// 主キー
@@ -61,6 +62,7 @@ pub struct Model {
   /// シード値
   pub seed: i32,
   /// その他のハイパーパラメータ
+  #[schema(value_type = Object)]
   pub hyperparameters: Json, // SeaORMのJson型
 
   // データ流用
@@ -80,6 +82,7 @@ pub struct Model {
   pub worker_name: Option<String>,
   /// 完了日時
   #[serde(with = "time::serde::iso8601::option")]
+  #[schema(value_type = Option<String>, format = DateTime)]
   pub completed_at: Option<TimeDateTimeWithTimeZone>, // SeaORMのTime型
   /// エラーメッセージ
   pub error_message: Option<String>,
@@ -94,6 +97,7 @@ pub struct Model {
   /// 0.01%FPRでのTPR
   pub tpr_at_001_fpr: Option<f64>,
   /// その他のメトリクス
+  #[schema(value_type = Option<Object>)]
   pub other_metrics: Option<Value>,
   /// トータルの実行時間(秒)
   pub total_time: Option<f64>,
@@ -106,12 +110,14 @@ pub struct Model {
   /// 実行ログのパス
   pub execution_log_path: Option<String>,
   /// その他のファイルのパス
+  #[schema(value_type = Option<Object>)]
   pub other_files: Option<Value>,
 
   // メタ情報
   /// 作成日時
   // OffsetDateTimeをISO8601形式でシリアライズ
   #[serde(with = "time::serde::iso8601")]
+  #[schema(value_type = String, format = DateTime)]
   pub created_at: TimeDateTimeWithTimeZone,
 }
 
