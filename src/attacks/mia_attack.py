@@ -135,6 +135,17 @@ class MIA_Attack(ABC):
 		self.logger.info(f"TPR: {(tpr_at_01_fpr * 100):.4f}% at 0.1% FPR, Threshold: {threshold_at_01_fpr:.4f}")
 		self.logger.info(f"TPR: {(tpr_at_001_fpr * 100):.4f}% at 0.01% FPR, Threshold: {threshold_at_001_fpr:.4f}")
   
+		metrics = {
+			"global_auc": float(roc_auc),
+			"tpr_at_1_fpr": float(tpr_at_1_fpr),
+			"tpr_at_01_fpr": float(tpr_at_01_fpr),
+			"tpr_at_001_fpr": float(tpr_at_001_fpr),
+			"threshold_at_1_fpr": float(threshold_at_1_fpr),
+			"threshold_at_01_fpr": float(threshold_at_01_fpr),
+			"threshold_at_001_fpr": float(threshold_at_001_fpr),
+		}
+		return metrics
+  
 	# ==========================================
 	# 以下、Utility関数
 	# ==========================================
