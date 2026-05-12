@@ -15,14 +15,14 @@ from src.server_client.api.experiments import reflect_experiment_results
 app = Celery('mia_tasks', broker=cfg.REDIS_URL)
 
 @app.task(name='mia_tasks.run_attack')
-def execute_attack_task(params_json):
+def execute_attack_task(_params):
 	"""
-	params_json: {"mia_method": "Shokri", "batch_size": 128, ...} のような辞書
+	_params: {"mia_method": "Shokri", "batch_size": 128, ...} のような辞書
 	"""
 	# idを取得、削除
-	id = params_json.pop("experiment_id")
+	id = _params.pop("experiment_id")
 	# JSONからCreateExperimentRequestオブジェクトを復元
-	request = CreateExperimentRequest(**params_json)
+	request = CreateExperimentRequest.from_dict(_params)
 	
 	# 依存モデルが存在する場合
 	if request.base_experiment_id is not None:
