@@ -13,8 +13,8 @@ Celery + Redisをベースとし、共有ストレージへのアクセス制限
 * **Redis (キュー)**: タスクの実行条件と、ワーカーのキュー待ち行列を管理します。
 * **MinIO (オブジェクトストレージ)**: `kslib` (NAS) をバックエンドの保存先としてマウントし、画像やモデルファイルなどの大きなバイナリデータを保存・配信します。（S3互換APIとして直接ワーカーから通信）
 * **PostgreSQL (リレーショナルデータベース)**: 実行ごとのハイパーパラメータ、精度（メトリクス）、実行時間、ステータス、MinIO上のファイルパスなど、構造化されたデータを保存します。
-* **Tracking API (Rust/Axum等のバックエンド)**: ワーカーから実行メタデータ（JSON）を受け取り、PostgreSQLに保存するためのAPIサーバー。DBとの直接の密結合を防ぎます。
-* **可視化・管理サーバー (将来構築)**: タスクの投入や、情報を可視化するダッシュボード。（Tracking APIを拡張して実装可能）
+* **MIAOS API (Rust/Axum等のバックエンド)**: ワーカーから実行メタデータ（JSON）を受け取り、PostgreSQLに保存するためのAPIサーバー。OpenAPIで自動生成されたPythonクライアント (`server_client`) を用いて通信します。
+* **可視化・管理サーバー (将来構築)**: タスクの投入や、情報を可視化するダッシュボード。（MIAOS APIを拡張して実装可能）
 
 ### 2.2 ワーカーノード (nn01, nn02, nn11, t43)
 タスクを取得し、実際の演算処理を行うPC群です。
@@ -30,27 +30,28 @@ Celery + Redisをベースとし、共有ストレージへのアクセス制限
 ```text
 mia-dev/
  ┣ 📂 src/
- ┃ ┣ 📂 core/    (config.py, pipeline.py)
- ┃ ┣ 📂 attacks/ (mia_attack.py, mia_lira.py, mia_shokri.py)
- ┃ ┣ 📂 models/  (target_model.py, attack_model.py)
- ┃ ┣ 📂 data/    (dataset.py)
- ┃ ┣ 📂 utils/   (minio_utils.py)
- ┃ ┗ 📂 workers/ (celery_tasks.py)
- ┣ 📂 tests/     (test_celery.py)
- ┣ 📂 scripts/   (run_local.py)
- ┗ 📂 docs/      (system_architecture.md, command.bash 等)
+ ┃ ┣ 📂 core/          (config.py, pipeline.py)
+ ┃ ┣ 📂 attacks/       (mia_attack.py, mia_lira.py, mia_shokri.py)
+ ┃ ┣ 📂 models/        (target_model.py, attack_model.py)
+ ┃ ┣ 📂 data/          (dataset.py)
+ ┃ ┣ 📂 utils/         (minio_utils.py)
+ ┃ ┣ 📂 workers/       (celery_tasks.py)
+ ┃ ┗ 📂 server_client/ (OpenAPIから自動生成されたAPIクライアント)
+ ┣ 📂 scripts/         (run_local.py)
+ ┗ 📂 docs/            (system_architecture.md, command.bash 等)
 ```
 
 ## 4. タスク実行のワークフロー
 
-1. **タスク投入**: ユーザーまたは管理スクリプトが、一意な `experiment_name`（タイムスタンプ等）を付与した実行条件をマスターのRedisに `send_task` で送信する。
+1. **タスク投入**: ユーザーまたは管理スクリプトが、MIAOS APIを通じて実験を作成し、発行された `experiment_id` を含む実行条件（`CreateExperimentRequest`）をマスターのRedisに `send_task` で送信する。
 2. **タスク取得**: 待機中のワーカー（Celery）がRedisから条件を取得する。
 3. **環境準備 (キャッシュ機能)**: 
    * ワーカーはローカルの一時実行ディレクトリ（`tempfile.TemporaryDirectory`）を作成する。
-   * 依存モデルの指定（`assigned_model_path`）がある場合、MinIOからローカルキャッシュにダウンロードし、パスを解決する。
+   * 依存モデルの指定（`base_experiment_id`）がある場合、MinIOからローカルキャッシュにダウンロードし、パスを解決する。
 4. **プログラム実行**: ワーカープロセス上で `pipeline.py` (run_experiment) が呼ばれ、機械学習の学習・攻撃・評価が実行される。結果はすべて一時ディレクトリに出力される。
-5. **結果保存 (MinIOへのアップロード)**:
-   * 実行が完了すると、一時ディレクトリ内のすべての成果物（モデル、ログ、画像等）がMinIOの `exp/<experiment_name>` 配下にアップロードされる。
+5. **結果保存 (MinIOへのアップロードとAPI通知)**:
+   * 実行が完了すると、一時ディレクトリ内のすべての成果物（モデル、ログ、画像等）がMinIOの `<experiment_id>` 配下にアップロードされる。
+   * `server_client` を用いて、MIAOS APIへ実行結果（AUCやTPR等のメトリクス、成果物のファイルパスなど）を `UpdateResultsRequest` として送信（PUT）する。
 6. **後処理**: 一時ディレクトリが削除され（自動クリーンアップ）、次のタスクを待機する。
 
 ## 5. 懸念事項の解決策（振り返り）
@@ -64,8 +65,7 @@ mia-dev/
 ---
 
 ### ToDo
-- [ ] Tracking APIと連携し、MinIOやRedisから情報を読み取ってタスクの進捗を確認できるダッシュボードを作成する。
+- [ ] MIAOS APIと連携し、MinIOやRedisから情報を読み取ってタスクの進捗を確認できるダッシュボードを作成する。
 
 ## 自分用メモ
 - ワーカーの起動コマンド: `docker run --rm -it --gpus all -v $(pwd):/workspace -e PYTHONPATH=/workspace --env-file .env mia_worker:latest bash -c "celery -A src.workers.celery_tasks worker --loglevel=info -P solo"`
-- テストタスクの送信: `python tests/test_celery.py`

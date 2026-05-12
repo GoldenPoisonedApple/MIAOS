@@ -25,7 +25,7 @@ def download_model_dir(experiment_id: int) -> str:
 	# ページネーションを使ってリモートディレクトリ内のオブジェクト一覧を取得
 	paginator = s3.get_paginator('list_objects_v2')
 	# page: 一度に全てのファイルリストを返すとメモリ不足になるため、ページに分けて取得
-	for page in paginator.paginate(Bucket=cfg.MINIO_BUCKET_NAME, Prefix=f"exp/{experiment_id}/"):
+	for page in paginator.paginate(Bucket=cfg.MINIO_BUCKET_NAME, Prefix=f"{experiment_id}/"):
 		# Contentsがない場合はスキップ
 		if "Contents" not in page:
 			continue

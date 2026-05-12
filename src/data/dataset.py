@@ -2,7 +2,7 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Subset, ConcatDataset, Dataset
 import src.core.config as cfg
-from server_client.models import CreateExperimentRequest
+from src.server_client.models import CreateExperimentRequest
 import numpy as np
 from sklearn.model_selection import train_test_split
 import json

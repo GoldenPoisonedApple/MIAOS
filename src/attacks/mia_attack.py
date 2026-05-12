@@ -17,7 +17,7 @@ import numpy as np
 
 import src.core.config as cfg
 from src.data.dataset import dataset
-from server_client.models import CreateExperimentRequest
+from src.server_client.models import CreateExperimentRequest
 
 class MIA_Attack(ABC):
 	def __init__(self, dataset: dataset, MODEL_SAVE_DIR: str, logger: logging.Logger, settings: CreateExperimentRequest):

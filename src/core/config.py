@@ -16,7 +16,7 @@ MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY")
 # MinIOのバケット名
 MINIO_BUCKET_NAME: str = os.getenv("MINIO_BUCKET_NAME")
-# Tracking APIのURL
+# MIAOS APIのURL
 MIAOS_API_URL: str = os.getenv("MIAOS_API_URL")
 
 # デバイス

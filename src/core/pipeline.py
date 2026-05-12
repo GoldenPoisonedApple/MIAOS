@@ -7,8 +7,8 @@ import os
 import logging
 import sys
 
-from server_client.models import CreateExperimentRequest
-from server_client.models import MiaMethod
+from src.server_client.models import CreateExperimentRequest
+from src.server_client.models import MiaMethod
 
 # ROC曲線描画用に追加
 import matplotlib

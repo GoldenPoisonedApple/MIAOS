@@ -7,7 +7,7 @@ import torch.nn as nn
 from tqdm import trange
 import src.core.config as cfg
 import os
-from server_client.models import CreateExperimentRequest
+from src.server_client.models import CreateExperimentRequest
 from src.models.attack_model import AttackNet
 
 # 攻撃用のモデルを作成し、攻撃

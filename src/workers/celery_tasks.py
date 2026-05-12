@@ -2,17 +2,15 @@
 from celery import Celery
 import tempfile
 import time
-import requests
-from dataclasses import asdict
 import os
 
 import src.core.config as cfg
 from src.core.pipeline import run_experiment
 import src.utils.minio_utils as minio_utils
 
-from server_client import Client
-from server_client.models import CreateExperimentRequest, UpdateResultsRequest, UpdateResultsRequestOtherFiles, UpdateResultsRequestOtherMetrics
-from server_client.api.experiments import reflect_experiment_results
+from src.server_client import Client
+from src.server_client.models import CreateExperimentRequest, UpdateResultsRequest, UpdateResultsRequestOtherFiles, UpdateResultsRequestOtherMetrics
+from src.server_client.api.experiments import reflect_experiment_results
 
 app = Celery('mia_tasks', broker=cfg.REDIS_URL)
 
@@ -46,7 +44,7 @@ def execute_attack_task(params_json):
 		time.sleep(2)
 		
 		# 実行結果アップロード
-		remote_prefix = f"exp/{id}/"
+		remote_prefix = f"{id}/"
 		minio_utils.upload_results_dir(temp_dir, remote_prefix=remote_prefix)
 		
 		# ------- MIAOS APIへの送信処理 -------

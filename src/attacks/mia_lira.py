@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from tqdm import trange
 import src.core.config as cfg
-from server_client.models import CreateExperimentRequest
+from src.server_client.models import CreateExperimentRequest
 
 # ROC曲線描画用に追加
 import matplotlib
