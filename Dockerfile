@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y tzdata && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+RUN apt-get install -y git
+
 WORKDIR /workspace
 
 # [修正点]
@@ -30,7 +32,8 @@ RUN pip install --no-cache-dir \
 		minio \
 		boto3 \
 		requests \
-		python-dotenv
+		python-dotenv \
+		openapi-python-client
 
 ENV TORCH_HOME=/workspace/.cache/torch
 

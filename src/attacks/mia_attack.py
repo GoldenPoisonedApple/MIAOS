@@ -15,16 +15,16 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc
 import numpy as np
 
-from src.core.config import ExperimentConfig
 import src.core.config as cfg
 from src.data.dataset import dataset
+from server_client.models import CreateExperimentRequest
 
 class MIA_Attack(ABC):
-	def __init__(self, dataset: dataset, MODEL_SAVE_DIR: str, logger: logging.Logger, config: ExperimentConfig):
+	def __init__(self, dataset: dataset, MODEL_SAVE_DIR: str, logger: logging.Logger, settings: CreateExperimentRequest):
 		self.dataset = dataset
 		self.MODEL_SAVE_DIR = MODEL_SAVE_DIR
 		self.logger = logger
-		self.config = config
+		self.settings = settings
 
 	# ターゲットモデルの訓練、評価
 	def train_target_model(self, target_model: nn.Module):
@@ -40,7 +40,7 @@ class MIA_Attack(ABC):
 		# 訓練
 		trainloader, testloader, num_train, num_test = self.dataset.get_target_dataloaders() # データ読み込み
 		self.logger.info(f"Train: {num_train}, Test: {num_test}")
-		target_model = MIA_Attack.train_model(target_model, trainloader, self.config.max_epochs) # 訓練
+		target_model = MIA_Attack.train_model(target_model, trainloader, self.settings.max_epochs) # 訓練
 		# モデルの保存
 		torch.save(target_model.state_dict(), os.path.join(self.MODEL_SAVE_DIR, cfg.TARGET_MODEL_NAME))
 
@@ -62,12 +62,12 @@ class MIA_Attack(ABC):
 		# シャドーモデルの訓練
 		shadow_models = []
 		state_dicts = []
-		for i in trange(self.config.num_shadow_models, desc="Shadow Models"):
+		for i in trange(self.settings.num_shadow_models, desc="Shadow Models"):
 			shadow_train_loader, shadow_test_loader, _, _ = self.dataset.get_shadow_dataloader(seed=i)
 			# モデルを作成
 			shadow_model = model_factory().to(cfg.DEVICE)
 			# モデルを訓練
-			shadow_model = MIA_Attack.train_model(shadow_model, shadow_train_loader, self.config.max_epochs)
+			shadow_model = MIA_Attack.train_model(shadow_model, shadow_train_loader, self.settings.max_epochs)
 			shadow_model.to('cpu') # GPUメモリ節約
 			# リストを追加
 			shadow_models.append(shadow_model)
@@ -102,7 +102,7 @@ class MIA_Attack(ABC):
 		roc_auc = auc(fpr, tpr)
 
 		plt.figure(figsize=(8, 8))
-		plt.plot(fpr, tpr, color='green', lw=1, marker='o', markersize=3, label=f'{self.config.mia_method.value} (AUC = {roc_auc:.4f})')
+		plt.plot(fpr, tpr, color='green', lw=1, marker='o', markersize=3, label=f'{self.settings.method.value} (AUC = {roc_auc:.4f})')
 		plt.plot([1e-5, 1], [1e-5, 1], color='navy', lw=2, linestyle='--', label='Random Guess')
 		plt.axvline(x=0.01, linestyle='--', linewidth=1, color='blue', label='1% FPR')
 		plt.axvline(x=0.001, linestyle='--', linewidth=1, color='blue', label='0.1% FPR')
@@ -118,13 +118,13 @@ class MIA_Attack(ABC):
 		plt.legend(loc="lower right")
 		plt.grid(True, which="both", ls="--", alpha=0.5)
 		# 保存
-		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, f"roc_curve_{self.config.mia_method.value}.png")
+		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, f"roc_curve_{self.settings.method.value}.png")
 		plt.savefig(roc_plot_path, dpi=300, bbox_inches='tight')
 		plt.close()
 		self.logger.info(f"Saved ROC curve plot to: {roc_plot_path}")
   
 		# ------- 総合評価 -------  
-		self.logger.info(f"--- {self.config.mia_method.value} Results ---")
+		self.logger.info(f"--- {self.settings.method.value} Results ---")
 		self.logger.info(f"Global AUC: {roc_auc:.4f}")
 	
 		tpr_at_1_fpr, threshold_at_1_fpr = MIA_Attack.get_tpr_and_threshold(fpr, tpr, thresholds, 0.01)

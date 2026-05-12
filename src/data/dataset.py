@@ -2,7 +2,7 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Subset, ConcatDataset, Dataset
 import src.core.config as cfg
-from src.core.config import ExperimentConfig
+from server_client.models import CreateExperimentRequest
 import numpy as np
 from sklearn.model_selection import train_test_split
 import json
@@ -34,8 +34,8 @@ class TransformedSubset(Dataset):
 class dataset:
 	DATASET_JSON_FILE_NAME = "dataset.json"
     
-	def __init__(self, model_save_dir: str, config: ExperimentConfig, assigned_model_path: str = None):
-		self.config = config
+	def __init__(self, model_save_dir: str, settings: CreateExperimentRequest, assigned_model_path: str = None):
+		self.settings = settings
 		# 画像変換処理 (Data Augmentation & Preprocessing)記述
 		self.transform_train = transforms.Compose([
 			# 将来的には変換処理も存在
@@ -71,8 +71,8 @@ class dataset:
 			# データセットのインデックスを作成
 			indices = np.arange(len(self.full_dataset))
 			# データセットからターゲットモデルの学習用とテスト用のインデックスを分割
-			self.target_train_idx, remaining_idx = train_test_split(indices, train_size=config.target_train_size, random_state=config.seed)
-			self.target_test_idx, self.shadow_pool_indices = train_test_split(remaining_idx, train_size=config.target_test_size, random_state=config.seed)
+			self.target_train_idx, remaining_idx = train_test_split(indices, train_size=settings.target_train_size, random_state=settings.seed)
+			self.target_test_idx, self.shadow_pool_indices = train_test_split(remaining_idx, train_size=settings.target_test_size, random_state=settings.seed)
 			# 保存
 			with open(os.path.join(model_save_dir, self.DATASET_JSON_FILE_NAME), "w") as f:
 				specification = {
@@ -93,14 +93,14 @@ class dataset:
 		# shuffle=True: エポックごとにデータの順番をランダムに
 		target_train_loader = DataLoader(
 			target_train_dataset, 
-			batch_size=self.config.batch_size, shuffle=True, 
-			num_workers=self.config.num_workers,
+			batch_size=self.settings.batch_size, shuffle=True, 
+			num_workers=0,
 			pin_memory=True if cfg.DEVICE.type == 'cuda' else False
 		)
 		target_test_loader = DataLoader(
 			target_test_dataset, 
-			batch_size=self.config.batch_size, shuffle=False, 
-			num_workers=self.config.num_workers,
+			batch_size=self.settings.batch_size, shuffle=False, 
+			num_workers=0,
 			pin_memory=True if cfg.DEVICE.type == 'cuda' else False
 		)
 		return target_train_loader, target_test_loader, len(self.target_train_idx), len(self.target_test_idx)
@@ -114,22 +114,22 @@ class dataset:
      
 		target_train_loader = DataLoader(
 			target_train_dataset, 
-			batch_size=self.config.batch_size, shuffle=False,  # 順序を完全に固定
-			num_workers=self.config.num_workers,
+			batch_size=self.settings.batch_size, shuffle=False,  # 順序を完全に固定
+			num_workers=0,
 			pin_memory=True if cfg.DEVICE.type == 'cuda' else False
 		)
 		target_test_loader = DataLoader(
 			target_test_dataset, 
-			batch_size=self.config.batch_size, shuffle=False,  # 順序を完全に固定
-			num_workers=self.config.num_workers,
+			batch_size=self.settings.batch_size, shuffle=False,  # 順序を完全に固定
+			num_workers=0,
 			pin_memory=True if cfg.DEVICE.type == 'cuda' else False
 		)
 		return target_train_loader, target_test_loader, len(self.target_train_idx), len(self.target_test_idx)
 
 	def get_shadow_dataloader(self, seed):
 		# 毎回新しくシャドーモデルの学習用とテスト用のインデックスを分割
-		shadow_train_idx, remaining_idx = train_test_split(self.shadow_pool_indices, train_size=self.config.shadow_train_size, random_state=self.config.seed + seed)
-		shadow_test_idx, _ = train_test_split(remaining_idx, train_size=self.config.shadow_test_size, random_state=self.config.seed + seed)
+		shadow_train_idx, remaining_idx = train_test_split(self.shadow_pool_indices, train_size=self.settings.shadow_train_size, random_state=self.settings.seed + seed)
+		shadow_test_idx, _ = train_test_split(remaining_idx, train_size=self.settings.shadow_test_size, random_state=self.settings.seed + seed)
 		# 動的にTransformを適応したSubsetを作成
 		shadow_train_dataset = TransformedSubset(self.full_dataset, shadow_train_idx, transform=self.transform_train)
 		shadow_test_dataset = TransformedSubset(self.full_dataset, shadow_test_idx, transform=self.transform_test)
@@ -137,14 +137,14 @@ class dataset:
 		# シャドーモデルの学習用とテスト用のDataLoaderを作成
 		shadow_train_loader = DataLoader(
 			shadow_train_dataset, 
-			batch_size=self.config.batch_size, shuffle=True, 
-			num_workers=self.config.num_workers,
+			batch_size=self.settings.batch_size, shuffle=True, 
+			num_workers=0,
 			pin_memory=True if cfg.DEVICE.type == 'cuda' else False
 		)
 		shadow_test_loader = DataLoader(
 			shadow_test_dataset, 
-			batch_size=self.config.batch_size, shuffle=False, 
-			num_workers=self.config.num_workers,
+			batch_size=self.settings.batch_size, shuffle=False, 
+			num_workers=0,
 			pin_memory=True if cfg.DEVICE.type == 'cuda' else False
 		)
 		return shadow_train_loader, shadow_test_loader, len(shadow_train_idx), len(shadow_test_idx)
@@ -152,22 +152,22 @@ class dataset:
 	def get_eval_shadow_dataloader(self, seed):
 		"""評価およびロジット抽出用のシャッフル無効化データローダー"""
 		# 毎回新しくシャドーモデルの学習用とテスト用のインデックスを分割
-		shadow_train_idx, remaining_idx = train_test_split(self.shadow_pool_indices, train_size=self.config.shadow_train_size, random_state=self.config.seed + seed)
-		shadow_test_idx, _ = train_test_split(remaining_idx, train_size=self.config.shadow_test_size, random_state=self.config.seed + seed)
+		shadow_train_idx, remaining_idx = train_test_split(self.shadow_pool_indices, train_size=self.settings.shadow_train_size, random_state=self.settings.seed + seed)
+		shadow_test_idx, _ = train_test_split(remaining_idx, train_size=self.settings.shadow_test_size, random_state=self.settings.seed + seed)
 		# 精度を正確に測定するためデータに対するランダムな摂動が許容されないため、テストデータと同じ変換処理を適用
-		shadow_train_dataset = TransformedSubset(self.full_dataset, self.shadow_train_idx, transform=self.transform_test)
-		shadow_test_dataset = TransformedSubset(self.full_dataset, self.shadow_test_idx, transform=self.transform_test)
+		shadow_train_dataset = TransformedSubset(self.full_dataset, shadow_train_idx, transform=self.transform_test)
+		shadow_test_dataset = TransformedSubset(self.full_dataset, shadow_test_idx, transform=self.transform_test)
 
 		shadow_train_loader = DataLoader(
 			shadow_train_dataset, 
-			batch_size=self.config.batch_size, shuffle=False,  # 順序を完全に固定
-			num_workers=self.config.num_workers,
+			batch_size=self.settings.batch_size, shuffle=False,  # 順序を完全に固定
+			num_workers=0,
 			pin_memory=True if cfg.DEVICE.type == 'cuda' else False
 		)
 		shadow_test_loader = DataLoader(
 			shadow_test_dataset, 
-			batch_size=self.config.batch_size, shuffle=False,  # 順序を完全に固定
-			num_workers=self.config.num_workers,
+			batch_size=self.settings.batch_size, shuffle=False,  # 順序を完全に固定
+			num_workers=0,
 			pin_memory=True if cfg.DEVICE.type == 'cuda' else False
 		)
 		return shadow_train_loader, shadow_test_loader, len(shadow_train_idx), len(shadow_test_idx)

@@ -13,21 +13,19 @@ def get_s3_client():
 		aws_secret_access_key=cfg.MINIO_SECRET_KEY,
 	)
 
-def download_model_dir(remote_dir_path: str) -> str:
+def download_model_dir(experiment_id: int) -> str:
 	"""
 	MinIOから指定されたディレクトリ配下のファイルをローカルキャッシュにダウンロードする。
 	戻り値として、ローカルの絶対パスを返す。
 	"""
 	s3 = get_s3_client()
-	local_dir_path = os.path.join(cfg.LOCAL_CACHE_DIR, remote_dir_path)
+	local_dir_path = os.path.join(cfg.LOCAL_CACHE_DIR, experiment_id)
 	os.makedirs(local_dir_path, exist_ok=True)
 
 	# ページネーションを使ってリモートディレクトリ内のオブジェクト一覧を取得
 	paginator = s3.get_paginator('list_objects_v2')
-	# remote_dir_pathで始まる名前のファイルのみを取得
-	# / によってフォルダの中身を取得
 	# page: 一度に全てのファイルリストを返すとメモリ不足になるため、ページに分けて取得
-	for page in paginator.paginate(Bucket=cfg.MINIO_BUCKET_NAME, Prefix=f"{remote_dir_path}/"):
+	for page in paginator.paginate(Bucket=cfg.MINIO_BUCKET_NAME, Prefix=f"exp/{experiment_id}/"):
 		# Contentsがない場合はスキップ
 		if "Contents" not in page:
 			continue
