@@ -1,3 +1,5 @@
+# MIAOS
+Membership Infference Attack Orchestration System
 
 
 実験はidで管理することに
@@ -94,6 +96,19 @@ http://localhost:3000/docs/
 機械用
 http://localhost:3000/api-docs/openapi.json
 
+
+- CI用にOpenAPI仕様を書き出し
+バイナリクレートに書き出し処理記述
+```bash
+cargo run --bin generate_openapi
+```
+バイナリクレート用意すると、cargo runでどれを起動すればいいかわからんって言われるから
+Cargo.tomlに追記
+```toml
+default-run = "server"
+```
+でもよく考えたらURLでJSON取ってこれるからいらんかった
+
 ## フロントエンド
 utoipaとの連携
 
@@ -162,6 +177,43 @@ KEYS *
 # キューの中身確認 0(最初)から-1(最後まで)
 LRANGE celery 0 -1
 ```
+#### なんと
+Redisをブローカーとして使用した場合に、送信するメッセージに exchange キーを含め忘れると言うバグがあり、直されていない
+似たようなことをやるならRabbitMQがよさそうではある
+
+- RabbitMQ
+ACK: 処理が成功した までqueueに残る
+再送制御可能
+routing設定可能
+などよりどりみどり
+
+### フォークして修正する
+ただ、せっかくなので持ってきて自分で修正したのを使ってみようと思う
+どこを修正すればいいかはPRが出ているので、それを参考に(PR出てるけど更新が止まってるので...)
+https://github.com/rusty-celery/rusty-celery/pull/253
+デメリットとして、更新が追えなくなるが、更新されてないので無問題
+
+公式からフォーク、クローン、patchとして使用
+```toml
+# ビルド時に、公式の0.5.5を手元のlibs/rusty-celeryで上書きする 送信メッセージにexchangeキーがないためエラーとなる パッチコードで上書き
+[patch.crates-io]
+celery = { path = "libs/rusty-celery" }
+```
+Apache License 2.0ライセンス
+- ライセンスのコピーを残す: LICENSEが入ってるので消さなければよい
+- 著作権表示を残す: Copyrightが入っているので消さなければよい
+- 変更を明記: // Modified by []みたいな感じ
+
+libs/にダウンロード
+.gitignoreには含めず
+
+/src/broker/redis: エラー修正
+/src/protocol/mod.rs: exchangeキーが無くてエラーになる問題の解消
+
+rust-analyzerではまだ問題と赤くなっていたり: 今のビルドで有効なfeatureの解釈、名前解決がコンパイラとずれることによるもの
+統合テストが通っていなかったりするが: AMQPが起動していなくて、環境変数がないため怒られている。 --libのテストは全て成功してるので無問題
+
+
 
 ### Celery
 基本的にbody(base64)部分の構造は以下
@@ -192,4 +244,16 @@ CORS設定とか
 
 認証を入れられたらいいいね
 
-MIAOS(Membership Infference Attack Orchestration System)
+
+Pythonの型だとidが振ってこんぞ(正確には振ってくるけど型にした時に落ちる)
+エラーになった時もエラーを返していない 想像以上に優先度が高い
+
+ワーカーがタスクを受け取った時は、受け取ったよーAPI呼び出して、今どのタスクをやってるかを分かるようにした方がいいな
+
+MINIOのパスとファイル名を分離する必要がないので、MINIOのパスを削除、全て正規パスで
+
+MINIO
+application/jsonでも開けないし
+executionn.logはまだout-streamだし
+
+

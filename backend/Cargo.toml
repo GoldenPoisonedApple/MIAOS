@@ -2,6 +2,10 @@
 name = "server"
 version = "0.1.0"
 edition = "2021"
+default-run = "server"
+license = "Apache-2.0"
+repository = "https://github.com/GoldenPoisonedApple/MIAOS"
+description = "Backend of MIAOS(Member Inference Attack Orchestration System)"
 
 [dependencies]
 # Web App
@@ -31,7 +35,13 @@ celery = "0.5.5"
 thiserror = "2.0.18"
 uuid = "1.23.1"
 
+# cargo build --releaseには含まれない
 [dev-dependencies]
 # for the test
 mockall = "0.14.0"
 tower = "0.5.2"
+
+
+# ビルド時に、公式の0.5.5を手元のlibs/rusty-celeryで上書きする 送信メッセージにexchangeキーがないためエラーとなる パッチコードで上書き
+[patch.crates-io]
+celery = { path = "libs/rusty-celery" }

@@ -40,7 +40,9 @@ use crate::handlers::experiment::{
 		(name = "Tasks", description = "タスク管理API")
 	)
 )]
-pub struct ApiDoc;
+pub struct ApiDoc; // utoipaで生成されたOpenAPIドキュメントを保持する構造体
+
+
 const SWAGGER_UI_PATH: &str = "/docs";
 const OPENAPI_JSON_PATH: &str = "/api-docs/openapi.json";
 
