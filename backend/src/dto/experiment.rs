@@ -143,3 +143,12 @@ pub struct UpdateResultsRequest {
 	pub error_message: Option<String>,
 }
 
+
+/// 処理取得の報告リクエスト
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+pub struct ClaimExperimentRequest {
+	/// 実験ID
+	pub id: i64,
+	/// ワーカー名
+	pub worker_name: String,
+}

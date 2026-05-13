@@ -90,6 +90,14 @@ curl -X POST http://localhost:3000/api/experiments -H "Content-Type: application
 curl -X GET http://localhost:3000/api/tasks
 ```
 
+- ルーティング
+"/api/experiments",
+"/api/experiments/claim"
+など個別対応にも関わらず、内部Jsonのidでやってるのあまりよくない設計な気がする
+ちゃんとidは外部に出してあげた方が内部の処理が綺麗
+
+
+
 - utoipa APIの仕様書とかを勝手に書いてくれるやつ
 人用
 http://localhost:3000/docs/

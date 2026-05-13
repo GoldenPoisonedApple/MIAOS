@@ -1,4 +1,4 @@
-use crate::dto::experiment::{CreateExperimentRequest, UpdateResultsRequest};
+use crate::dto::experiment::{ClaimExperimentRequest, CreateExperimentRequest, UpdateResultsRequest};
 use crate::dto::task::CreateTaskRequest;
 use crate::entities::experiment::Model;
 use crate::entities::task::Task;
@@ -52,6 +52,18 @@ impl<E: ExperimentRepositoryTrait, T: TaskRepositoryTrait> ExperimentService<E, 
 		let mut model = self.experiment_repository.find_by_id(request.experiment_id).await?;
 		// 結果反映
 		model.complete(request, OffsetDateTime::now_utc());
+		// 更新
+		self.experiment_repository.update(model).await
+	}
+
+	/// 処理取得の報告
+	/// * request: ClaimExperimentRequest - 処理取得の報告リクエスト
+	/// * 戻り値: Result<Model, ServerError> - 処理取得の報告結果
+	pub async fn claim_experiment(&self, request: ClaimExperimentRequest) -> Result<Model, ServerError> {
+		// 更新対象取得
+		let mut model = self.experiment_repository.find_by_id(request.id).await?;
+		// 処理取得の報告
+		model.claim(request);
 		// 更新
 		self.experiment_repository.update(model).await
 	}
@@ -228,6 +240,24 @@ mod tests {
 		// Assert
 		assert_eq!(result.status, ExperimentStatus::Failed); // 失敗となっていること
 		assert_eq!(result.error_message, Some("test_error".to_string())); // エラーメッセージがセットされていること
+		remove_test_experiments(&service.experiment_repository).await;
+	}
+
+	/// 処理取得の報告テスト
+	#[tokio::test]
+	async fn test_claim_experiment() {
+		// Arrange
+		let service = setup().await;
+		let experiment = service.experiment_repository.create(create_experiment_request_factory("test_experiment")).await.unwrap(); // 実験を作成
+		let request = ClaimExperimentRequest {
+			id: experiment.id,
+			worker_name: "test_worker".to_string(),
+		};
+		// Act
+		let result = service.claim_experiment(request).await.unwrap();
+		// Assert
+		assert_eq!(result.status, ExperimentStatus::Running); // ステータスが実行中となっていること
+		assert_eq!(result.worker_name, Some("test_worker".to_string())); // ワーカーがセットされていること
 		remove_test_experiments(&service.experiment_repository).await;
 	}
 }

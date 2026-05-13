@@ -1,5 +1,5 @@
 use axum::{
-  routing::{get, delete},
+  routing::{get, delete, put},
   Router,
 };
 use utoipa::OpenApi;
@@ -13,6 +13,7 @@ use crate::handlers::experiment::{
 	get_all_experiments,
 	get_all_tasks,
   reflect_experiment_results,
+  claim_experiment,
 };
 
 #[derive(OpenApi)]
@@ -24,11 +25,13 @@ use crate::handlers::experiment::{
 		crate::handlers::experiment::reflect_experiment_results,
 		crate::handlers::experiment::get_all_tasks,
 		crate::handlers::experiment::delete_task,
+		crate::handlers::experiment::claim_experiment,
 	),
 	components(
 		schemas(
 			crate::dto::experiment::CreateExperimentRequest,
 			crate::dto::experiment::UpdateResultsRequest,
+			crate::dto::experiment::ClaimExperimentRequest,
 			crate::entities::experiment::Model,
 			crate::entities::experiment::ExperimentStatus,
 			crate::entities::experiment::MiaMethod,
@@ -55,13 +58,17 @@ pub fn app_routes(state: AppState) -> Router {
       "/api/experiments",
       get(get_all_experiments).post(create_experiment).put(reflect_experiment_results),
     )
+		.route(
+			"/api/experiments/claim",
+			put(claim_experiment),
+		)
     .route(
       "/api/experiments/{id}",
       delete(delete_experiment),
     )
     .route(
       "/api/tasks",
-      get(get_all_tasks).delete(delete_task),
+      get(get_all_tasks),
     )
     .route(
       "/api/tasks/{id}",

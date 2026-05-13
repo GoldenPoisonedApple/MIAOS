@@ -5,7 +5,7 @@ use serde_json::Value;
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 
-use crate::dto::experiment::UpdateResultsRequest;
+use crate::dto::experiment::{ClaimExperimentRequest, UpdateResultsRequest};
 
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "experiment_status")]
@@ -157,6 +157,12 @@ impl Model {
     self.files = Some(results.files);
   }
 
+	/// 処理取得の報告
+	pub fn claim(&mut self, claim: ClaimExperimentRequest) {
+		self.status = ExperimentStatus::Running;
+		self.worker_name = Some(claim.worker_name);
+	}
+
 	// SeaORMの仕様のせいでつくってる変換 Updateを通知してあげる
 	pub fn into_active_model_for_update(self) -> ActiveModel {
 		ActiveModel {
@@ -250,5 +256,21 @@ mod tests {
 		assert_eq!(experiment.status, ExperimentStatus::Succeeded); // ステータスがセットされていること
 		assert_eq!(experiment.completed_at, Some(completed_at)); // 完了時刻がセットされている事
 		assert_eq!(experiment.worker_name, Some("test_worker".to_string())); // 結果が反映されていること
+	}
+
+	/// 処理取得の報告テスト
+	#[test]
+	fn test_claim() {
+		// Arrange
+		let mut experiment = create_model();
+		let request = ClaimExperimentRequest {
+			id: experiment.id,
+			worker_name: "test_worker".to_string(),
+		};
+		// Act
+		experiment.claim(request);
+		// Assert
+		assert_eq!(experiment.status, ExperimentStatus::Running); // ステータスが実行中となっていること
+		assert_eq!(experiment.worker_name, Some("test_worker".to_string())); // ワーカーがセットされていること
 	}
 }
