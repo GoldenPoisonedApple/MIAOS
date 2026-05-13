@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class ExperimentStatus(str, Enum):
     FAILED = "Failed"
     RUNNING = "Running"

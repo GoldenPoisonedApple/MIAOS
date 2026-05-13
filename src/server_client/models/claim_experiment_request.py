@@ -6,29 +6,52 @@ from typing import Any, TypeVar
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-T = TypeVar("T", bound="TaskArgsPositional")
+T = TypeVar("T", bound="ClaimExperimentRequest")
 
 
 @_attrs_define
-class TaskArgsPositional:
-    """位置引数"""
+class ClaimExperimentRequest:
+    """処理取得の報告リクエスト
 
+    Attributes:
+        id (int): 実験ID
+        worker_name (str): ワーカー名
+    """
+
+    id: int
+    worker_name: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        id = self.id
+
+        worker_name = self.worker_name
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
+        field_dict.update(
+            {
+                "id": id,
+                "worker_name": worker_name,
+            }
+        )
 
         return field_dict
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        task_args_positional = cls()
+        id = d.pop("id")
 
-        task_args_positional.additional_properties = d
-        return task_args_positional
+        worker_name = d.pop("worker_name")
+
+        claim_experiment_request = cls(
+            id=id,
+            worker_name=worker_name,
+        )
+
+        claim_experiment_request.additional_properties = d
+        return claim_experiment_request
 
     @property
     def additional_keys(self) -> list[str]:

@@ -1,7 +1,10 @@
-""" Contains all the data models used in inputs/outputs """
+"""Contains all the data models used in inputs/outputs"""
 
+from .claim_experiment_request import ClaimExperimentRequest
 from .create_experiment_request import CreateExperimentRequest
-from .create_experiment_request_hyperparameters import CreateExperimentRequestHyperparameters
+from .create_experiment_request_hyperparameters import (
+    CreateExperimentRequestHyperparameters,
+)
 from .experiment_status import ExperimentStatus
 from .mia_method import MiaMethod
 from .model import Model
@@ -17,6 +20,7 @@ from .update_results_request_files import UpdateResultsRequestFiles
 from .update_results_request_other_metrics import UpdateResultsRequestOtherMetrics
 
 __all__ = (
+    "ClaimExperimentRequest",
     "CreateExperimentRequest",
     "CreateExperimentRequestHyperparameters",
     "ExperimentStatus",

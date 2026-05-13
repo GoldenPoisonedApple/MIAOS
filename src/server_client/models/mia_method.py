@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class MiaMethod(str, Enum):
     OFFLINELIRA = "OfflineLira"
     SHOKRI = "Shokri"

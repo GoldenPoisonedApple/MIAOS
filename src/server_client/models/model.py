@@ -1,68 +1,61 @@
 from __future__ import annotations
 
+import datetime
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-
-from ..types import UNSET, Unset
+from dateutil.parser import isoparse
 
 from ..models.experiment_status import ExperimentStatus
 from ..models.mia_method import MiaMethod
 from ..types import UNSET, Unset
-from dateutil.parser import isoparse
-from typing import cast
-import datetime
 
 if TYPE_CHECKING:
-  from ..models.model_files_type_0 import ModelFilesType0
-  from ..models.model_hyperparameters import ModelHyperparameters
-  from ..models.model_other_metrics_type_0 import ModelOtherMetricsType0
-
-
-
+    from ..models.model_files_type_0 import ModelFilesType0
+    from ..models.model_hyperparameters import ModelHyperparameters
+    from ..models.model_other_metrics_type_0 import ModelOtherMetricsType0
 
 
 T = TypeVar("T", bound="Model")
 
 
-
 @_attrs_define
 class Model:
-    """ 
-        Attributes:
-            batch_size (int): バッチサイズ
-            created_at (datetime.datetime): 作成日時
-            hyperparameters (ModelHyperparameters): その他のハイパーパラメータ
-            id (int): 主キー
-            load_attack_model (bool): 攻撃モデルを読み込むかどうか
-            load_shadow_model (bool): シャドウモデルを読み込むかどうか
-            load_target_model (bool): ターゲットモデルを読み込むかどうか
-            max_epochs (int): 最大エポック数
-            method (MiaMethod):
-            name (str): 実験名
-            num_shadow_models (int): シャドウモデル数
-            seed (int): シード値
-            shadow_test_size (int): シャドウモデルのテストサイズ
-            shadow_train_size (int): シャドウモデルのトレーニングサイズ
-            status (ExperimentStatus):
-            target_test_size (int): ターゲットモデルのテストサイズ
-            target_train_size (int): ターゲットモデルのトレーニングサイズ
-            base_experiment_id (int | None | Unset): 既存実験結果を流用する実験結果
-            completed_at (datetime.datetime | None | Unset): 完了日時
-            error_message (None | str | Unset): エラーメッセージ
-            files (ModelFilesType0 | None | Unset):
-            global_auc (float | None | Unset): 全体のAUC
-            notes (None | str | Unset): 備考
-            other_metrics (ModelOtherMetricsType0 | None | Unset): その他のメトリクス
-            threshold_at_01_fpr (float | None | Unset): 0.1%FPRでの閾値
-            threshold_at_1_fpr (float | None | Unset): 1%FPRでの閾値
-            total_time (float | None | Unset): トータルの実行時間(秒)
-            tpr_at_01_fpr (float | None | Unset): 0.1%FPRでのTPR
-            tpr_at_1_fpr (float | None | Unset): 1%FPRでのTPR
-            worker_name (None | str | Unset): 作業PC名
-     """
+    """
+    Attributes:
+        batch_size (int): バッチサイズ
+        created_at (datetime.datetime): 作成日時
+        hyperparameters (ModelHyperparameters): その他のハイパーパラメータ
+        id (int): 主キー
+        load_attack_model (bool): 攻撃モデルを読み込むかどうか
+        load_shadow_model (bool): シャドウモデルを読み込むかどうか
+        load_target_model (bool): ターゲットモデルを読み込むかどうか
+        max_epochs (int): 最大エポック数
+        method (MiaMethod):
+        name (str): 実験名
+        num_shadow_models (int): シャドウモデル数
+        seed (int): シード値
+        shadow_test_size (int): シャドウモデルのテストサイズ
+        shadow_train_size (int): シャドウモデルのトレーニングサイズ
+        status (ExperimentStatus):
+        target_test_size (int): ターゲットモデルのテストサイズ
+        target_train_size (int): ターゲットモデルのトレーニングサイズ
+        base_experiment_id (int | None | Unset): 既存実験結果を流用する実験結果
+        completed_at (datetime.datetime | None | Unset): 完了日時
+        error_message (None | str | Unset): エラーメッセージ
+        files (ModelFilesType0 | None | Unset):
+        global_auc (float | None | Unset): 全体のAUC
+        notes (None | str | Unset): 備考
+        other_metrics (ModelOtherMetricsType0 | None | Unset): その他のメトリクス
+        threshold_at_01_fpr (float | None | Unset): 0.1%FPRでの閾値
+        threshold_at_1_fpr (float | None | Unset): 1%FPRでの閾値
+        total_time (float | None | Unset): トータルの実行時間(秒)
+        tpr_at_01_fpr (float | None | Unset): 0.1%FPRでのTPR
+        tpr_at_1_fpr (float | None | Unset): 1%FPRでのTPR
+        worker_name (None | str | Unset): 作業PC名
+    """
 
     batch_size: int
     created_at: datetime.datetime
@@ -96,14 +89,10 @@ class Model:
     worker_name: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
         from ..models.model_files_type_0 import ModelFilesType0
-        from ..models.model_hyperparameters import ModelHyperparameters
         from ..models.model_other_metrics_type_0 import ModelOtherMetricsType0
+
         batch_size = self.batch_size
 
         created_at = self.created_at.isoformat()
@@ -222,28 +211,29 @@ class Model:
         else:
             worker_name = self.worker_name
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "batch_size": batch_size,
-            "created_at": created_at,
-            "hyperparameters": hyperparameters,
-            "id": id,
-            "load_attack_model": load_attack_model,
-            "load_shadow_model": load_shadow_model,
-            "load_target_model": load_target_model,
-            "max_epochs": max_epochs,
-            "method": method,
-            "name": name,
-            "num_shadow_models": num_shadow_models,
-            "seed": seed,
-            "shadow_test_size": shadow_test_size,
-            "shadow_train_size": shadow_train_size,
-            "status": status,
-            "target_test_size": target_test_size,
-            "target_train_size": target_train_size,
-        })
+        field_dict.update(
+            {
+                "batch_size": batch_size,
+                "created_at": created_at,
+                "hyperparameters": hyperparameters,
+                "id": id,
+                "load_attack_model": load_attack_model,
+                "load_shadow_model": load_shadow_model,
+                "load_target_model": load_target_model,
+                "max_epochs": max_epochs,
+                "method": method,
+                "name": name,
+                "num_shadow_models": num_shadow_models,
+                "seed": seed,
+                "shadow_test_size": shadow_test_size,
+                "shadow_train_size": shadow_train_size,
+                "status": status,
+                "target_test_size": target_test_size,
+                "target_train_size": target_train_size,
+            }
+        )
         if base_experiment_id is not UNSET:
             field_dict["base_experiment_id"] = base_experiment_id
         if completed_at is not UNSET:
@@ -273,25 +263,18 @@ class Model:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.model_files_type_0 import ModelFilesType0
         from ..models.model_hyperparameters import ModelHyperparameters
         from ..models.model_other_metrics_type_0 import ModelOtherMetricsType0
+
         d = dict(src_dict)
         batch_size = d.pop("batch_size")
 
         created_at = isoparse(d.pop("created_at"))
 
-
-
-
         hyperparameters = ModelHyperparameters.from_dict(d.pop("hyperparameters"))
-
-
-
 
         id = d.pop("id")
 
@@ -305,9 +288,6 @@ class Model:
 
         method = MiaMethod(d.pop("method"))
 
-
-
-
         name = d.pop("name")
 
         num_shadow_models = d.pop("num_shadow_models")
@@ -320,9 +300,6 @@ class Model:
 
         status = ExperimentStatus(d.pop("status"))
 
-
-
-
         target_test_size = d.pop("target_test_size")
 
         target_train_size = d.pop("target_train_size")
@@ -334,8 +311,9 @@ class Model:
                 return data
             return cast(int | None | Unset, data)
 
-        base_experiment_id = _parse_base_experiment_id(d.pop("base_experiment_id", UNSET))
-
+        base_experiment_id = _parse_base_experiment_id(
+            d.pop("base_experiment_id", UNSET)
+        )
 
         def _parse_completed_at(data: object) -> datetime.datetime | None | Unset:
             if data is None:
@@ -347,15 +325,12 @@ class Model:
                     raise TypeError()
                 completed_at_type_0 = isoparse(data)
 
-
-
                 return completed_at_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(datetime.datetime | None | Unset, data)
 
         completed_at = _parse_completed_at(d.pop("completed_at", UNSET))
-
 
         def _parse_error_message(data: object) -> None | str | Unset:
             if data is None:
@@ -365,7 +340,6 @@ class Model:
             return cast(None | str | Unset, data)
 
         error_message = _parse_error_message(d.pop("error_message", UNSET))
-
 
         def _parse_files(data: object) -> ModelFilesType0 | None | Unset:
             if data is None:
@@ -377,15 +351,12 @@ class Model:
                     raise TypeError()
                 files_type_0 = ModelFilesType0.from_dict(data)
 
-
-
                 return files_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(ModelFilesType0 | None | Unset, data)
 
         files = _parse_files(d.pop("files", UNSET))
-
 
         def _parse_global_auc(data: object) -> float | None | Unset:
             if data is None:
@@ -396,7 +367,6 @@ class Model:
 
         global_auc = _parse_global_auc(d.pop("global_auc", UNSET))
 
-
         def _parse_notes(data: object) -> None | str | Unset:
             if data is None:
                 return data
@@ -405,7 +375,6 @@ class Model:
             return cast(None | str | Unset, data)
 
         notes = _parse_notes(d.pop("notes", UNSET))
-
 
         def _parse_other_metrics(data: object) -> ModelOtherMetricsType0 | None | Unset:
             if data is None:
@@ -417,15 +386,12 @@ class Model:
                     raise TypeError()
                 other_metrics_type_0 = ModelOtherMetricsType0.from_dict(data)
 
-
-
                 return other_metrics_type_0
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
             return cast(ModelOtherMetricsType0 | None | Unset, data)
 
         other_metrics = _parse_other_metrics(d.pop("other_metrics", UNSET))
-
 
         def _parse_threshold_at_01_fpr(data: object) -> float | None | Unset:
             if data is None:
@@ -434,8 +400,9 @@ class Model:
                 return data
             return cast(float | None | Unset, data)
 
-        threshold_at_01_fpr = _parse_threshold_at_01_fpr(d.pop("threshold_at_01_fpr", UNSET))
-
+        threshold_at_01_fpr = _parse_threshold_at_01_fpr(
+            d.pop("threshold_at_01_fpr", UNSET)
+        )
 
         def _parse_threshold_at_1_fpr(data: object) -> float | None | Unset:
             if data is None:
@@ -444,8 +411,9 @@ class Model:
                 return data
             return cast(float | None | Unset, data)
 
-        threshold_at_1_fpr = _parse_threshold_at_1_fpr(d.pop("threshold_at_1_fpr", UNSET))
-
+        threshold_at_1_fpr = _parse_threshold_at_1_fpr(
+            d.pop("threshold_at_1_fpr", UNSET)
+        )
 
         def _parse_total_time(data: object) -> float | None | Unset:
             if data is None:
@@ -456,7 +424,6 @@ class Model:
 
         total_time = _parse_total_time(d.pop("total_time", UNSET))
 
-
         def _parse_tpr_at_01_fpr(data: object) -> float | None | Unset:
             if data is None:
                 return data
@@ -465,7 +432,6 @@ class Model:
             return cast(float | None | Unset, data)
 
         tpr_at_01_fpr = _parse_tpr_at_01_fpr(d.pop("tpr_at_01_fpr", UNSET))
-
 
         def _parse_tpr_at_1_fpr(data: object) -> float | None | Unset:
             if data is None:
@@ -476,7 +442,6 @@ class Model:
 
         tpr_at_1_fpr = _parse_tpr_at_1_fpr(d.pop("tpr_at_1_fpr", UNSET))
 
-
         def _parse_worker_name(data: object) -> None | str | Unset:
             if data is None:
                 return data
@@ -485,7 +450,6 @@ class Model:
             return cast(None | str | Unset, data)
 
         worker_name = _parse_worker_name(d.pop("worker_name", UNSET))
-
 
         model = cls(
             batch_size=batch_size,
@@ -519,7 +483,6 @@ class Model:
             tpr_at_1_fpr=tpr_at_1_fpr,
             worker_name=worker_name,
         )
-
 
         model.additional_properties = d
         return model

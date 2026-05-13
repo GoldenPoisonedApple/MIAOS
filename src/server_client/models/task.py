@@ -1,42 +1,35 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, TypeVar, cast
+from uuid import UUID
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
-from typing import cast
-from uuid import UUID
-
 if TYPE_CHECKING:
-  from ..models.task_args_control import TaskArgsControl
-  from ..models.task_args_keyword import TaskArgsKeyword
-  from ..models.task_args_positional import TaskArgsPositional
-
-
-
+    from ..models.task_args_control import TaskArgsControl
+    from ..models.task_args_keyword import TaskArgsKeyword
+    from ..models.task_args_positional import TaskArgsPositional
 
 
 T = TypeVar("T", bound="Task")
 
 
-
 @_attrs_define
 class Task:
-    """ タスク
+    """タスク
 
-        Attributes:
-            args_control (TaskArgsControl): 制御情報
-            args_keyword (TaskArgsKeyword): キーワード引数
-            args_positional (TaskArgsPositional): 位置引数
-            id (UUID): id
-            task (str): タスク名
-            error_message (None | str | Unset): エラーメッセージ
-     """
+    Attributes:
+        args_control (TaskArgsControl): 制御情報
+        args_keyword (TaskArgsKeyword): キーワード引数
+        args_positional (TaskArgsPositional): 位置引数
+        id (UUID): id
+        task (str): タスク名
+        error_message (None | str | Unset): エラーメッセージ
+    """
 
     args_control: TaskArgsControl
     args_keyword: TaskArgsKeyword
@@ -46,14 +39,7 @@ class Task:
     error_message: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.task_args_control import TaskArgsControl
-        from ..models.task_args_keyword import TaskArgsKeyword
-        from ..models.task_args_positional import TaskArgsPositional
         args_control = self.args_control.to_dict()
 
         args_keyword = self.args_keyword.to_dict()
@@ -70,48 +56,36 @@ class Task:
         else:
             error_message = self.error_message
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-            "args_control": args_control,
-            "args_keyword": args_keyword,
-            "args_positional": args_positional,
-            "id": id,
-            "task": task,
-        })
+        field_dict.update(
+            {
+                "args_control": args_control,
+                "args_keyword": args_keyword,
+                "args_positional": args_positional,
+                "id": id,
+                "task": task,
+            }
+        )
         if error_message is not UNSET:
             field_dict["error_message"] = error_message
 
         return field_dict
-
-
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.task_args_control import TaskArgsControl
         from ..models.task_args_keyword import TaskArgsKeyword
         from ..models.task_args_positional import TaskArgsPositional
+
         d = dict(src_dict)
         args_control = TaskArgsControl.from_dict(d.pop("args_control"))
 
-
-
-
         args_keyword = TaskArgsKeyword.from_dict(d.pop("args_keyword"))
-
-
-
 
         args_positional = TaskArgsPositional.from_dict(d.pop("args_positional"))
 
-
-
-
         id = UUID(d.pop("id"))
-
-
-
 
         task = d.pop("task")
 
@@ -124,7 +98,6 @@ class Task:
 
         error_message = _parse_error_message(d.pop("error_message", UNSET))
 
-
         task = cls(
             args_control=args_control,
             args_keyword=args_keyword,
@@ -133,7 +106,6 @@ class Task:
             task=task,
             error_message=error_message,
         )
-
 
         task.additional_properties = d
         return task

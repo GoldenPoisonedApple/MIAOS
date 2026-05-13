@@ -1,50 +1,45 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-from ..types import UNSET, Unset
-
 from ..models.mia_method import MiaMethod
 from ..types import UNSET, Unset
-from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.create_experiment_request_hyperparameters import CreateExperimentRequestHyperparameters
-
-
-
+    from ..models.create_experiment_request_hyperparameters import (
+        CreateExperimentRequestHyperparameters,
+    )
 
 
 T = TypeVar("T", bound="CreateExperimentRequest")
 
 
-
 @_attrs_define
 class CreateExperimentRequest:
-    """ 実験の作成リクエスト
+    """実験の作成リクエスト
 
-        Attributes:
-            base_experiment_id (int | None | Unset): 既存実験結果を流用する実験結果
-            batch_size (int | Unset): バッチサイズ Default: 256.
-            hyperparameters (CreateExperimentRequestHyperparameters | Unset): その他のハイパーパラメータ
-            load_attack_model (bool | Unset): 攻撃モデルを読み込むかどうか Default: False.
-            load_shadow_model (bool | Unset): シャドウモデルを読み込むかどうか Default: False.
-            load_target_model (bool | Unset): ターゲットモデルを読み込むかどうか Default: False.
-            max_epochs (int | Unset): 最大エポック数 Default: 200.
-            method (MiaMethod | Unset):  Default: MiaMethod.OFFLINELIRA.
-            name (str | Unset): 実験名 Default: '2026-05-13_13-56-25'.
-            notes (None | str | Unset): 備考
-            num_shadow_models (int | Unset): シャドウモデル数 Default: 100.
-            seed (int | Unset): シード値 Default: 42.
-            shadow_test_size (int | Unset): シャドウモデルのテストサイズ Default: 10520.
-            shadow_train_size (int | Unset): シャドウモデルのトレーニングサイズ Default: 10520.
-            target_test_size (int | Unset): ターゲットモデルのテストサイズ Default: 10520.
-            target_train_size (int | Unset): ターゲットモデルのトレーニングサイズ Default: 10520.
-     """
+    Attributes:
+        base_experiment_id (int | None | Unset): 既存実験結果を流用する実験結果
+        batch_size (int | Unset): バッチサイズ Default: 256.
+        hyperparameters (CreateExperimentRequestHyperparameters | Unset): その他のハイパーパラメータ
+        load_attack_model (bool | Unset): 攻撃モデルを読み込むかどうか Default: False.
+        load_shadow_model (bool | Unset): シャドウモデルを読み込むかどうか Default: False.
+        load_target_model (bool | Unset): ターゲットモデルを読み込むかどうか Default: False.
+        max_epochs (int | Unset): 最大エポック数 Default: 200.
+        method (MiaMethod | Unset):  Default: MiaMethod.OFFLINELIRA.
+        name (str | Unset): 実験名 Default: '2026-05-13_19-11-43'.
+        notes (None | str | Unset): 備考
+        num_shadow_models (int | Unset): シャドウモデル数 Default: 100.
+        seed (int | Unset): シード値 Default: 42.
+        shadow_test_size (int | Unset): シャドウモデルのテストサイズ Default: 10520.
+        shadow_train_size (int | Unset): シャドウモデルのトレーニングサイズ Default: 10520.
+        target_test_size (int | Unset): ターゲットモデルのテストサイズ Default: 10520.
+        target_train_size (int | Unset): ターゲットモデルのトレーニングサイズ Default: 10520.
+    """
 
     base_experiment_id: int | None | Unset = UNSET
     batch_size: int | Unset = 256
@@ -54,7 +49,7 @@ class CreateExperimentRequest:
     load_target_model: bool | Unset = False
     max_epochs: int | Unset = 200
     method: MiaMethod | Unset = MiaMethod.OFFLINELIRA
-    name: str | Unset = '2026-05-13_13-56-25'
+    name: str | Unset = "2026-05-13_19-11-43"
     notes: None | str | Unset = UNSET
     num_shadow_models: int | Unset = 100
     seed: int | Unset = 42
@@ -64,12 +59,7 @@ class CreateExperimentRequest:
     target_train_size: int | Unset = 10520
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
-
-
-
-
     def to_dict(self) -> dict[str, Any]:
-        from ..models.create_experiment_request_hyperparameters import CreateExperimentRequestHyperparameters
         base_experiment_id: int | None | Unset
         if isinstance(self.base_experiment_id, Unset):
             base_experiment_id = UNSET
@@ -94,7 +84,6 @@ class CreateExperimentRequest:
         if not isinstance(self.method, Unset):
             method = self.method.value
 
-
         name = self.name
 
         notes: None | str | Unset
@@ -115,11 +104,9 @@ class CreateExperimentRequest:
 
         target_train_size = self.target_train_size
 
-
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
-        field_dict.update({
-        })
+        field_dict.update({})
         if base_experiment_id is not UNSET:
             field_dict["base_experiment_id"] = base_experiment_id
         if batch_size is not UNSET:
@@ -155,12 +142,14 @@ class CreateExperimentRequest:
 
         return field_dict
 
-
-
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.create_experiment_request_hyperparameters import CreateExperimentRequestHyperparameters
+        from ..models.create_experiment_request_hyperparameters import (
+            CreateExperimentRequestHyperparameters,
+        )
+
         d = dict(src_dict)
+
         def _parse_base_experiment_id(data: object) -> int | None | Unset:
             if data is None:
                 return data
@@ -168,20 +157,20 @@ class CreateExperimentRequest:
                 return data
             return cast(int | None | Unset, data)
 
-        base_experiment_id = _parse_base_experiment_id(d.pop("base_experiment_id", UNSET))
-
+        base_experiment_id = _parse_base_experiment_id(
+            d.pop("base_experiment_id", UNSET)
+        )
 
         batch_size = d.pop("batch_size", UNSET)
 
         _hyperparameters = d.pop("hyperparameters", UNSET)
         hyperparameters: CreateExperimentRequestHyperparameters | Unset
-        if isinstance(_hyperparameters,  Unset):
+        if isinstance(_hyperparameters, Unset):
             hyperparameters = UNSET
         else:
-            hyperparameters = CreateExperimentRequestHyperparameters.from_dict(_hyperparameters)
-
-
-
+            hyperparameters = CreateExperimentRequestHyperparameters.from_dict(
+                _hyperparameters
+            )
 
         load_attack_model = d.pop("load_attack_model", UNSET)
 
@@ -193,13 +182,10 @@ class CreateExperimentRequest:
 
         _method = d.pop("method", UNSET)
         method: MiaMethod | Unset
-        if isinstance(_method,  Unset):
+        if isinstance(_method, Unset):
             method = UNSET
         else:
             method = MiaMethod(_method)
-
-
-
 
         name = d.pop("name", UNSET)
 
@@ -211,7 +197,6 @@ class CreateExperimentRequest:
             return cast(None | str | Unset, data)
 
         notes = _parse_notes(d.pop("notes", UNSET))
-
 
         num_shadow_models = d.pop("num_shadow_models", UNSET)
 
@@ -243,7 +228,6 @@ class CreateExperimentRequest:
             target_test_size=target_test_size,
             target_train_size=target_train_size,
         )
-
 
         create_experiment_request.additional_properties = d
         return create_experiment_request
