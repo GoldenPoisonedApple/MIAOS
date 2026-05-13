@@ -21,7 +21,7 @@ export const ExperimentList = () => {
   const { dynamicColumns, defaultHiddenColumns } = useDynamicColumns<Experiment>(experiments, [
     { key: "hyperparameters", prefix: "HP" },
     { key: "other_metrics", prefix: "Metric" },
-    { key: "other_files", prefix: "File" },
+    { key: "files", prefix: "File" },
   ]);
 
   const columns = useMemo<ColumnDef<Experiment>[]>(
@@ -65,7 +65,8 @@ export const ExperimentList = () => {
       { accessorKey: "worker_name", header: "ワーカー名" },
       { accessorKey: "error_message", header: "エラーメッセージ" },
       { accessorKey: "global_auc", header: "全体AUC" },
-      { accessorKey: "tpr_at_001_fpr", header: "TPR (0.01% FPR)" },
+			{ accessorKey: "threshold_at_01_fpr", header: "閾値 (0.1% FPR)" },
+			{ accessorKey: "threshold_at_1_fpr", header: "閾値 (1% FPR)" },
       { accessorKey: "tpr_at_01_fpr", header: "TPR (0.1% FPR)" },
       { accessorKey: "tpr_at_1_fpr", header: "TPR (1% FPR)" },
       { accessorKey: "total_time", header: "実行時間(秒)" },
@@ -92,8 +93,6 @@ export const ExperimentList = () => {
         header: "Load Target Model",
         cell: ({ row }) => (row.original.load_target_model ? "Yes" : "No"),
       },
-      { accessorKey: "dataset_json_path", header: "データセットパス" },
-      { accessorKey: "execution_log_path", header: "実行ログパス" },
       { accessorKey: "notes", header: "備考" },
       ...dynamicColumns,
     ],
