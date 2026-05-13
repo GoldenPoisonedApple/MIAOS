@@ -23,23 +23,12 @@ from src.attacks.mia_shokri import MIA_Shokri
 def run_experiment(request: CreateExperimentRequest, work_dir: str, assigned_model_path: str | None, experiment_id: int):
 	is_assigned_model_path = (assigned_model_path is not None)
 
+
 	# シード値の設定
 	torch.manual_seed(request.seed)
 	if torch.cuda.is_available():
 		torch.cuda.manual_seed_all(request.seed)
   
-	# パス整形
-	# 早期終了判定
-	if is_assigned_model_path:
-		# 指定されたパスのディレクトリが存在しない場合早期終了
-		if not os.path.exists(assigned_model_path):
-			print(f"Error: Assigned model path '{assigned_model_path}' does not exist.")
-			return
-		# パスを指定しているのにモデルを読み込まない場合早期終了
-		if (not request.load_target_model) and (not request.load_shadow_model) and (not request.load_attack_model):
-			print("Error: No model to load. Please specify the model to load.")
-			return
- 
 	# ロガー
 	log_file_path = os.path.join(work_dir, "execution.log")
 	
@@ -54,6 +43,20 @@ def run_experiment(request: CreateExperimentRequest, work_dir: str, assigned_mod
 	
 	logger.addHandler(file_handler)
 	logger.addHandler(stream_handler)
+
+  
+	# パス整形
+	# 早期終了判定
+	if is_assigned_model_path:
+		# 指定されたパスのディレクトリが存在しない場合早期終了
+		if not os.path.exists(assigned_model_path):
+			logger.error(f"Error: Assigned model path '{assigned_model_path}' does not exist.")
+			raise ValueError(f"Error: Assigned model path '{assigned_model_path}' does not exist.")
+		# パスを指定しているのにモデルを読み込まない場合早期終了
+		if (not request.load_target_model) and (not request.load_shadow_model) and (not request.load_attack_model):
+			logger.error("Error: No model to load. Please specify the model to load.")
+			raise ValueError("Error: No model to load. Please specify the model to load.")
+ 
  
 	# メタ情報表示
 	logger.info("Configurations:")
@@ -81,7 +84,7 @@ def run_experiment(request: CreateExperimentRequest, work_dir: str, assigned_mod
 		mia_class = MIA_Shokri(dataset_instance, work_dir, logger, request)
 	else:
 		logger.error(f"Invalid MIA method: {mia_method}")
-		return
+		raise ValueError(f"Invalid MIA method: {mia_method}")
 
 	logger.info(f"-> {time.time() - p1_start_time:.2f} sec: {((time.time() - p1_start_time) / 60):.2f} min")
 	# ----------------------------------
