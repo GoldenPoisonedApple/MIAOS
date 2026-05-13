@@ -6,22 +6,21 @@ import torch
 import torch.nn as nn
 from tqdm import trange
 import src.core.config as cfg
-from src.core.config import ExperimentConfig
 import os
-
+from src.server_client.models import CreateExperimentRequest
 from src.models.attack_model import AttackNet
 
 # 攻撃用のモデルを作成し、攻撃
 class MIA_Shokri(MIA_Attack):
-	def __init__(self, dataset: dataset, MODEL_SAVE_DIR: str, logger: logging.Logger, config: ExperimentConfig):
-		super().__init__(dataset, MODEL_SAVE_DIR, logger, config)
+	def __init__(self, dataset: dataset, MODEL_SAVE_DIR: str, logger: logging.Logger, settings: CreateExperimentRequest):
+		super().__init__(dataset, MODEL_SAVE_DIR, logger, settings)
 
 	# MIA Attack
 	def attack(self, shadow_models: list[nn.Module], target_model: nn.Module) -> tuple[np.ndarray, np.ndarray]:
     
 		# ------------- 特徴量抽出 -------------
 		attack_x, attack_y, attack_classes = [], [], []
-		for i in trange(self.config.num_shadow_models, desc="Feature Extraction with Shadow Models"):
+		for i in trange(self.settings.num_shadow_models, desc="Feature Extraction with Shadow Models"):
 			# 評価用のデータローダーを取得
 			shadow_train_loader, shadow_test_loader, _, _ = self.dataset.get_eval_shadow_dataloader(seed=i)
 			# 予測値の抽出
@@ -48,17 +47,17 @@ class MIA_Shokri(MIA_Attack):
 		# クラスごとに攻撃モデルを訓練
 		attack_models = {}
 		state_dicts = []
-		for class_idx in trange(self.config.num_classes, desc="Training Attack Models"):
+		for class_idx in trange(cfg.NUM_CLASSES, desc="Training Attack Models"):
 			# クラスごとのマスクを作成
 			class_mask = (attack_classes == class_idx)
 			if class_mask.sum() == 0: # クラスにデータがない場合はスキップ
 				continue
 			# データセット作成
 			class_dataset = torch.utils.data.TensorDataset(attack_x[class_mask], attack_y[class_mask])
-			class_loader = torch.utils.data.DataLoader(class_dataset, batch_size=self.config.batch_size, shuffle=True, num_workers=self.config.num_workers, pin_memory=True)
+			class_loader = torch.utils.data.DataLoader(class_dataset, batch_size=self.settings.batch_size, shuffle=True, num_workers=0, pin_memory=True)
 			# 攻撃モデルの訓練
-			attack_model = AttackNet(input_dim=self.config.num_classes).to(cfg.DEVICE)
-			attack_model = MIA_Attack.train_model(attack_model, class_loader, self.config.attack_model_epochs)
+			attack_model = AttackNet(input_dim=cfg.NUM_CLASSES).to(cfg.DEVICE)
+			attack_model = MIA_Attack.train_model(attack_model, class_loader, cfg.ATTACK_MODEL_EPOCHS)
 			# 追加
 			attack_models[class_idx] = attack_model
 			state_dicts.append(attack_model.state_dict())
@@ -77,7 +76,7 @@ class MIA_Shokri(MIA_Attack):
 		all_trues = []
 
 		# クラスごとに評価
-		for class_idx in trange(self.config.num_classes, desc="Evaluating Classes"):
+		for class_idx in trange(cfg.NUM_CLASSES, desc="Evaluating Classes"):
 			# クラスに攻撃モデルがない場合はスキップ
 			if class_idx not in attack_models:
 				continue

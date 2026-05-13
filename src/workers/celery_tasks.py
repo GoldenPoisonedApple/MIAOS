@@ -2,31 +2,35 @@
 from celery import Celery
 import tempfile
 import time
-import requests
-from dataclasses import asdict
 import os
 
-from src.core.config import ExperimentConfig
 import src.core.config as cfg
 from src.core.pipeline import run_experiment
 import src.utils.minio_utils as minio_utils
 
+from src.server_client import Client
+from src.server_client.models import CreateExperimentRequest, UpdateResultsRequest, UpdateResultsRequestFiles, UpdateResultsRequestOtherMetrics
+from src.server_client.api.experiments import reflect_experiment_results
+
 app = Celery('mia_tasks', broker=cfg.REDIS_URL)
 
 @app.task(name='mia_tasks.run_attack')
-def execute_attack_task(params_json):
+def execute_attack_task(_params):
 	"""
-	params_json: {"mia_method": "Shokri", "batch_size": 128, ...} のような辞書
+	_params: {"mia_method": "Shokri", "batch_size": 128, ...} のような辞書
 	"""
-	# JSONからConfigオブジェクトを復元 指定されていない場合はデフォルト値が使用される
-	config = ExperimentConfig(**params_json)
+	# idを取得、削除
+	id = _params.pop("experiment_id")
+	# JSONからCreateExperimentRequestオブジェクトを復元
+	request = CreateExperimentRequest.from_dict(_params)
 	
 	# 依存モデルが存在する場合
-	if config.assigned_model_path != "":
+	if request.base_experiment_id is not None:
 		# ダウンロード
 		# MinIOから落としてきたローカルの絶対パスを取得し、設定を上書きする
-		local_model_path = minio_utils.download_model_dir(config.assigned_model_path)
-		config.assigned_model_path = local_model_path
+		assigned_model_path = minio_utils.download_model_dir(request.base_experiment_id)
+	else:
+		assigned_model_path = None
 
 	
 	# 他のPCのNASと衝突しないよう、一時ディレクトリを生成
@@ -34,43 +38,45 @@ def execute_attack_task(params_json):
 	with tempfile.TemporaryDirectory(prefix="ito_research_") as temp_dir:
 		
 		# パイプライン実行 (結果は temp_dir に保存される)
-		metrics = run_experiment(config, work_dir=temp_dir)
+		metrics = run_experiment(request, work_dir=temp_dir, assigned_model_path=assigned_model_path, experiment_id=id)
 		
 		# OSのファイルシステム同期を確実に行うための待機
 		time.sleep(2)
 		
 		# 実行結果アップロード
-		remote_prefix = f"exp/{config.experiment_name}"
+		remote_prefix = f"{id}/"
 		minio_utils.upload_results_dir(temp_dir, remote_prefix=remote_prefix)
 		
-		# ------- Tracking APIへの送信処理 -------
-		# 実行条件 辞書変換
-		config_dict = asdict(config)
-		config_dict["mia_method"] = config.mia_method.value # Enumを文字列に変換
-		# artifacts リスト作成
-		artifacts = []
+		# ------- MIAOS APIへの送信処理 -------
+		# ファイル作成
+		files_dict = {}
 		for root, _, files in os.walk(temp_dir):
 			for file in files:
 				# temp_dirを起点とした相対パスを計算
 				rel_path = os.path.relpath(os.path.join(root, file), temp_dir)
-				artifacts.append(rel_path)		
+				files_dict[rel_path] = rel_path
 		# ペイロード作成
-		payload = {
-			"minio_path": remote_prefix,
-			"worker_id": cfg.PC_NAME,
-			"artifacts": artifacts,	# 実行結果のファイルパスリスト
-			"metrics": metrics,       # 実行結果
-			"parameters": config_dict # 実行条件
-		}
+		payload = UpdateResultsRequest(
+			experiment_id=id,
+			files=UpdateResultsRequestFiles.from_dict(files_dict),
+			global_auc=metrics["global_auc"],
+			other_metrics=UpdateResultsRequestOtherMetrics.from_dict({
+				"tpr_at_001_fpr": metrics["tpr_at_001_fpr"],
+				"threshold_at_001_fpr": metrics["threshold_at_001_fpr"],
+			}),
+			threshold_at_01_fpr=metrics["threshold_at_01_fpr"],
+			threshold_at_1_fpr=metrics["threshold_at_1_fpr"],
+			total_time=metrics["total_time_sec"],
+			tpr_at_01_fpr=metrics["tpr_at_01_fpr"],
+			tpr_at_1_fpr=metrics["tpr_at_1_fpr"],
+			worker_name=cfg.PC_NAME,
+		)
 		try:
-			# RustのTracking APIへPOST送信
-			api_url = cfg.TRACKING_API_URL
-			response = requests.post(api_url, json=payload, timeout=10)
-			response.raise_for_status() # HTTPエラーなら例外を出す
-			print(f"Tracking APIへの送信成功: {response.text}")
+			client = Client(base_url=cfg.MIAOS_API_URL)
+			response = reflect_experiment_results.sync(client=client, body=payload)
+			print(f"MIAOS APIへの送信成功: {response}")
 		except Exception as e:
-			# MinIOには保存できているので、タスク全体を失敗扱いにせずエラーログだけ出すのが推奨
-			print(f"Tracking APIへの送信失敗: {e}")
+			print(f"MIAOS APIへの送信失敗: {e}")
 				
 	# withブロックを抜けると temp_dir は自動的に削除（クリーンアップ）される
 	return {"status": "success", "worker_id": cfg.PC_NAME}

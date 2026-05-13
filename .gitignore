@@ -3,3 +3,7 @@ models/
 __pycache__/
 .vscode/
 .env
+
+# OpenAPI
+openapi.json
+server_client/
