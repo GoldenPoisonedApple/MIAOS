@@ -260,4 +260,6 @@ MINIO
 application/jsonでも開けないし
 executionn.logはまだout-streamだし
 
+多分 色んな所でMakefile作った方がいいな
 
+この実験から生成(同じ条件がセットされる)、ボタンがあると参照がらく
