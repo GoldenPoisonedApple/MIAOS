@@ -80,11 +80,19 @@ impl<E: ExperimentRepositoryTrait, T: TaskRepositoryTrait> ExperimentService<E, 
 		self.task_repository.find_all_tasks().await
 	}
 
-	/// 指定IDの実験を削除
+	/// 指定IDの実験を削除 タスクも一緒に削除する
 	/// * id: i64 - 削除する実験のID
 	/// * 戻り値: Result<u64, ServerError> - 実験の削除結果
 	pub async fn delete_experiment_by_id(&self, id: i64) -> Result<u64, ServerError> {
-		self.experiment_repository.delete_from_id(id).await
+		let result = self.experiment_repository.delete_from_id(id).await?;
+		// タスクも削除
+		let tasks = self.task_repository.find_all_tasks().await?;
+		for task in tasks {
+			if task.experiment_id == id {
+				self.task_repository.delete_by_id(task.id).await?;
+			}
+		}
+		Ok(result)
 	}
 
 	/// 指定IDのタスクを削除
@@ -259,5 +267,23 @@ mod tests {
 		assert_eq!(result.status, ExperimentStatus::Running); // ステータスが実行中となっていること
 		assert_eq!(result.worker_name, Some("test_worker".to_string())); // ワーカーがセットされていること
 		remove_test_experiments(&service.experiment_repository).await;
+	}
+
+	/// 実験の削除テスト
+	#[tokio::test]
+	async fn test_delete_experiment_by_id() {
+		// Arrange
+		let service = setup().await;
+		let created_experiment = service.experiment_repository.create(create_experiment_request_factory("test_experiment")).await.unwrap(); // 実験を作成
+		// Act
+		let result = service.delete_experiment_by_id(created_experiment.id).await.unwrap();
+		// Assert
+		assert_eq!(result, 1); // 削除された実験の数が1件である事
+		let experiments = service.experiment_repository.find_all().await.unwrap();
+		assert!(!experiments.iter().any(|experiment| experiment.id == created_experiment.id)); // 指定IDの実験が存在しない事
+		let tasks = service.task_repository.find_all_tasks().await.unwrap();
+		assert!(!tasks.iter().any(|task| task.experiment_id == created_experiment.id)); // 指定IDの実験タスクが存在しない事
+		remove_test_experiments(&service.experiment_repository).await;
+		remove_test_tasks(&service.task_repository).await;
 	}
 }

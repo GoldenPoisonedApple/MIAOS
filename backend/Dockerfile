@@ -37,7 +37,11 @@
 	RUN apt-get update && apt-get install -y \
 		curl \
 		git \
+		make \
 		&& rm -rf /var/lib/apt/lists/*
+
+	# 環境変数の設定 なぜかこれしないとcargoが使えない
+	RUN export PATH="/usr/local/cargo/bin:/usr/local/rustup/bin:$PATH"
 
 	RUN rustup component add rustfmt
 

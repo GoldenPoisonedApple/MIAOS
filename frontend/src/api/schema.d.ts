@@ -23,6 +23,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/experiments/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 処理取得の報告 */
+        put: operations["claim_experiment"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/experiments/{id}": {
         parameters: {
             query?: never;
@@ -81,6 +98,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description 処理取得の報告リクエスト */
+        ClaimExperimentRequest: {
+            /**
+             * Format: int64
+             * @description 実験ID
+             */
+            id: number;
+            /** @description ワーカー名 */
+            worker_name: string;
+        };
         /** @description 実験の作成リクエスト */
         CreateExperimentRequest: {
             /**
@@ -122,7 +149,7 @@ export interface components {
             method: components["schemas"]["MiaMethod"];
             /**
              * @description 実験名
-             * @default 2026-05-13_13-56-25
+             * @default 2026-05-13_23-38-59
              */
             name: string;
             /**
@@ -297,6 +324,11 @@ export interface components {
             /** @description エラーメッセージ */
             error_message?: string | null;
             /**
+             * Format: int64
+             * @description 実験ID
+             */
+            experiment_id: number;
+            /**
              * Format: uuid
              * @description id
              */
@@ -319,7 +351,7 @@ export interface components {
              * Format: double
              * @description 全体のAUC
              */
-            global_auc: number;
+            global_auc?: number | null;
             /** @description 拡張メトリクス */
             other_metrics: Record<string, never>;
             /** @description 実験結果 ステータス */
@@ -328,27 +360,27 @@ export interface components {
              * Format: double
              * @description 0.1%FPRでの閾値
              */
-            threshold_at_01_fpr: number;
+            threshold_at_01_fpr?: number | null;
             /**
              * Format: double
              * @description 1%FPRでの閾値
              */
-            threshold_at_1_fpr: number;
+            threshold_at_1_fpr?: number | null;
             /**
              * Format: double
              * @description トータルの実行時間(秒)
              */
-            total_time: number;
+            total_time?: number | null;
             /**
              * Format: double
              * @description 0.1%FPRでのTPR
              */
-            tpr_at_01_fpr: number;
+            tpr_at_01_fpr?: number | null;
             /**
              * Format: double
              * @description 1%FPRでのTPR
              */
-            tpr_at_1_fpr: number;
+            tpr_at_1_fpr?: number | null;
             /** @description 作業PC名 */
             worker_name: string;
         };
@@ -447,6 +479,44 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Model"];
                 };
+            };
+            /** @description サーバー内部エラー */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    claim_experiment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimExperimentRequest"];
+            };
+        };
+        responses: {
+            /** @description 処理取得が正常に報告された */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Model"];
+                };
+            };
+            /** @description 指定された実験が見つからない */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description サーバー内部エラー */
             500: {

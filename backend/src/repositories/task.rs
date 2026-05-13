@@ -77,10 +77,20 @@ impl TaskRepository {
 				"invalid Celery args format".to_string(),
 			)),
 		};
+		// 実験IDを取得
+		let experiment_id = match params["_params"]["experiment_id"].as_i64() {
+			Some(experiment_id) => experiment_id,
+			None => {
+				return Err(ServerError::DataFormatError(
+					"Missing or invalid 'experiment_id'".to_string(),
+				))
+			}
+		};
 		// タスクを作成
 		let task_entity = Task {
 				id,
 				task,
+				experiment_id,
 				args_positional: positional.clone(),
 				args_keyword: params.clone(),
 				args_control: control.clone(),
@@ -126,6 +136,7 @@ impl TaskRepositoryTrait for TaskRepository {
           let error_task = Task {
             id: Uuid::nil(),
             task: "error".to_string(),
+            experiment_id: 0,
             args_positional: serde_json::Value::Null,
             args_keyword: serde_json::Value::Null,
             args_control: serde_json::Value::Null,
@@ -233,6 +244,7 @@ mod tests {
 		// Arrange
 		let task_repository = setup().await;
     let request = create_request("backend_test");
+		let experiment_id = request.experiment_id;
 		let total = task_repository.find_all_tasks().await.unwrap().len();
 		// Act
 		let id = task_repository.create_task(request).await.unwrap();
@@ -241,6 +253,7 @@ mod tests {
 		let created_total = tasks.len();
 		assert_eq!(created_total, total + 1);	// タスクの数が1増えている事
 		assert_eq!(tasks[created_total - 1].id, id); // 末尾に追加されている事
+		assert_eq!(tasks[created_total - 1].experiment_id, experiment_id); // 実験IDが一致する事
 		remove_test_tasks(&task_repository).await;
 	}
 

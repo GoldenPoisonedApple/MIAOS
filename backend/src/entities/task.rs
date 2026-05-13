@@ -9,6 +9,8 @@ pub struct Task {
 	pub id: Uuid,
 	/// タスク名
 	pub task: String,
+	/// 実験ID
+	pub experiment_id: i64,
 	// ---- 引数 ----
 	/// 位置引数
 	#[schema(value_type = Object)]
