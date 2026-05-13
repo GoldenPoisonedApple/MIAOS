@@ -129,8 +129,6 @@ pub struct UpdateResultsRequest {
   /// トータルの実行時間(秒)
   pub total_time: f64,
 
-  /// MINIOでのベースパス
-  pub minio_path: String,
   /// データセットのパス
   pub dataset_json_path: String,
   /// 実行ログのパス

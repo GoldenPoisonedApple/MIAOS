@@ -122,7 +122,7 @@ export interface components {
             method: components["schemas"]["MiaMethod"];
             /**
              * @description 実験名
-             * @default 2026-05-11_19-31-21
+             * @default 2026-05-13_00-14-28
              */
             name: string;
             /**
@@ -223,8 +223,6 @@ export interface components {
             max_epochs: number;
             /** @description 攻撃手法 */
             method: components["schemas"]["MiaMethod"];
-            /** @description MINIOでのベースパス */
-            minio_path?: string | null;
             /** @description 実験名 */
             name: string;
             /** @description 備考 */
@@ -322,8 +320,6 @@ export interface components {
              * @description 全体のAUC
              */
             global_auc: number;
-            /** @description MINIOでのベースパス */
-            minio_path: string;
             /** @description その他のファイルのパス */
             other_files: Record<string, never>;
             /** @description 拡張メトリクス */

@@ -103,8 +103,6 @@ pub struct Model {
   pub total_time: Option<f64>,
 
   // ファイル
-  /// MINIOでのベースパス
-  pub minio_path: Option<String>,
   /// データセットのパス
   pub dataset_json_path: Option<String>,
   /// 実行ログのパス
@@ -156,7 +154,6 @@ impl Model {
 		// 時間
     self.total_time = Some(results.total_time);
 		// ファイル
-    self.minio_path = Some(results.minio_path);
     self.dataset_json_path = Some(results.dataset_json_path);
     self.execution_log_path = Some(results.execution_log_path);
     self.other_files = Some(results.other_files);
@@ -192,7 +189,6 @@ impl Model {
 			tpr_at_001_fpr: Set(self.tpr_at_001_fpr),
 			other_metrics: Set(self.other_metrics),
 			total_time: Set(self.total_time),
-			minio_path: Set(self.minio_path),
 			dataset_json_path: Set(self.dataset_json_path),
 			execution_log_path: Set(self.execution_log_path),
 			other_files: Set(self.other_files),
@@ -236,7 +232,6 @@ mod tests {
 			tpr_at_001_fpr: None,
 			other_metrics: None,
 			total_time: None,
-			minio_path: None,
 			dataset_json_path: None,
 			execution_log_path: None,
 			other_files: None,
@@ -254,7 +249,6 @@ mod tests {
 			tpr_at_01_fpr: 0.5,
 			other_metrics: serde_json::json!({}),
 			total_time: 10.0,
-			minio_path: "test_minio_path".to_string(),
 			dataset_json_path: "test_dataset_json_path".to_string(),
 			execution_log_path: "test_execution_log_path".to_string(),
 			other_files: serde_json::json!({}),

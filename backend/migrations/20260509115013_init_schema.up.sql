@@ -68,7 +68,6 @@ CREATE TABLE experiments (
 	-- ファイル
 	-- ----------------------------
 	-- 生成されたファイル群
-	minio_path TEXT, -- MINIOでのベースパス
 	dataset_json_path TEXT, -- データセットのパス
 	execution_log_path TEXT, -- 実行ログのパス
 	other_files JSONB DEFAULT '{}', -- その他のファイルのパス

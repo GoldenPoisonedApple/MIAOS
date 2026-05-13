@@ -94,7 +94,6 @@ export const ExperimentList = () => {
       },
       { accessorKey: "dataset_json_path", header: "データセットパス" },
       { accessorKey: "execution_log_path", header: "実行ログパス" },
-      { accessorKey: "minio_path", header: "MinIOパス" },
       { accessorKey: "notes", header: "備考" },
       ...dynamicColumns,
     ],

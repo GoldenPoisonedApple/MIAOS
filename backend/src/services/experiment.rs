@@ -173,7 +173,6 @@ mod tests {
 			tpr_at_01_fpr: 0.5,
 			other_metrics: serde_json::json!({}),
 			total_time: 10.0,
-			minio_path: "test_minio_path".to_string(),
 			dataset_json_path: "test_dataset_json_path".to_string(),
 			execution_log_path: "test_execution_log_path".to_string(),
 			other_files: serde_json::json!({}),
