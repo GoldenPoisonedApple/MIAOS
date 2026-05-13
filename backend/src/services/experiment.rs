@@ -89,7 +89,7 @@ mod tests {
   use crate::infrastructure::{
     establish_celery_app, establish_db_connection, establish_redis_connection,
   };
-  use crate::test_utils::{remove_test_experiments, remove_test_tasks};
+  use crate::test_utils::{create_experiment_request_factory, update_experiment_request_factory, remove_test_experiments, remove_test_tasks};
   use crate::repositories::experiment::ExperimentRepository;
   use crate::repositories::task::TaskRepository;
   use crate::entities::experiment::ExperimentStatus;
@@ -152,40 +152,12 @@ mod tests {
 		service
 	}
 
-  /// requestファクトリー
-  fn create_request(name: &str) -> CreateExperimentRequest {
-    let request = CreateExperimentRequest {
-      name: name.to_string(),
-      notes: Some("backend_test".to_string()),
-      ..Default::default()
-    };
-
-    request
-  }
-
-	/// requestファクトリー
-	fn update_request(experiment_id: i64) -> UpdateResultsRequest {
-		let request = UpdateResultsRequest {
-			experiment_id: experiment_id,
-			worker_name: "test_worker".to_string(),
-			global_auc: 0.5,
-			tpr_at_1_fpr: 0.5,
-			threshold_at_1_fpr: 0.5,
-			tpr_at_01_fpr: 0.5,
-			threshold_at_01_fpr: 0.5,
-			other_metrics: serde_json::json!({}),
-			total_time: 10.0,
-			files: serde_json::json!({}),
-		};
-		request
-	}
-
   /// 実験の作成テスト
   #[tokio::test]
   async fn test_create() {
     // Arrange
     let service = setup().await;
-    let request = create_request("test_experiment");
+    let request = create_experiment_request_factory("test_experiment");
     let experiment_total = service
       .experiment_repository
       .find_all()
@@ -216,7 +188,7 @@ mod tests {
 	async fn create_should_rollback_on_task_creation_failure() {
 		// Arrange
 		let service = setup_with_mock_task_repository().await;
-		let request = create_request("test_experiment");
+		let request = create_experiment_request_factory("test_experiment");
 		// Act
 		let result = service.create_experiment(request.clone()).await;
 		// Assert
@@ -231,15 +203,31 @@ mod tests {
 	async fn test_reflect_experiment_results() {
 		// Arrange
 		let service = setup().await;
-		let experiment = service.experiment_repository.create(create_request("test_experiment")).await.unwrap(); // 実験を作成
-		let request = update_request(experiment.id);
+		let experiment = service.experiment_repository.create(create_experiment_request_factory("test_experiment")).await.unwrap(); // 実験を作成
+		let request = update_experiment_request_factory(experiment.id, ExperimentStatus::Succeeded);
 		// Act
 		let result = service.reflect_experiment_results(request).await.unwrap();
 		// Assert
 		assert_eq!(result.name, "test_experiment"); // 実験名が一致する事
-		assert_eq!(result.status, ExperimentStatus::Succeeded); // ステータスがSUCCEEDEDである事
+		assert_eq!(result.status, ExperimentStatus::Succeeded); // ステータスがセットされていること
 		assert!(result.completed_at.is_some()); // 完了時刻がセットされている事
-		assert_eq!(result.worker_name, Some("test_worker".to_string())); // パラメータが更新されていること
+		assert_eq!(result.worker_name, Some("test_worker".to_string())); // ワーカーがセットされていること
+		remove_test_experiments(&service.experiment_repository).await;
+	}
+
+	/// 実験の結果反映: FAILED
+	#[tokio::test]
+	async fn test_reflect_experiment_results_failed() {
+		// Arrange
+		let service = setup().await;
+		let experiment = service.experiment_repository.create(create_experiment_request_factory("test_experiment")).await.unwrap(); // 実験を作成
+		let mut request = update_experiment_request_factory(experiment.id, ExperimentStatus::Failed);
+		request.error_message = Some("test_error".to_string());
+		// Act
+		let result = service.reflect_experiment_results(request).await.unwrap();
+		// Assert
+		assert_eq!(result.status, ExperimentStatus::Failed); // 失敗となっていること
+		assert_eq!(result.error_message, Some("test_error".to_string())); // エラーメッセージがセットされていること
 		remove_test_experiments(&service.experiment_repository).await;
 	}
 }

@@ -97,6 +97,7 @@ mod tests {
   use crate::entities::experiment::{ExperimentStatus};
 	use crate::infrastructure::establish_db_connection;
 	use crate::test_utils::remove_test_experiments;
+	use crate::test_utils::create_experiment_request_factory;
 
 
 	/// DBテストの前処理
@@ -111,24 +112,13 @@ mod tests {
 		repository
 	}
 
-	/// requestファクトリー
-	fn create_request(name: &str) -> CreateExperimentRequest {
-		let request = CreateExperimentRequest {
-			name: name.to_string(),
-			notes: Some("backend_test".to_string()),
-			..Default::default()
-		};
-
-		request
-	}
-
 	/// 実験の作成テスト
   #[tokio::test]
   async fn test_create() {
 
 		// Arrange
 		let repository = setup().await;
-		let request = create_request("test_experiment");
+		let request = create_experiment_request_factory("test_experiment");
 		let total = repository.find_all().await.unwrap().len();
 		// Act
 		let result = repository.create(request).await.unwrap();
@@ -145,7 +135,7 @@ mod tests {
   async fn test_update() {
     // Arrange
     let repository = setup().await;
-		let request = create_request("test_experiment"); // 実験を作成
+		let request = create_experiment_request_factory("test_experiment"); // 実験を作成
 		let mut model = repository.create(request).await.unwrap();
     model.name = "test_experiment_updated".to_string();	// 実験名を更新
     // Act
@@ -160,7 +150,7 @@ mod tests {
   async fn test_find_by_id() {
     // Arrange
     let repository = setup().await;
-    let request = create_request("test_experiment");
+    let request = create_experiment_request_factory("test_experiment");
     let result = repository.create(request).await.unwrap();
     // Act
 		let result = repository.find_by_id(result.id).await.unwrap();
@@ -174,8 +164,8 @@ mod tests {
   async fn test_find_all() {
     // Arrange
     let repository = setup().await;
-		let request1 = create_request("test_experiment1");
-		let request2 = create_request("test_experiment2");
+		let request1 = create_experiment_request_factory("test_experiment1");
+		let request2 = create_experiment_request_factory("test_experiment2");
 		repository.create(request1).await.unwrap();
 		repository.create(request2).await.unwrap();
     // Act
@@ -199,7 +189,7 @@ mod tests {
   async fn test_delete_from_id() {
     // Arrange
     let repository = setup().await;
-    let request = create_request("test_experiment");
+    let request = create_experiment_request_factory("test_experiment");
     let result = repository.create(request).await.unwrap();
 		let total = repository.find_all().await.unwrap().len();
     // Act
