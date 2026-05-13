@@ -120,8 +120,12 @@ pub struct UpdateResultsRequest {
   pub global_auc: f64,
   /// 1%FPRでのTPR
   pub tpr_at_1_fpr: f64,
+  /// 1%FPRでの閾値
+  pub threshold_at_1_fpr: f64,
   /// 0.1%FPRでのTPR
   pub tpr_at_01_fpr: f64,
+  /// 0.1%FPRでの閾値
+  pub threshold_at_01_fpr: f64,
   /// 拡張メトリクス
   #[schema(value_type = Object)]
   pub other_metrics: Value,
@@ -129,12 +133,8 @@ pub struct UpdateResultsRequest {
   /// トータルの実行時間(秒)
   pub total_time: f64,
 
-  /// データセットのパス
-  pub dataset_json_path: String,
-  /// 実行ログのパス
-  pub execution_log_path: String,
   /// その他のファイルのパス
   #[schema(value_type = Object)]
-  pub other_files: Value,
+  pub files: Value,
 }
 

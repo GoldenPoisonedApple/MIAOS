@@ -92,10 +92,12 @@ pub struct Model {
   pub global_auc: Option<f64>,
   /// 1%FPRでのTPR
   pub tpr_at_1_fpr: Option<f64>,
+  /// 1%FPRでの閾値
+  pub threshold_at_1_fpr: Option<f64>,
   /// 0.1%FPRでのTPR
   pub tpr_at_01_fpr: Option<f64>,
-  /// 0.01%FPRでのTPR
-  pub tpr_at_001_fpr: Option<f64>,
+  /// 0.1%FPRでの閾値
+  pub threshold_at_01_fpr: Option<f64>,
   /// その他のメトリクス
   #[schema(value_type = Option<Object>)]
   pub other_metrics: Option<Value>,
@@ -103,13 +105,8 @@ pub struct Model {
   pub total_time: Option<f64>,
 
   // ファイル
-  /// データセットのパス
-  pub dataset_json_path: Option<String>,
-  /// 実行ログのパス
-  pub execution_log_path: Option<String>,
-  /// その他のファイルのパス
   #[schema(value_type = Option<Object>)]
-  pub other_files: Option<Value>,
+  pub files: Option<Value>,
 
   // メタ情報
   /// 作成日時
@@ -149,14 +146,14 @@ impl Model {
 		// 結果
     self.global_auc = Some(results.global_auc);
     self.tpr_at_1_fpr = Some(results.tpr_at_1_fpr);
+    self.threshold_at_1_fpr = Some(results.threshold_at_1_fpr);
     self.tpr_at_01_fpr = Some(results.tpr_at_01_fpr);
+    self.threshold_at_01_fpr = Some(results.threshold_at_01_fpr);
     self.other_metrics = Some(results.other_metrics);
 		// 時間
     self.total_time = Some(results.total_time);
 		// ファイル
-    self.dataset_json_path = Some(results.dataset_json_path);
-    self.execution_log_path = Some(results.execution_log_path);
-    self.other_files = Some(results.other_files);
+    self.files = Some(results.files);
   }
 
 	// SeaORMの仕様のせいでつくってる変換 Updateを通知してあげる
@@ -185,13 +182,12 @@ impl Model {
 			error_message: Set(self.error_message),
 			global_auc: Set(self.global_auc),
 			tpr_at_1_fpr: Set(self.tpr_at_1_fpr),
+			threshold_at_1_fpr: Set(self.threshold_at_1_fpr),
 			tpr_at_01_fpr: Set(self.tpr_at_01_fpr),
-			tpr_at_001_fpr: Set(self.tpr_at_001_fpr),
+			threshold_at_01_fpr: Set(self.threshold_at_01_fpr),
 			other_metrics: Set(self.other_metrics),
 			total_time: Set(self.total_time),
-			dataset_json_path: Set(self.dataset_json_path),
-			execution_log_path: Set(self.execution_log_path),
-			other_files: Set(self.other_files),
+			files: Set(self.files),
 			created_at: Unchanged(self.created_at),	// 作成日時は更新対象ではないのでUnchanged
 		}
 	}
@@ -228,13 +224,12 @@ mod tests {
 			error_message: None,
 			global_auc: None,
 			tpr_at_1_fpr: None,
+			threshold_at_1_fpr: None,
 			tpr_at_01_fpr: None,
-			tpr_at_001_fpr: None,
+			threshold_at_01_fpr: None,
 			other_metrics: None,
 			total_time: None,
-			dataset_json_path: None,
-			execution_log_path: None,
-			other_files: None,
+			files: None,
 			created_at: TimeDateTimeWithTimeZone::from(OffsetDateTime::now_utc()),
 		};
 		model
@@ -246,12 +241,12 @@ mod tests {
 			worker_name: worker_name.to_string(),
 			global_auc: 0.5,
 			tpr_at_1_fpr: 0.5,
+			threshold_at_1_fpr: 0.5,
 			tpr_at_01_fpr: 0.5,
+			threshold_at_01_fpr: 0.5,
 			other_metrics: serde_json::json!({}),
 			total_time: 10.0,
-			dataset_json_path: "test_dataset_json_path".to_string(),
-			execution_log_path: "test_execution_log_path".to_string(),
-			other_files: serde_json::json!({}),
+			files: serde_json::json!({}),
 		};
 		request
 	}
