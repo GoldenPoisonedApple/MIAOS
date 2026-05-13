@@ -170,13 +170,12 @@ mod tests {
 			worker_name: "test_worker".to_string(),
 			global_auc: 0.5,
 			tpr_at_1_fpr: 0.5,
+			threshold_at_1_fpr: 0.5,
 			tpr_at_01_fpr: 0.5,
+			threshold_at_01_fpr: 0.5,
 			other_metrics: serde_json::json!({}),
 			total_time: 10.0,
-			minio_path: "test_minio_path".to_string(),
-			dataset_json_path: "test_dataset_json_path".to_string(),
-			execution_log_path: "test_execution_log_path".to_string(),
-			other_files: serde_json::json!({}),
+			files: serde_json::json!({}),
 		};
 		request
 	}

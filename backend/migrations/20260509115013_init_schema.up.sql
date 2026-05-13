@@ -57,8 +57,9 @@ CREATE TABLE experiments (
 	-- 実験後に送信されてくる実験結果
 	global_auc DOUBLE PRECISION, -- 全体のAUC
 	tpr_at_1_fpr DOUBLE PRECISION, -- 1%FPRでのTPR
+	threshold_at_1_fpr DOUBLE PRECISION, -- 1%FPRでの閾値
 	tpr_at_01_fpr DOUBLE PRECISION, -- 0.1%FPRでのTPR
-	tpr_at_001_fpr DOUBLE PRECISION, -- 0.01%FPRでのTPR
+	threshold_at_01_fpr DOUBLE PRECISION, -- 0.1%FPRでの閾値
 	-- 拡張メトリクス (今後指標が増えた時用)
 	other_metrics JSONB DEFAULT '{}', -- その他のメトリクス
 	-- トータルの実行時間(秒)
@@ -68,10 +69,7 @@ CREATE TABLE experiments (
 	-- ファイル
 	-- ----------------------------
 	-- 生成されたファイル群
-	minio_path TEXT, -- MINIOでのベースパス
-	dataset_json_path TEXT, -- データセットのパス
-	execution_log_path TEXT, -- 実行ログのパス
-	other_files JSONB DEFAULT '{}', -- その他のファイルのパス
+	files JSONB DEFAULT '{}', -- その他のファイルのパス
 
 	-- メタ情報
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() -- 作成日時
