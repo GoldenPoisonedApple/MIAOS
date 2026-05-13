@@ -26,6 +26,6 @@ docker rm <container_id>
 # で、再実行
 
 # openapi-python-client の生成
-openapi-python-client generate --url http://ksl-v03.nagaokaut.ac.jp:3000/api-docs/openapi.json --meta none --output-path src/server_client
+openapi-python-client generate --url http://ksl-v03.nagaokaut.ac.jp:3000/api-docs/openapi.json --meta none --output-path src/server_client --overwrite
 # ローカル URLから取ってこれるからいらんかったけど
-openapi-python-client generate --path ./openapi.json --meta none --output-path src/server_client
+openapi-python-client generate --path ./openapi.json --meta none --output-path src/server_client --overwrite

@@ -9,7 +9,7 @@ from src.core.pipeline import run_experiment
 import src.utils.minio_utils as minio_utils
 
 from src.server_client import Client
-from src.server_client.models import CreateExperimentRequest, UpdateResultsRequest, UpdateResultsRequestOtherFiles, UpdateResultsRequestOtherMetrics
+from src.server_client.models import CreateExperimentRequest, UpdateResultsRequest, UpdateResultsRequestFiles, UpdateResultsRequestOtherMetrics
 from src.server_client.api.experiments import reflect_experiment_results
 
 app = Celery('mia_tasks', broker=cfg.REDIS_URL)
@@ -48,40 +48,35 @@ def execute_attack_task(_params):
 		minio_utils.upload_results_dir(temp_dir, remote_prefix=remote_prefix)
 		
 		# ------- MIAOS APIへの送信処理 -------
-		# artifacts リスト作成
-		artifacts = []
+		# ファイル作成
+		files_dict = {}
 		for root, _, files in os.walk(temp_dir):
 			for file in files:
 				# temp_dirを起点とした相対パスを計算
 				rel_path = os.path.relpath(os.path.join(root, file), temp_dir)
-				artifacts.append(rel_path)		
+				files_dict[rel_path] = rel_path
 		# ペイロード作成
 		payload = UpdateResultsRequest(
-      		dataset_json_path=os.path.join(temp_dir, "dataset.json"),
-			execution_log_path=os.path.join(temp_dir, "execution.log"),
 			experiment_id=id,
+			files=UpdateResultsRequestFiles.from_dict(files_dict),
 			global_auc=metrics["global_auc"],
-			minio_path=remote_prefix,
-			other_files=UpdateResultsRequestOtherFiles(
-				artifacts=artifacts
-			),
-			other_metrics=UpdateResultsRequestOtherMetrics(
-				threshold_at_1_fpr=metrics["threshold_at_1_fpr"],
-				threshold_at_01_fpr=metrics["threshold_at_01_fpr"],
-				threshold_at_001_fpr=metrics["threshold_at_001_fpr"],
-				tpr_at_001_fpr=metrics["tpr_at_001_fpr"],
-			),
+			other_metrics=UpdateResultsRequestOtherMetrics.from_dict({
+				"tpr_at_001_fpr": metrics["tpr_at_001_fpr"],
+				"threshold_at_001_fpr": metrics["threshold_at_001_fpr"],
+			}),
+			threshold_at_01_fpr=metrics["threshold_at_01_fpr"],
+			threshold_at_1_fpr=metrics["threshold_at_1_fpr"],
 			total_time=metrics["total_time_sec"],
-			tpr_at_1_fpr=metrics["tpr_at_1_fpr"],
 			tpr_at_01_fpr=metrics["tpr_at_01_fpr"],
+			tpr_at_1_fpr=metrics["tpr_at_1_fpr"],
 			worker_name=cfg.PC_NAME,
 		)
 		try:
 			client = Client(base_url=cfg.MIAOS_API_URL)
 			response = reflect_experiment_results.sync(client=client, body=payload)
-			print(f"Tracking APIへの送信成功: {response}")
+			print(f"MIAOS APIへの送信成功: {response}")
 		except Exception as e:
-			print(f"Tracking APIへの送信失敗: {e}")
+			print(f"MIAOS APIへの送信失敗: {e}")
 				
 	# withブロックを抜けると temp_dir は自動的に削除（クリーンアップ）される
 	return {"status": "success", "worker_id": cfg.PC_NAME}
