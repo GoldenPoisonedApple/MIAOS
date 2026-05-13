@@ -9,19 +9,17 @@ from src.core.pipeline import run_experiment
 import src.utils.minio_utils as minio_utils
 
 from src.server_client import Client
-from src.server_client.models import CreateExperimentRequest, UpdateResultsRequest, UpdateResultsRequestFiles, UpdateResultsRequestOtherMetrics, ExperimentStatus
-from src.server_client.api.experiments import reflect_experiment_results
+from src.server_client.models import CreateExperimentRequest, UpdateResultsRequest, UpdateResultsRequestFiles, UpdateResultsRequestOtherMetrics, ExperimentStatus, ClaimExperimentRequest
+from src.server_client.api.experiments import reflect_experiment_results, claim_experiment
 
 app = Celery('mia_tasks', broker=cfg.REDIS_URL)
 
 # メイン処理
 # 送信処理以外を担う
-def main(_params) -> UpdateResultsRequest:
-	# idを取得、削除
-	id = _params.pop("experiment_id")
+def main(id: int, params) -> UpdateResultsRequest:
 	try:
 		# JSONからCreateExperimentRequestオブジェクトを復元
-		request = CreateExperimentRequest.from_dict(_params)
+		request = CreateExperimentRequest.from_dict(params)
 		
 		# 依存モデルが存在する場合
 		if request.base_experiment_id is not None:
@@ -90,16 +88,34 @@ def main(_params) -> UpdateResultsRequest:
 		)
 	return payload
 
+# タスクの取得、送信処理を担う
 @app.task(name='mia_tasks.run_attack')
 def execute_attack_task(_params):
 	"""
 	_params: {"mia_method": "Shokri", "batch_size": 128, ...} のような辞書
 	"""
+	# クライアントを作成
+	client = Client(base_url=cfg.MIAOS_API_URL)
+ 
+	# idを取得、削除
+	id: int = _params.pop("experiment_id")
+ 
+ 
+	# タスク取得報告
+	payload = ClaimExperimentRequest(
+		id=id,
+		worker_name=cfg.PC_NAME,
+    )
+	try:
+		response = claim_experiment.sync(client=client, body=payload)
+		print(f"MIAOS APIへの送信成功: {response}")
+	except Exception as e:
+		print(f"MIAOS APIへの送信失敗: {e}")
+ 
 	# メイン処理
-	payload = main(_params)
+	payload = main(id, _params)
  
 	try:
-		client = Client(base_url=cfg.MIAOS_API_URL)
 		response = reflect_experiment_results.sync(client=client, body=payload)
 		print(f"MIAOS APIへの送信成功: {response}")
 	except Exception as e:
