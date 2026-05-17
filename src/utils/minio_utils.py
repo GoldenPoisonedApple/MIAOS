@@ -4,6 +4,9 @@ import boto3
 import src.core.config as cfg
 import mimetypes
 
+# logファイルをtext/plainとして認識させる
+mimetypes.add_type("text/plain", ".log")
+
 
 def get_s3_client():
 	return boto3.client(
@@ -75,5 +78,6 @@ def upload_results_dir(local_dir: str, remote_prefix: str):
 			
 			
 			print(f"[{cfg.PC_NAME}] Uploading: {local_file_path} -> {remote_file_path}")
+			# なんかエラーでるからここで生成しているけど、接続確率のオーバーヘッドがある
 			s3 = get_s3_client()
 			s3.upload_file(local_file_path, cfg.MINIO_BUCKET_NAME, remote_file_path, ExtraArgs={'ContentType': content_type})

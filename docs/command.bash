@@ -16,6 +16,9 @@ docker run -d --gpus all -it --rm --shm-size=8g -v $(pwd):/workspace -e PYTHONPA
 # 保存場所の指定 読み込みは同じ、出力は特定場所
 # docker run -d --gpus all -it --rm --shm-size=8g -v $(pwd):/workspace:ro -v /tmp/mia_ito:/workspace/models mia_ito python main.py
 
+# 内部実行
+celery -A src.workers.celery_tasks worker --loglevel=info -P solo
+
 # ログ
 docker logs -f <container_id>
 

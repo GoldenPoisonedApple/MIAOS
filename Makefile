@@ -11,9 +11,20 @@ build:
 # 開発用立上げ
 .PHONY: dev
 dev:
-	docker run -d --gpus all -it --shm-size=8g -v $(pwd):/workspace -e PYTHONPATH=/workspace --env-file .env mia_ito
+	docker run -d --gpus all --name ito_research -it --shm-size=8g -v $(CURDIR):/workspace -e PYTHONPATH=/workspace --env-file .env mia_ito
+
+# コンテナに入る
+.PHONY: shell
+shell:
+	docker exec -it ito_research bash
 
 # 実行
 .PHONY: run
 run:
-	docker run -d --gpus all -it --rm --shm-size=8g -v $(pwd):/workspace -e PYTHONPATH=/workspace --env-file .env mia_ito bash -c "celery -A src.workers.celery_tasks worker --loglevel=info -P solo"
+	docker run -d --gpus all --name ito_research -it --rm --shm-size=8g -v $(CURDIR):/workspace -e PYTHONPATH=/workspace --env-file .env mia_ito bash -c "celery -A src.workers.celery_tasks worker --loglevel=info -P solo"
+
+# コンテナを停止・削除
+.PHONY: remove
+remove:
+	docker stop ito_research
+	docker rm ito_research
