@@ -102,7 +102,7 @@ class MIA_Attack(ABC):
 		roc_auc = auc(fpr, tpr)
 
 		plt.figure(figsize=(8, 8))
-		plt.plot(fpr, tpr, color='green', lw=1, marker='o', markersize=3, label=f'{self.settings.method.value} (AUC = {roc_auc:.4f})')
+		plt.plot(fpr, tpr, color='green', lw=1, marker='o', markersize=3, label=f'Results (AUC = {roc_auc:.4f})')
 		plt.plot([1e-5, 1], [1e-5, 1], color='navy', lw=2, linestyle='--', label='Random Guess')
 		plt.axvline(x=0.01, linestyle='--', linewidth=1, color='blue', label='1% FPR')
 		plt.axvline(x=0.001, linestyle='--', linewidth=1, color='blue', label='0.1% FPR')
@@ -118,13 +118,13 @@ class MIA_Attack(ABC):
 		plt.legend(loc="lower right")
 		plt.grid(True, which="both", ls="--", alpha=0.5)
 		# 保存
-		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, f"roc_curve_{self.settings.method.value}.png")
+		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, f"roc_curve.png")
 		plt.savefig(roc_plot_path, dpi=300, bbox_inches='tight')
 		plt.close()
 		self.logger.info(f"Saved ROC curve plot to: {roc_plot_path}")
   
 		# ------- 総合評価 -------  
-		self.logger.info(f"--- {self.settings.method.value} Results ---")
+		self.logger.info(f"--- Results ---")
 		self.logger.info(f"Global AUC: {roc_auc:.4f}")
 	
 		tpr_at_1_fpr, threshold_at_1_fpr = MIA_Attack.get_tpr_and_threshold(fpr, tpr, thresholds, 0.01)
