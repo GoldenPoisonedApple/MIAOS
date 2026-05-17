@@ -44,7 +44,6 @@ export const TaskList = () => {
       { accessorKey: "id", header: "ID" },
 			{ accessorKey: "experiment_id", header: "実験ID" },
       { accessorKey: "task", header: "タスク名" },
-      { accessorKey: "error_message", header: "エラーメッセージ" },
       ...dynamicColumns,
     ],
     [dynamicColumns]

@@ -166,7 +166,7 @@ export interface components {
             method: components["schemas"]["MiaMethod"];
             /**
              * @description 実験名
-             * @default 2026-05-17_08-42-55
+             * @default 2026-05-17_10-12-32
              */
             name: string;
             /**
@@ -338,8 +338,6 @@ export interface components {
             args_keyword: Record<string, never>;
             /** @description 位置引数 */
             args_positional: Record<string, never>;
-            /** @description エラーメッセージ */
-            error_message?: string | null;
             /**
              * Format: int64
              * @description 実験ID

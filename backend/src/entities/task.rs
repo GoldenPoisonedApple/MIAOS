@@ -21,7 +21,4 @@ pub struct Task {
 	/// 制御情報
 	#[schema(value_type = Object)]
 	pub args_control: serde_json::Value,
-	// ----- エラー情報 ----
-	/// エラーメッセージ
-	pub error_message: Option<String>,
 }

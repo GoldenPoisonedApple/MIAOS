@@ -94,7 +94,6 @@ impl TaskRepository {
 				args_positional: positional.clone(),
 				args_keyword: params.clone(),
 				args_control: control.clone(),
-				error_message: None,
 			};
 		Ok(task_entity)
 	}
@@ -140,7 +139,6 @@ impl TaskRepositoryTrait for TaskRepository {
             args_positional: serde_json::Value::Null,
             args_keyword: serde_json::Value::Null,
             args_control: serde_json::Value::Null,
-            error_message: Some(e.to_string()),
           };
           tasks.push(error_task);
         }
