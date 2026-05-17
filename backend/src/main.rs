@@ -1,6 +1,7 @@
 use tokio::net::TcpListener;
 use std::sync::Arc;
 use std::net::SocketAddr;
+use tower_http::trace::TraceLayer;
 
 use server::infrastructure::{establish_db_connection, establish_redis_connection, establish_celery_app, establish_storage_client, get_bucket_name};
 use server::repositories::experiment::ExperimentRepository;
@@ -14,7 +15,9 @@ use server::routes::app_routes;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// ロガー
-	tracing_subscriber::fmt::init();
+	tracing_subscriber::fmt()
+		.with_max_level(tracing::Level::DEBUG)
+		.init();
 	tracing::info!("Starting server...");
 	
 	// DB
@@ -41,7 +44,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	};
 
 	// ルーティング
-	let app = app_routes(state);
+	let app = app_routes(state)
+		.layer(TraceLayer::new_for_http());	// リクエストのトレースを有効化
 
   // サーバ起動
 	const SERVER_PORT: u16 = 3000;

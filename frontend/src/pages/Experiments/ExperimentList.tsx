@@ -1,7 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useExperiments } from "../../hooks/useExperiments";
-import { useDynamicColumns } from "../../hooks/useDynamicColumns";
+import { useDynamicColumns, type DictionaryCellRenderContext } from "../../hooks/useDynamicColumns";
 import { CreateExperimentModal } from "./components/CreateExperimentModal";
+import { FilePreviewModal } from "./components/FilePreviewModal";
 import { ConfirmModal } from "../../components/ui/ConfirmModal/ConfirmModal";
 import { Button } from "../../components/ui/Button/Button";
 import { Badge } from "../../components/ui/Badge/Badge";
@@ -17,12 +18,40 @@ export const ExperimentList = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState({});
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
 
-  const { dynamicColumns, defaultHiddenColumns } = useDynamicColumns<Experiment>(experiments, [
-    { key: "hyperparameters", prefix: "HP" },
-    { key: "other_metrics", prefix: "Metric" },
-    { key: "files", prefix: "File" },
-  ]);
+  const filesRenderCell = useCallback((ctx: DictionaryCellRenderContext<Experiment>) => {
+    const { value, row } = ctx;
+    if (value === null || value === undefined) return "-";
+    if (typeof value === "object") return JSON.stringify(value);
+    const s = String(value);
+    if (!s) return "-";
+    // MinIO キーは「実験ID/ファイル名」。API はセルがファイル名のみのときに id を前置する。
+    const objectKey = s.includes("/") ? s : `${row.id}/${s}`;
+    return (
+      <button
+        type="button"
+        className={styles.fileLink}
+        onClick={(e) => {
+          e.stopPropagation();
+          setPreviewKey(objectKey);
+        }}
+      >
+        {s}
+      </button>
+    );
+  }, []);
+
+  const dictionaryConfigs = useMemo(
+    () => [
+      { key: "hyperparameters" as const, prefix: "HP" },
+      { key: "other_metrics" as const, prefix: "Metric" },
+      { key: "files" as const, prefix: "File", renderCell: filesRenderCell },
+    ],
+    [filesRenderCell]
+  );
+
+  const { dynamicColumns, defaultHiddenColumns } = useDynamicColumns<Experiment>(experiments, dictionaryConfigs);
 
   const columns = useMemo<ColumnDef<Experiment>[]>(
     () => [
@@ -155,6 +184,8 @@ export const ExperimentList = () => {
         message={`選択した ${selectedCount} 件の実験を本当に削除しますか？この操作は取り消せません。`}
         isConfirming={isDeleting}
       />
+
+      <FilePreviewModal objectKey={previewKey} onClose={() => setPreviewKey(null)} />
     </div>
   );
 };

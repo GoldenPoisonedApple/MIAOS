@@ -1,9 +1,18 @@
 import { useMemo } from "react";
+import type { ReactNode } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
-interface DictionaryConfig<TData> {
+export interface DictionaryCellRenderContext<TData extends Record<string, unknown>> {
+  row: TData;
+  sourceKey: keyof TData;
+  dictKey: string;
+  value: unknown;
+}
+
+export interface DictionaryConfig<TData extends Record<string, unknown>> {
   key: keyof TData;
   prefix: string;
+  renderCell?: (ctx: DictionaryCellRenderContext<TData>) => ReactNode;
 }
 
 export function useDynamicColumns<TData extends Record<string, unknown>>(
@@ -16,7 +25,7 @@ export function useDynamicColumns<TData extends Record<string, unknown>>(
 
     // For memoization to work properly with complex objects, we might want to be careful,
     // but extracting keys from data array directly is fine here.
-    dictionaryConfigs.forEach(({ key, prefix }) => {
+    dictionaryConfigs.forEach(({ key, prefix, renderCell }) => {
       const uniqueKeys = new Set<string>();
 
       // Extract all unique keys from the dictionary property across all rows
@@ -38,8 +47,11 @@ export function useDynamicColumns<TData extends Record<string, unknown>>(
             return dict ? dict[dictKey] : undefined;
           },
           header: `${prefix}: ${dictKey}`,
-          cell: ({ getValue }) => {
+          cell: ({ row, getValue }) => {
             const val = getValue();
+            if (renderCell) {
+              return renderCell({ row: row.original, sourceKey: key, dictKey, value: val });
+            }
             if (val === null || val === undefined) return "-";
             if (typeof val === "object") return JSON.stringify(val);
             return String(val);

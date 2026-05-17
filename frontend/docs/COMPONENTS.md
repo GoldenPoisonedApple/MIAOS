@@ -30,10 +30,12 @@
 
 - **引数:**
   - `data: TData[]`: 展開対象のデータ配列
-  - `dictionaryConfigs`: `{ key: keyof TData, prefix: string }[]` (展開するプロパティ名とヘッダーに付与するプレフィックス)
+  - `dictionaryConfigs`: `{ key: keyof TData, prefix: string, renderCell?: (ctx) => ReactNode }[]`（展開するプロパティ名、ヘッダー用プレフィックス、任意のセルカスタム描画）
 - **戻り値:**
   - `dynamicColumns`: 生成された `ColumnDef[]`
   - `defaultHiddenColumns`: 生成されたカラムのIDをキーとし、`false` を値に持つオブジェクト（初期非表示設定用）
+
+`renderCell` を指定した辞書のみセル表示を上書きできます（例: 実験一覧の `files` 列でオブジェクトキーをクリック可能にする）。
 
 ---
 
@@ -77,7 +79,8 @@
 
 - **構成:**
   - `useExperiments` でデータを取得。
-  - `useDynamicColumns` を用いて、`hyperparameters`, `other_metrics`, `other_files` を動的カラムとして展開。
+  - `useDynamicColumns` を用いて、`hyperparameters`, `other_metrics`, `files` を動的カラムとして展開。
+  - `files` の各セルは MinIO オブジェクトキー文字列をクリックすると `FilePreviewModal` が開き、`GET /api/files/{key}` で取得した内容を画像・テキスト・またはダウンロード案内として表示する。
   - `DataTable` にデータを渡し、静的カラム（ID, 名前, ステータス等）と動的カラムを結合して表示。
   - ヘッダー部に「新しい実験を作成」ボタンと、選択項目がある場合のみ「選択した項目を削除」ボタンを表示。
 

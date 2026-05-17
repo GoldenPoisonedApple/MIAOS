@@ -60,6 +60,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** ファイルの取得 */
+        get: operations["get_file"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks": {
         parameters: {
             query?: never;
@@ -149,7 +166,7 @@ export interface components {
             method: components["schemas"]["MiaMethod"];
             /**
              * @description 実験名
-             * @default 2026-05-13_23-38-59
+             * @default 2026-05-17_08-42-55
              */
             name: string;
             /**
@@ -547,6 +564,42 @@ export interface operations {
                 content: {
                     "text/plain": number;
                 };
+            };
+            /** @description サーバー内部エラー */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ファイルが正常に取得された */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": number[];
+                };
+            };
+            /** @description ファイルが見つからない */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description サーバー内部エラー */
             500: {

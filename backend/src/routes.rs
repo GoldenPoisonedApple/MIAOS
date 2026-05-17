@@ -79,7 +79,10 @@ pub fn app_routes(state: AppState) -> Router {
       delete(delete_task),
     )
 		.route(
-			"/api/files/{key}",
+			// *keyは任意のパスを受け取れる test/sample.logなど / を含めることができる
+			// 今回はkeyをURLエンコードしているため * である必要はない
+			//一部プロキシは%2Fですら特別扱いするためちゃんとやるならクエリとかが良い
+			"/api/files/{*key}",
 			get(get_file),
 		)
     .with_state(state);

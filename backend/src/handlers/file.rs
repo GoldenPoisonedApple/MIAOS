@@ -7,6 +7,7 @@ use axum::{
 };
 use tokio_util::io::ReaderStream;
 use std::sync::Arc;
+use urlencoding::decode;
 use crate::services::file::StorageService;
 use crate::repositories::storage::StorageRepository;
 use crate::error::ServerError;
@@ -26,6 +27,8 @@ pub async fn get_file(
 	State(service): State<Arc<StorageService<StorageRepository>>>,
 	Path(key): Path<String>,
 ) -> Result<Response, ServerError> {
+	// URLエンコードされたキーをデコード %2F -> / など
+	let key = decode(&key)?;
 	// オブジェクト取得
 	let object = service.fetch(&key).await?;
 
