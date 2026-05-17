@@ -40,7 +40,10 @@ graph TD
 ├── hooks/           # ビジネスロジック・状態管理層 (カスタムフック)
 │   ├── useExperiments.ts    # 実験データの取得(Query)と操作(Mutation)
 │   ├── useTasks.ts          # タスクデータの取得(Query)と操作(Mutation)
-│   └── useDynamicColumns.ts # JSON型の動的キー抽出・カラム生成ロジック
+│   └── useDynamicColumns.ts # JSON型の動的キー抽出・カラム生成（列ソート用 sortingFn を含む）
+│
+├── utils/           # 画面横断の小さな純関数
+│   └── fileApiPath.ts       # MinIO オブジェクトキー → /api/files/... 相対パス
 │
 ├── components/      # 汎用コンポーネント層
 │   ├── layout/      # 画面の共通レイアウト (Header, Navigation 等)
@@ -48,7 +51,7 @@ graph TD
 │       ├── Badge/   # ステータス表示バッジ
 │       ├── Button/  # 共通ボタン
 │       ├── ConfirmModal/ # 削除確認等の共通モーダル
-│       ├── DataTable/    # TanStack Tableをラップした高機能テーブル
+│       ├── DataTable/    # TanStack Table（ソート・行選択・D&D列順・列表示切替）
 │       ├── KeyValueEditor/ # 辞書型(JSON)編集用エディタ
 │       └── Modal/   # モーダル基底コンポーネント
 │
@@ -56,7 +59,8 @@ graph TD
 │   ├── Experiments/ # 実験一覧・管理画面
 │   │   ├── ExperimentList.tsx
 │   │   └── components/
-│   │       └── CreateExperimentModal.tsx # 実験作成モーダル
+│   │       ├── CreateExperimentModal.tsx # 実験作成モーダル
+│   │       └── FilePreviewModal.tsx      # MinIO ファイルのプレビュー（blob 取得・別タブ用 URL）
 │   └── Tasks/       # タスク一覧画面
 │       └── TaskList.tsx
 │
@@ -73,11 +77,19 @@ graph TD
 
 ### 3.2 テーブル設計と動的カラム
 カラム数が非常に多いデータ（実験一覧等）を扱うため、`@tanstack/react-table` を利用しています。
-- **動的カラムの展開**: JSON（辞書型）のプロパティ（例: `hyperparameters`）は、`useDynamicColumns` フックにより内部のキーを抽出し、テーブルのフラットなカラムとして動的に展開されます。
-- **カラムの制御**: カラムの表示/非表示の切り替え、および `@dnd-kit` を用いたヘッダーのドラッグ＆ドロップによる並び替えが実装されています。
+- **動的カラムの展開**: JSON（辞書型）のプロパティ（例: `hyperparameters`, `files`）は、`useDynamicColumns` フックにより内部のキーを抽出し、テーブルのフラットなカラムとして動的に展開されます。辞書単位で任意の `renderCell` を差し込める（実験の `files` はファイル名クリックでプレビューモーダル、⧉ で別タブ用 API URL を開く等）。
+- **列ソート**: `getSortedRowModel` とヘッダー上の昇順・降順操作により、単一キーでソート状態を管理します。実験一覧は初期状態で **ID 昇順**。動的列には比較可能な文字列表現へ正規化する `sortingFn` を付与しています。
+- **行 ID と行選択**: 列ソート後もチェックボックスの選択がデータ行と一致するよう、`DataTable` は任意の `getRowId`（実験は数値 `id` の文字列化、タスクは UUID）を TanStack Table に渡し、`rowSelection` のキーを行インデックスから切り離しています。
+- **カラムの制御**: カラムの表示/非表示の切り替え、および `@dnd-kit` を用いたヘッダーのドラッグ＆ドロップによる**列の並び順**変更が実装されています（行の並び替えとは別レイヤー）。
 
 ### 3.3 コンポーネントのカプセル化
 スタイリングには **CSS Modules** (`*.module.css`) を採用しています。クラス名のスコープが各コンポーネント内に閉じられるため、他のコンポーネントへの意図しないスタイルの影響を防ぎ、保守性を高めています。
+
+### 3.4 実験付属ファイル（MinIO）の参照
+実験レコードの `files` は実行時に「ファイル名 → MinIO オブジェクトキー」へと解釈し、**``${実験ID}/${ファイル名}` ``** としてバックエンドの `GET /api/files/{key}` に渡します。パス上の `key` はスラッシュを含み得るため、クライアントでは `encodeURIComponent` した相対パス（`fileApiPath`）で同一オリジンにリクエストします（開発時は Vite のプロキシ経由で API に到達）。
+
+- **別タブ / 直リンク**: ブラウザのナビゲーションとして開く場合は blob ではなく上記 URL を用い、サーバーが返す `Content-Type` に従い表示またはダウンロードとなります。
+- **モーダル内プレビュー**: `openapi-fetch` の `parseAs: "blob"` でバイナリを取得し、`URL.createObjectURL` による画像・テキスト表示やダウンロード用一時 URL を組み立てます。閉じる・キー変更時に `revokeObjectURL` で解放します。
 
 ## 4. ルーティング設計
 
