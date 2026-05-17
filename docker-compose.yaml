@@ -97,9 +97,10 @@ services:
       - APP_ENV=dev
       - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       - REDIS_URL=${REDIS_URL}
-      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
     depends_on:
       db:
         condition: service_healthy  # DBのヘルスチェック待機

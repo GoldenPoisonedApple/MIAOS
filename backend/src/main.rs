@@ -1,12 +1,13 @@
 use tokio::net::TcpListener;
 use std::sync::Arc;
-use axum::Router;
 use std::net::SocketAddr;
 
-use server::infrastructure::{establish_db_connection, establish_redis_connection, establish_celery_app};
+use server::infrastructure::{establish_db_connection, establish_redis_connection, establish_celery_app, establish_storage_client, get_bucket_name};
 use server::repositories::experiment::ExperimentRepository;
+use server::repositories::storage::StorageRepository;
 use server::repositories::task::TaskRepository;
 use server::services::experiment::ExperimentService;
+use server::services::file::StorageService;
 use server::state::AppState;
 use server::routes::app_routes;
 
@@ -24,14 +25,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   let celery_app = establish_celery_app().await;
   let task_repository = TaskRepository::new(pool, celery_app);
 	// サービス組み立て
-  let service = Arc::new(ExperimentService::new(
+  let experiment_service = Arc::new(ExperimentService::new(
     experiment_repository,
     task_repository,
   ));
+	// MINIO接続
+	let client = establish_storage_client().await;
+	let storage_repository = StorageRepository::new(client, get_bucket_name());
+	let storage_service = Arc::new(StorageService::new(storage_repository));
 
 	// 状態
 	let state = AppState {
-		experiment_service: service,
+		experiment_service: experiment_service,
+		storage_service: storage_service,
 	};
 
 	// ルーティング

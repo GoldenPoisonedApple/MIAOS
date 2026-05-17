@@ -18,6 +18,10 @@ pub enum ServerError {
   #[error("Celery error: {0}")]
   CeleryError(#[from] celery::error::CeleryError),
 
+	/// S3エラー
+  #[error("S3 error: {0}")]
+  S3Error(#[from] aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::get_object::GetObjectError>),
+
   /// Poolエラー
   #[error("Pool error: {0}")]
   PoolError(String),
@@ -39,6 +43,10 @@ pub enum ServerError {
   /// データ構造の不整合エラー（JSON内の期待するキーがない場合など）
   #[error("Data format error: {0}")]
   DataFormatError(String),
+
+  /// 無効なパスエラー
+  #[error("Invalid path: {0}")]
+  InvalidPath(String),
 
   /// Not Foundエラー
   #[error("Not found: {0}")]
