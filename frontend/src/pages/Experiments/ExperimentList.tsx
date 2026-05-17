@@ -69,6 +69,7 @@ export const ExperimentList = () => {
     () => [
       {
         id: "select",
+        enableSorting: false,
         header: ({ table }) => (
           <input
             type="checkbox"
@@ -84,7 +85,7 @@ export const ExperimentList = () => {
           />
         ),
       },
-      { accessorKey: "id", header: "ID" },
+      { accessorKey: "id", header: "ID", sortingFn: "basic" },
       { accessorKey: "name", header: "名前" },
       { accessorKey: "method", header: "手法" },
       {
@@ -143,8 +144,11 @@ export const ExperimentList = () => {
   if (loading) return <div>実験情報を読み込み中...</div>;
   if (error) return <div>エラー: {error.message}</div>;
 
-  const selectedCount = Object.keys(rowSelection).length;
-  const selectedIds = Object.keys(rowSelection).map((index) => experiments[Number(index)].id);
+  const selectedRowIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
+  const selectedCount = selectedRowIds.length;
+  const selectedIds = selectedRowIds.map(Number);
 
   const handleDeleteConfirm = () => {
     deleteExperiments(selectedIds, {
@@ -179,6 +183,8 @@ export const ExperimentList = () => {
         initialColumnVisibility={{
           ...defaultHiddenColumns,
         }}
+        initialSorting={[{ id: "id", desc: false }]}
+        getRowId={(row) => String(row.id)}
       />
 
       <CreateExperimentModal

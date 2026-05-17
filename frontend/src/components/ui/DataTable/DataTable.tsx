@@ -1,12 +1,14 @@
 import {
   flexRender,
   getCoreRowModel,
+  getSortedRowModel,
   useReactTable,
   type ColumnDef,
   type RowSelectionState,
   type VisibilityState,
   type ColumnOrderState,
   type Header,
+  type SortingState,
 } from "@tanstack/react-table";
 import { useState } from "react";
 import {
@@ -36,6 +38,10 @@ interface DataTableProps<TData, TValue> {
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: import("@tanstack/react-table").OnChangeFn<RowSelectionState>;
   initialColumnVisibility?: VisibilityState;
+  /** 初期ソート（例: 実験一覧の ID 昇順） */
+  initialSorting?: SortingState;
+  /** 行 ID をデータの識別子に固定（ソート後も選択・削除が正しく動く） */
+  getRowId?: (row: TData) => string;
 }
 
 // Draggable Header Cell Component
@@ -62,13 +68,45 @@ function DraggableHeader<TData, TValue>({ header }: { header: Header<TData, TVal
     );
   }
 
+  const { table } = header.getContext();
+  const canSort = header.column.getCanSort();
+  const sorted = header.column.getIsSorted();
+
   return (
     <th key={header.id} colSpan={header.colSpan} ref={setNodeRef} style={style} className={styles.th}>
       <div className={styles.headerContent}>
         <div {...attributes} {...listeners} className={styles.dragHandle}>
           ⋮⋮
         </div>
-        {flexRender(header.column.columnDef.header, header.getContext())}
+        <div className={styles.headerMain}>
+          <span className={styles.headerTitle}>{flexRender(header.column.columnDef.header, header.getContext())}</span>
+          {canSort && (
+            <span className={styles.sortGroup}>
+              <button
+                type="button"
+                className={sorted === "asc" ? styles.sortBtnActive : styles.sortBtn}
+                aria-label="昇順で並べ替え"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  table.setSorting([{ id: header.column.id, desc: false }]);
+                }}
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                className={sorted === "desc" ? styles.sortBtnActive : styles.sortBtn}
+                aria-label="降順で並べ替え"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  table.setSorting([{ id: header.column.id, desc: true }]);
+                }}
+              >
+                ▼
+              </button>
+            </span>
+          )}
+        </div>
       </div>
     </th>
   );
@@ -84,9 +122,12 @@ export function DataTable<TData, TValue>({
   rowSelection,
   onRowSelectionChange,
   initialColumnVisibility = {},
+  initialSorting = [],
+  getRowId,
 }: DataTableProps<TData, TValue>) {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
+  const [sorting, setSorting] = useState<SortingState>(() => initialSorting);
 
   const table = useReactTable({
     data,
@@ -95,12 +136,16 @@ export function DataTable<TData, TValue>({
       rowSelection,
       columnVisibility,
       columnOrder,
+      sorting,
     },
     enableRowSelection: true,
     onRowSelectionChange,
     onColumnVisibilityChange: setColumnVisibility,
     onColumnOrderChange: setColumnOrder,
+    onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getRowId: getRowId ? (original) => getRowId(original) : undefined,
   });
 
   const currentColumnIds = table.getAllLeafColumns().map((c) => c.id);

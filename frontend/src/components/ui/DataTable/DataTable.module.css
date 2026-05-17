@@ -67,6 +67,49 @@
   gap: 8px;
 }
 
+.headerMain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.headerTitle {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.sortGroup {
+  display: inline-flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 0;
+  line-height: 1;
+}
+
+.sortBtn,
+.sortBtnActive {
+  display: block;
+  margin: 0;
+  padding: 0 1px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 8px;
+  line-height: 1;
+  color: var(--text-muted, #666);
+}
+
+.sortBtn:hover {
+  color: var(--text-h, #111);
+}
+
+.sortBtnActive {
+  color: var(--link-color, #0a58ca);
+  font-weight: 700;
+}
+
 .dragHandle {
   cursor: grab;
   opacity: 0.5;
