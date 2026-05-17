@@ -5,7 +5,7 @@ use serde_json::Value;
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 
-use crate::dto::experiment::UpdateResultsRequest;
+use crate::dto::experiment::{ClaimExperimentRequest, UpdateResultsRequest};
 
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "experiment_status")]
@@ -135,26 +135,33 @@ impl ActiveModelBehavior for ActiveModel {}
 // createの処理については idがないのでどうしようもない 新規作成時に複雑なビジネスロジックがないのでDTOをそのままrepositoryにねじ込む構造
 // 複雑なロジックがある場合は、serviceとrepositoryの間のDTOを作成するのが良いかと
 impl Model {
-  /// 実験を完了状態にし、結果を反映する
+  /// 結果を反映する
   pub fn complete(&mut self, results: UpdateResultsRequest, completed_at: OffsetDateTime) {
     // 状態遷移のルール
-    self.status = ExperimentStatus::Succeeded;
+    self.status = results.status;
+    self.error_message = results.error_message;
     self.completed_at = Some(completed_at);
 
     // 結果の反映
     self.worker_name = Some(results.worker_name);
 		// 結果
-    self.global_auc = Some(results.global_auc);
-    self.tpr_at_1_fpr = Some(results.tpr_at_1_fpr);
-    self.threshold_at_1_fpr = Some(results.threshold_at_1_fpr);
-    self.tpr_at_01_fpr = Some(results.tpr_at_01_fpr);
-    self.threshold_at_01_fpr = Some(results.threshold_at_01_fpr);
+    self.global_auc = results.global_auc;
+    self.tpr_at_1_fpr = results.tpr_at_1_fpr;
+    self.threshold_at_1_fpr = results.threshold_at_1_fpr;
+    self.tpr_at_01_fpr = results.tpr_at_01_fpr;
+    self.threshold_at_01_fpr = results.threshold_at_01_fpr;
     self.other_metrics = Some(results.other_metrics);
 		// 時間
-    self.total_time = Some(results.total_time);
+    self.total_time = results.total_time;
 		// ファイル
     self.files = Some(results.files);
   }
+
+	/// 処理取得の報告
+	pub fn claim(&mut self, claim: ClaimExperimentRequest) {
+		self.status = ExperimentStatus::Running;
+		self.worker_name = Some(claim.worker_name);
+	}
 
 	// SeaORMの仕様のせいでつくってる変換 Updateを通知してあげる
 	pub fn into_active_model_for_update(self) -> ActiveModel {
@@ -197,6 +204,7 @@ impl Model {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::test_utils::update_experiment_request_factory;
 
 	/// モデルファクトリ
 	fn create_model() -> Model {
@@ -234,35 +242,35 @@ mod tests {
 		};
 		model
 	}
-	/// requestファクトリー
-	fn update_request(worker_name: &str) -> UpdateResultsRequest {
-		let request = UpdateResultsRequest {
-			experiment_id: 1,
-			worker_name: worker_name.to_string(),
-			global_auc: 0.5,
-			tpr_at_1_fpr: 0.5,
-			threshold_at_1_fpr: 0.5,
-			tpr_at_01_fpr: 0.5,
-			threshold_at_01_fpr: 0.5,
-			other_metrics: serde_json::json!({}),
-			total_time: 10.0,
-			files: serde_json::json!({}),
-		};
-		request
-	}
 	
 	/// 実験を完了状態にし、結果を反映するテスト
 	#[test]
 	fn test_complete() {
 		// Arrange
 		let mut experiment = create_model();
-		let request = update_request("test_worker");
+		let request = update_experiment_request_factory(experiment.id, ExperimentStatus::Succeeded);
 		let completed_at = OffsetDateTime::now_utc();
 		// Act
 		experiment.complete(request, completed_at);
 		// Assert
-		assert_eq!(experiment.status, ExperimentStatus::Succeeded); // ステータスがSUCCEEDEDである事
+		assert_eq!(experiment.status, ExperimentStatus::Succeeded); // ステータスがセットされていること
 		assert_eq!(experiment.completed_at, Some(completed_at)); // 完了時刻がセットされている事
 		assert_eq!(experiment.worker_name, Some("test_worker".to_string())); // 結果が反映されていること
+	}
+
+	/// 処理取得の報告テスト
+	#[test]
+	fn test_claim() {
+		// Arrange
+		let mut experiment = create_model();
+		let request = ClaimExperimentRequest {
+			id: experiment.id,
+			worker_name: "test_worker".to_string(),
+		};
+		// Act
+		experiment.claim(request);
+		// Assert
+		assert_eq!(experiment.status, ExperimentStatus::Running); // ステータスが実行中となっていること
+		assert_eq!(experiment.worker_name, Some("test_worker".to_string())); // ワーカーがセットされていること
 	}
 }

@@ -6,7 +6,7 @@ use axum::{
 use uuid::Uuid;
 use std::sync::Arc;
 
-use crate::dto::experiment::CreateExperimentRequest;
+use crate::dto::experiment::{ClaimExperimentRequest, CreateExperimentRequest};
 use crate::dto::experiment::UpdateResultsRequest;
 use crate::entities::experiment::Model;
 use crate::entities::task::Task;
@@ -35,6 +35,7 @@ pub async fn create_experiment(
 }
 
 /// 実験の結果反映
+// ちゃんとidは外部に出してあげた方が内部の処理が綺麗になると思う
 #[utoipa::path(
 	put,
 	path = "/api/experiments",
@@ -51,6 +52,27 @@ pub async fn reflect_experiment_results(
 	Json(request): Json<UpdateResultsRequest>
 ) -> Result<Json<Model>, ServerError> {
 	let experiment = service.reflect_experiment_results(request).await?;
+	Ok(Json(experiment))
+}
+
+/// 処理取得の報告
+// ちゃんとidは外部に出してあげた方が内部の処理が綺麗になると思う
+#[utoipa::path(
+	put,
+	path = "/api/experiments/claim",
+	request_body = ClaimExperimentRequest,
+	responses(
+		(status = 200, description = "処理取得が正常に報告された", body = Model),
+		(status = 404, description = "指定された実験が見つからない"),
+		(status = 500, description = "サーバー内部エラー")
+	),
+	tag = "Experiments"
+)]
+pub async fn claim_experiment(
+	State(service): State<Arc<ExperimentService<ExperimentRepository, TaskRepository>>>,
+	Json(request): Json<ClaimExperimentRequest>
+) -> Result<Json<Model>, ServerError> {
+	let experiment = service.claim_experiment(request).await?;
 	Ok(Json(experiment))
 }
 

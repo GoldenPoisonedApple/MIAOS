@@ -4,7 +4,7 @@ use serde_json::Value;
 use utoipa::ToSchema;
 
 use crate::config::default::*;
-use crate::entities::experiment::{ActiveModel, MiaMethod};
+use crate::entities::experiment::{ActiveModel, ExperimentStatus, MiaMethod};
 
 /// 実験の作成リクエスト
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
@@ -117,24 +117,38 @@ pub struct UpdateResultsRequest {
   pub worker_name: String,
 
   /// 全体のAUC
-  pub global_auc: f64,
+  pub global_auc: Option<f64>,
   /// 1%FPRでのTPR
-  pub tpr_at_1_fpr: f64,
+  pub tpr_at_1_fpr: Option<f64>,
   /// 1%FPRでの閾値
-  pub threshold_at_1_fpr: f64,
+  pub threshold_at_1_fpr: Option<f64>,
   /// 0.1%FPRでのTPR
-  pub tpr_at_01_fpr: f64,
+  pub tpr_at_01_fpr: Option<f64>,
   /// 0.1%FPRでの閾値
-  pub threshold_at_01_fpr: f64,
+  pub threshold_at_01_fpr: Option<f64>,
   /// 拡張メトリクス
   #[schema(value_type = Object)]
   pub other_metrics: Value,
 
   /// トータルの実行時間(秒)
-  pub total_time: f64,
+  pub total_time: Option<f64>,
 
   /// その他のファイルのパス
   #[schema(value_type = Object)]
   pub files: Value,
+
+	/// 実験結果 ステータス
+	pub status: ExperimentStatus,
+	/// エラーメッセージ
+	pub error_message: Option<String>,
 }
 
+
+/// 処理取得の報告リクエスト
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+pub struct ClaimExperimentRequest {
+	/// 実験ID
+	pub id: i64,
+	/// ワーカー名
+	pub worker_name: String,
+}

@@ -25,6 +25,7 @@ export const TaskList = () => {
     () => [
       {
         id: "select",
+        enableSorting: false,
         header: ({ table }) => (
           <input
             type="checkbox"
@@ -41,8 +42,8 @@ export const TaskList = () => {
         ),
       },
       { accessorKey: "id", header: "ID" },
+			{ accessorKey: "experiment_id", header: "実験ID" },
       { accessorKey: "task", header: "タスク名" },
-      { accessorKey: "error_message", header: "エラーメッセージ" },
       ...dynamicColumns,
     ],
     [dynamicColumns]
@@ -51,8 +52,11 @@ export const TaskList = () => {
   if (loading) return <div>タスク情報を読み込み中...</div>;
   if (error) return <div>エラー: {error.message}</div>;
 
-  const selectedCount = Object.keys(rowSelection).length;
-  const selectedIds = Object.keys(rowSelection).map((index) => tasks[Number(index)].id);
+  const selectedRowIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
+  const selectedCount = selectedRowIds.length;
+  const selectedIds = selectedRowIds;
 
   const handleDeleteConfirm = () => {
     deleteTasks(selectedIds, {
@@ -84,6 +88,7 @@ export const TaskList = () => {
         initialColumnVisibility={{
           ...defaultHiddenColumns,
         }}
+        getRowId={(row) => row.id}
       />
 
       <ConfirmModal

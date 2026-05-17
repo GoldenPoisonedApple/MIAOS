@@ -9,6 +9,8 @@ pub struct Task {
 	pub id: Uuid,
 	/// タスク名
 	pub task: String,
+	/// 実験ID
+	pub experiment_id: i64,
 	// ---- 引数 ----
 	/// 位置引数
 	#[schema(value_type = Object)]
@@ -19,7 +21,4 @@ pub struct Task {
 	/// 制御情報
 	#[schema(value_type = Object)]
 	pub args_control: serde_json::Value,
-	// ----- エラー情報 ----
-	/// エラーメッセージ
-	pub error_message: Option<String>,
 }

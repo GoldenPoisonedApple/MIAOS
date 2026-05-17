@@ -1,13 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useExperiments } from "../../hooks/useExperiments";
-import { useDynamicColumns } from "../../hooks/useDynamicColumns";
+import { useDynamicColumns, type DictionaryCellRenderContext } from "../../hooks/useDynamicColumns";
 import { CreateExperimentModal } from "./components/CreateExperimentModal";
+import { FilePreviewModal } from "./components/FilePreviewModal";
 import { ConfirmModal } from "../../components/ui/ConfirmModal/ConfirmModal";
 import { Button } from "../../components/ui/Button/Button";
 import { Badge } from "../../components/ui/Badge/Badge";
 import { DataTable } from "../../components/ui/DataTable/DataTable";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { components } from "../../api/schema";
+import { fileApiPath } from "../../utils/fileApiPath";
 import styles from "./ExperimentList.module.css";
 
 type Experiment = components["schemas"]["Model"];
@@ -17,17 +19,57 @@ export const ExperimentList = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState({});
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
 
-  const { dynamicColumns, defaultHiddenColumns } = useDynamicColumns<Experiment>(experiments, [
-    { key: "hyperparameters", prefix: "HP" },
-    { key: "other_metrics", prefix: "Metric" },
-    { key: "files", prefix: "File" },
-  ]);
+  const filesRenderCell = useCallback((ctx: DictionaryCellRenderContext<Experiment>) => {
+    const { value, row } = ctx;
+    if (value === null || value === undefined) return "-";
+    if (typeof value === "object") return JSON.stringify(value);
+    const s = String(value);
+    if (!s) return "-";
+    const objectKey = `${row.id}/${s}`;
+    return (
+      <span className={styles.fileCell}>
+        <button
+          type="button"
+          className={styles.fileLink}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPreviewKey(objectKey);
+          }}
+        >
+          {s}
+        </button>
+        <a
+          className={styles.openTabGlyph}
+          href={fileApiPath(objectKey)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="別タブで開く"
+          onClick={(e) => e.stopPropagation()}
+        >
+          ⧉
+        </a>
+      </span>
+    );
+  }, []);
+
+  const dictionaryConfigs = useMemo(
+    () => [
+      { key: "hyperparameters" as const, prefix: "HP" },
+      { key: "other_metrics" as const, prefix: "Metric" },
+      { key: "files" as const, prefix: "File", renderCell: filesRenderCell },
+    ],
+    [filesRenderCell]
+  );
+
+  const { dynamicColumns, defaultHiddenColumns } = useDynamicColumns<Experiment>(experiments, dictionaryConfigs);
 
   const columns = useMemo<ColumnDef<Experiment>[]>(
     () => [
       {
         id: "select",
+        enableSorting: false,
         header: ({ table }) => (
           <input
             type="checkbox"
@@ -43,7 +85,7 @@ export const ExperimentList = () => {
           />
         ),
       },
-      { accessorKey: "id", header: "ID" },
+      { accessorKey: "id", header: "ID", sortingFn: "basic" },
       { accessorKey: "name", header: "名前" },
       { accessorKey: "method", header: "手法" },
       {
@@ -102,8 +144,11 @@ export const ExperimentList = () => {
   if (loading) return <div>実験情報を読み込み中...</div>;
   if (error) return <div>エラー: {error.message}</div>;
 
-  const selectedCount = Object.keys(rowSelection).length;
-  const selectedIds = Object.keys(rowSelection).map((index) => experiments[Number(index)].id);
+  const selectedRowIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
+  const selectedCount = selectedRowIds.length;
+  const selectedIds = selectedRowIds.map(Number);
 
   const handleDeleteConfirm = () => {
     deleteExperiments(selectedIds, {
@@ -138,6 +183,8 @@ export const ExperimentList = () => {
         initialColumnVisibility={{
           ...defaultHiddenColumns,
         }}
+        initialSorting={[{ id: "id", desc: false }]}
+        getRowId={(row) => String(row.id)}
       />
 
       <CreateExperimentModal
@@ -155,6 +202,8 @@ export const ExperimentList = () => {
         message={`選択した ${selectedCount} 件の実験を本当に削除しますか？この操作は取り消せません。`}
         isConfirming={isDeleting}
       />
+
+      <FilePreviewModal objectKey={previewKey} onClose={() => setPreviewKey(null)} />
     </div>
   );
 };

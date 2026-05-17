@@ -21,6 +21,7 @@
   overflow-y: auto;
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
+  text-align: left;
 }
 
 .content h2 {

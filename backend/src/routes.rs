@@ -1,5 +1,5 @@
 use axum::{
-  routing::{get, delete},
+  routing::{get, delete, put},
   Router,
 };
 use utoipa::OpenApi;
@@ -13,7 +13,10 @@ use crate::handlers::experiment::{
 	get_all_experiments,
 	get_all_tasks,
   reflect_experiment_results,
+  claim_experiment,
 };
+
+use crate::handlers::file::get_file;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -24,11 +27,14 @@ use crate::handlers::experiment::{
 		crate::handlers::experiment::reflect_experiment_results,
 		crate::handlers::experiment::get_all_tasks,
 		crate::handlers::experiment::delete_task,
+		crate::handlers::experiment::claim_experiment,
+		crate::handlers::file::get_file,
 	),
 	components(
 		schemas(
 			crate::dto::experiment::CreateExperimentRequest,
 			crate::dto::experiment::UpdateResultsRequest,
+			crate::dto::experiment::ClaimExperimentRequest,
 			crate::entities::experiment::Model,
 			crate::entities::experiment::ExperimentStatus,
 			crate::entities::experiment::MiaMethod,
@@ -37,7 +43,8 @@ use crate::handlers::experiment::{
 	),
 	tags(
 		(name = "Experiments", description = "実験管理API"),
-		(name = "Tasks", description = "タスク管理API")
+		(name = "Tasks", description = "タスク管理API"),
+		(name = "Files", description = "ファイル管理API")
 	)
 )]
 pub struct ApiDoc; // utoipaで生成されたOpenAPIドキュメントを保持する構造体
@@ -55,19 +62,30 @@ pub fn app_routes(state: AppState) -> Router {
       "/api/experiments",
       get(get_all_experiments).post(create_experiment).put(reflect_experiment_results),
     )
+		.route(
+			"/api/experiments/claim",
+			put(claim_experiment),
+		)
     .route(
       "/api/experiments/{id}",
       delete(delete_experiment),
     )
     .route(
       "/api/tasks",
-      get(get_all_tasks).delete(delete_task),
+      get(get_all_tasks),
     )
     .route(
       "/api/tasks/{id}",
       delete(delete_task),
     )
-    .with_state(state.experiment_service);
+		.route(
+			// *keyは任意のパスを受け取れる test/sample.logなど / を含めることができる
+			// 今回はkeyをURLエンコードしているため * である必要はない
+			//一部プロキシは%2Fですら特別扱いするためちゃんとやるならクエリとかが良い
+			"/api/files/{*key}",
+			get(get_file),
+		)
+    .with_state(state);
 
   Router::new()
     .merge(SwaggerUi::new(SWAGGER_UI_PATH).url(OPENAPI_JSON_PATH, ApiDoc::openapi())) // ドキュメント生成用

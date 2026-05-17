@@ -20,3 +20,44 @@
   display: flex;
   gap: 12px;
 }
+
+.fileCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fileLink {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--link-color, #0a58ca);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  text-decoration: underline;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openTabGlyph {
+  flex: 0 0 auto;
+  color: var(--link-color, #0a58ca);
+  text-decoration: none;
+  line-height: 1;
+  font-size: 1.1em;
+}
+
+.openTabGlyph:hover {
+  color: var(--link-hover-color, #084298);
+}
+
+.fileLink:hover {
+  color: var(--link-hover-color, #084298);
+}

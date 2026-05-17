@@ -5,6 +5,9 @@ Membership Infference Attack Orchestration System
 実験はidで管理することに
 <- わざわざ名前にしなくても良い、idでも一意性が付く、検索容易性がある、覚えやすく入力しやすい
 
+次はリポジトリ全部一つにまとめた方がいいな...
+その方が統合テスト楽だし、開発環境でもできるし...
+
 sudo chown -R $USER:$USER .
 
 ## バックエンド
@@ -90,6 +93,14 @@ curl -X POST http://localhost:3000/api/experiments -H "Content-Type: application
 curl -X GET http://localhost:3000/api/tasks
 ```
 
+- ルーティング
+"/api/experiments",
+"/api/experiments/claim"
+など個別対応にも関わらず、内部Jsonのidでやってるのあまりよくない設計な気がする
+ちゃんとidは外部に出してあげた方が内部の処理が綺麗
+
+
+
 - utoipa APIの仕様書とかを勝手に書いてくれるやつ
 人用
 http://localhost:3000/docs/
@@ -138,6 +149,8 @@ package.jsonのscripts追記
 ```bash
 npm run gen:api
 ```
+
+生成も、どうせ変更を加えた時にするので、gitignoreに入れない方がいいらしい
 
 ## DB
 
@@ -228,13 +241,39 @@ args = [
 Tasks: [Task { id: 1107cc26-b460-4405-8b07-96ff7007f7d2, task: "mia_tasks.run_attack", args_positional: Array [], args_keyword: Object {"params": Object {"base_experiment_id": Null, "batch_size": Number(10), "experiment_id": Number(1), "hyperparameters": Object {}, "load_attack_model": Bool(false), "load_shadow_model": Bool(false), "load_target_model": Bool(false), "max_epochs": Number(10), "method": String("OfflineLira"), "name": String("test"), "notes": String("backend_test"), "num_shadow_models": Number(10), "seed": Number(10), "shadow_test_size": Number(10), "shadow_train_size": Number(10), "target_test_size": Number(10), "target_train_size": Number(10)}}, args_control: Object {"callbacks": Null, "chain": Null, "chord": Null, "errbacks": Null} }, Task { id: 676a5a77-8464-424f-bbad-19599fb20079, task: "mia_tasks.run_attack", args_positional: Array [], args_keyword: Object {"params": Object {"base_experiment_id": Null, "batch_size": Number(10), "experiment_id": Number(1), "hyperparameters": Object {}, "load_attack_model": Bool(false), "load_shadow_model": Bool(false), "load_target_model": Bool(false), "max_epochs": Number(10), "method": String("OfflineLira"), "name": String("test"), "notes": String("backend_test"), "num_shadow_models": Number(10), "seed": Number(10), "shadow_test_size": Number(10), "shadow_train_size": Number(10), "target_test_size": Number(10), "target_train_size": Number(10)}}, args_control: Object {"callbacks": Null, "chain": Null, "chord": Null, "errbacks": Null} }, Task { id: d2e8213d-6412-4b1f-9111-f3dfbaa805ef, task: "mia_tasks.run_attack", args_positional: Array [], args_keyword: Object {"params": Object {"base_experiment_id": Null, "batch_size": Number(10), "experiment_id": Number(1), "hyperparameters": Object {}, "load_attack_model": Bool(false), "load_shadow_model": Bool(false), "load_target_model": Bool(false), "max_epochs": Number(10), "method": String("OfflineLira"), "name": String("test"), "notes": String("backend_test"), "num_shadow_models": Number(10), "seed": Number(10), "shadow_test_size": Number(10), "shadow_train_size": Number(10), "target_test_size": Number(10), "target_train_size": Number(10)}}, args_control: Object {"callbacks": Null, "chain": Null, "chord": Null, "errbacks": Null} }]
 
 
+## MINIO
+結局Previewが.logや.jsonはできないらしいので、仕組みを整える
+手法が2つ
+- Presigned URL: バックエンドは署名だけを行う、CDN(キャッシュとの相性が良い(証明付きURLが毎回同じため))、大ファイルでもバックエンドのメモリを食わない
+	MINIOがクライアントから到達可能であること、URLの失効が時間でのみしか管理できない、実装コストがかからない
+- Backend Proxy: 全てのリクエストがバックエンドを経由、MINIOはクライアントから完全に分離されている、認証・認可が厳密に可能
+
+ワーカーからのアップロードは直接MINIOでやっているが、フロントからとの経路が違うので分けて考える
+アップロードはこのままで良い(無駄にバックエンドの容量を食う必要がない)
+
+ブラウザは全てバックエンドを通っていて、MINIOが内部ネットワーク完結なので Backend Proxy の方向性で
 
 
 ## TODO
+### 優先度: 高
+CI作る: テストの時はワーカー動かしてるとできないから、ワーカー閉じないとね
+いや違う、redisだけは外部依存だからモックでテストするようにしないといけない taskのreposityでデフォルトテストはしない方向で
+CIはMakefile作ろう
+テストのタスクはタスク名を変えてあげた方がいいな(repository)
+
+フィルタ、順番情報をバックエンドに記録
+
+
+### 優先度: 中
+
+多分 色んな所でMakefile作った方がいいな
+
+タスクの中に条件ぶち込まなくてもClaimの返り値で条件取得できるから、タスクにはidだけ入れておけばいいのでは？
+
+### 優先度: 低
 
 CORS設定とか
 
-フィルタ、順番情報をバックエンドに記録
 
 こういうの見れたらいいよね
 [Pending]  12件
@@ -243,23 +282,16 @@ CORS設定とか
 [Failed]    2件
 
 
-タスクに実験idを
-実験を削除したら自動的にそのタスクを削除
+Pythonの型だとidが振ってこんぞ(正確には振ってくるけど型にした時に落ちる)
+この実験から生成(同じ条件がセットされる)、ボタンがあると参照がらく
+
 
 認証を入れられたらいいいね
 
+## 疑問
+ワーカーからのアクセスもフロントエンドのところからリバースプロキシでやった方がいいのだろうか
+3000番を公開するのはあまりよくないのかな
+でもどのみちフロントから同じ所に経由するもんな....
+でも一か所に固めた方が制御が楽か？
 
-Pythonの型だとidが振ってこんぞ(正確には振ってくるけど型にした時に落ちる)
-エラーになった時もエラーを返していない 想像以上に優先度が高い
-
-ワーカーがタスクを受け取った時は、受け取ったよーAPI呼び出して、今どのタスクをやってるかを分かるようにした方がいいな
-
-MINIOのパスとファイル名を分離する必要がないので、MINIOのパスを削除、全て正規パスで というかidから推測できるから正規パスでなくてもいいなこれ
-
-MINIO
-application/jsonでも開けないし
-executionn.logはまだout-streamだし
-
-多分 色んな所でMakefile作った方がいいな
-
-この実験から生成(同じ条件がセットされる)、ボタンがあると参照がらく
+-> フロント、バック共に制御するリバースプロキシ(APIゲートウェイの層)を用意してやるという解決策が多いっぽい
