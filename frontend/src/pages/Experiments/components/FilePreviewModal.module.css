@@ -46,7 +46,26 @@
   color: var(--text-muted, #666);
 }
 
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
 .download {
   display: inline-block;
   align-self: flex-start;
+}
+
+.openTab {
+  display: inline-block;
+  font-size: 14px;
+  color: var(--link-color, #0a58ca);
+  text-decoration: underline;
+}
+
+.openTab:hover {
+  color: var(--link-hover-color, #084298);
 }

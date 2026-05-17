@@ -9,6 +9,7 @@ import { Badge } from "../../components/ui/Badge/Badge";
 import { DataTable } from "../../components/ui/DataTable/DataTable";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { components } from "../../api/schema";
+import { fileApiPath } from "../../utils/fileApiPath";
 import styles from "./ExperimentList.module.css";
 
 type Experiment = components["schemas"]["Model"];
@@ -26,19 +27,30 @@ export const ExperimentList = () => {
     if (typeof value === "object") return JSON.stringify(value);
     const s = String(value);
     if (!s) return "-";
-    // MinIO キーは「実験ID/ファイル名」。API はセルがファイル名のみのときに id を前置する。
-    const objectKey = s.includes("/") ? s : `${row.id}/${s}`;
+    const objectKey = `${row.id}/${s}`;
     return (
-      <button
-        type="button"
-        className={styles.fileLink}
-        onClick={(e) => {
-          e.stopPropagation();
-          setPreviewKey(objectKey);
-        }}
-      >
-        {s}
-      </button>
+      <span className={styles.fileCell}>
+        <button
+          type="button"
+          className={styles.fileLink}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPreviewKey(objectKey);
+          }}
+        >
+          {s}
+        </button>
+        <a
+          className={styles.openTabGlyph}
+          href={fileApiPath(objectKey)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="別タブで開く"
+          onClick={(e) => e.stopPropagation()}
+        >
+          ⧉
+        </a>
+      </span>
     );
   }, []);
 

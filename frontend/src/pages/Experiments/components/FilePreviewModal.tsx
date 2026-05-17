@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../../../api/client";
+import { fileApiPath } from "../../../utils/fileApiPath";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import styles from "./FilePreviewModal.module.css";
 
@@ -76,7 +77,7 @@ function FilePreviewInner({ objectKey }: FilePreviewInnerProps) {
       }
 
       const textLike =
-        ct.startsWith("text/") || ct === "application/json" || ct === "application/javascript";
+        ct.startsWith("text/") || ct === "application/json" || ct === "application/javascript" || ct === "application/octet-stream";
 
       if (textLike && data.size <= MAX_TEXT_BYTES) {
         try {
@@ -109,34 +110,49 @@ function FilePreviewInner({ objectKey }: FilePreviewInnerProps) {
     };
   }, [objectKey]);
 
+  const openInNewTab = (
+    <a className={styles.openTab} href={fileApiPath(objectKey)} target="_blank" rel="noopener noreferrer">
+      別タブで開く
+    </a>
+  );
+
   return (
     <div className={styles.body}>
       {mode === "loading" && <p className={styles.loading}>読み込み中…</p>}
       {mode === "error" && <p className={styles.error}>{errorMessage ?? "エラーが発生しました"}</p>}
       {mode === "image" && objectUrl && (
-        <div className={styles.imageWrap}>
-          <img className={styles.image} src={objectUrl} alt={objectKey} />
-        </div>
+        <>
+          <div className={styles.imageWrap}>
+            <img className={styles.image} src={objectUrl} alt={objectKey} />
+          </div>
+          <div className={styles.actions}>{openInNewTab}</div>
+        </>
       )}
       {mode === "text" && textContent !== null && (
         <>
           <pre className={styles.pre}>{textContent}</pre>
-          {objectUrl && (
-            <a className={styles.download} href={objectUrl} download={fileNameFromKey(objectKey)}>
-              ダウンロード
-            </a>
-          )}
+          <div className={styles.actions}>
+            {objectUrl && (
+              <a className={styles.download} href={objectUrl} download={fileNameFromKey(objectKey)}>
+                ダウンロード
+              </a>
+            )}
+            {openInNewTab}
+          </div>
         </>
       )}
       {mode === "binary" && (
         <div className={styles.binary}>
           <p>バイナリまたは大きなテキストファイルのため、ここではプレビューできません。</p>
           <p className={styles.meta}>Content-Type: {contentType}</p>
-          {objectUrl && (
-            <a className={styles.download} href={objectUrl} download={fileNameFromKey(objectKey)}>
-              ダウンロード
-            </a>
-          )}
+          <div className={styles.actions}>
+            {objectUrl && (
+              <a className={styles.download} href={objectUrl} download={fileNameFromKey(objectKey)}>
+                ダウンロード
+              </a>
+            )}
+            {openInNewTab}
+          </div>
         </div>
       )}
     </div>
