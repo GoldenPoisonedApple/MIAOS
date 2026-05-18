@@ -81,11 +81,17 @@ jobs:
 
       minio:
         image: minio/minio:latest
+        command: server /data
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
         ports:
           - 9000:9000
+        options: >-
+          --health-cmd "curl -fsS http://127.0.0.1:9000/minio/health/live || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - uses: actions/checkout@v4
@@ -104,39 +110,20 @@ jobs:
         with:
           workspaces: orchestrator/backend
 
+      # taiki-e/install-action を使用してバイナリを直接取得し、コンパイル時間を排除
       - name: Install sqlx-cli
-        run: cargo install sqlx-cli --no-default-features --features postgres --locked
-
-      - name: Wait for Postgres
-        run: |
-          for i in $(seq 1 60); do
-            pg_isready -h 127.0.0.1 -p 5432 -U postgres -d miaos_test && exit 0
-            sleep 1
-          done
-          echo "Postgres did not become ready in time"
-          exit 1
+        uses: taiki-e/install-action@v2
+        with:
+          tool: sqlx-cli
 
       - name: Run database migrations
         run: sqlx migrate run
 
-      - name: Wait for MinIO and seed test object
+      - name: Seed test object to MinIO
         env:
           AWS_ACCESS_KEY_ID: minioadmin
           AWS_SECRET_ACCESS_KEY: minioadmin
         run: |
-          ready=0
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:9000/minio/health/live; then
-              ready=1
-              break
-            fi
-            sleep 2
-          done
-          if [ "$ready" != 1 ]; then
-            echo "MinIO did not become ready in time"
-            exit 1
-          fi
-          aws --version
           aws s3 mb "s3://${MINIO_BUCKET_NAME}" --endpoint-url "${MINIO_ENDPOINT}" || true
           echo -n 'hello world' > /tmp/sample.log
           aws s3 cp /tmp/sample.log "s3://${MINIO_BUCKET_NAME}/test/sample.log" --endpoint-url "${MINIO_ENDPOINT}"
@@ -190,6 +177,9 @@ jobs:
 
       - name: Install Ruff
         run: pip install ruff
+
+      - name: Ruff format check
+        run: ruff format --check src --extend-exclude=src/server_client
 
       - name: Ruff check
         run: ruff check src --extend-exclude=src/server_client
