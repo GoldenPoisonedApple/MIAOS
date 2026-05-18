@@ -4,6 +4,10 @@
 //! top of the protocol for a broker. This is why a broker's [`Delivery`](crate::broker::Broker::Delivery)
 //! type must implement [`TryCreateMessage`].
 
+// This file has been modified by ito in 2026.
+// Modifications include:
+// - Fix delivery_info error in Python Celery: add default exchange value
+
 use base64::{
     alphabet,
     engine::{general_purpose::PAD, GeneralPurpose},
