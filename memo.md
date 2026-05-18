@@ -212,10 +212,21 @@ https://github.com/rusty-celery/rusty-celery/pull/253
 [patch.crates-io]
 celery = { path = "libs/rusty-celery" }
 ```
+
+### ライセンス
+orchestrator/backendにて
+rusty-celeryをフォーク、修正して使用しているため同様にApache License 2.0を採用
+
+LICENSE の保持
+著作権表示の保持
+NOTICE の保持（存在する場合）
+
 Apache License 2.0ライセンス
 - ライセンスのコピーを残す: LICENSEが入ってるので消さなければよい
 - 著作権表示を残す: Copyrightが入っているので消さなければよい
 - 変更を明記: // Modified by []みたいな感じ
+- NOTICEは存在しなかった
+元の配布物に NOTICE が含まれていた場合その派生物を再配布するならNOTICE に含まれる内容を「読める形で」保持しなければならない
 
 libs/にダウンロード
 .gitignoreには含めず

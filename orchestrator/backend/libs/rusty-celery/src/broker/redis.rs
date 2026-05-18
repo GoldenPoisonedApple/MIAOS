@@ -1,4 +1,10 @@
 //! Redis broker.
+
+// This file has been modified by ito in 2026.
+// Modifications include:
+// - Fixed type inference error in remove_task function
+// - Fixed type inference error in close function
+
 #![allow(dead_code)]
 use super::{Broker, BrokerBuilder, DeliveryError, DeliveryStream};
 use crate::error::{BrokerError, ProtocolError};
