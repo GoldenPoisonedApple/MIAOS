@@ -43,18 +43,17 @@ impl StorageRepositoryTrait for StorageRepository {
   }
 }
 
-
 #[cfg(test)]
 mod tests {
   use super::*;
   use crate::infrastructure::{establish_storage_client, get_bucket_name};
 
-	/// オブジェクトの取得テスト
+  /// オブジェクトの取得テスト
   #[tokio::test]
   async fn test_get_object() {
     let client = establish_storage_client().await;
     let repository = StorageRepository::new(client, get_bucket_name());
-		let object = repository.get_object("test/sample.log").await.unwrap();
-		assert_eq!(object.content_length(), Some("hello world".len() as i64)); // 正常に取得できていること
+    let object = repository.get_object("test/sample.log").await.unwrap();
+    assert_eq!(object.content_length(), Some("hello world".len() as i64)); // 正常に取得できていること
   }
 }

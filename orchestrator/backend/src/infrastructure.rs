@@ -1,10 +1,10 @@
 use crate::dto::task::CreateTaskRequest;
+use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
+use aws_sdk_s3::Client;
 use deadpool_redis::{Config, Pool, Runtime};
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use std::sync::Arc;
 use std::time::Duration;
-use aws_sdk_s3::{Client};
-use aws_sdk_s3::config::{Region, Credentials, BehaviorVersion};
 
 const MAX_CONNECTIONS: u32 = 5;
 
@@ -65,21 +65,20 @@ pub async fn establish_celery_app() -> Arc<celery::Celery> {
 /// MINIO接続を確立する
 /// * 戻り値: Client - MINIO接続
 pub async fn establish_storage_client() -> Client {
-	let access_key = std::env::var("MINIO_ACCESS_KEY").expect("MINIO_ACCESS_KEY must be set");
-	let secret_key = std::env::var("MINIO_SECRET_KEY").expect("MINIO_SECRET_KEY must be set");
-	let endpoint = std::env::var("MINIO_ENDPOINT").expect("MINIO_ENDPOINT must be set");
-	let region = std::env::var("MINIO_REGION").unwrap_or_else(|_| "us-east-1".to_string()); // MINIOではregionが必須ではないので
-	
+  let access_key = std::env::var("MINIO_ACCESS_KEY").expect("MINIO_ACCESS_KEY must be set");
+  let secret_key = std::env::var("MINIO_SECRET_KEY").expect("MINIO_SECRET_KEY must be set");
+  let endpoint = std::env::var("MINIO_ENDPOINT").expect("MINIO_ENDPOINT must be set");
+  let region = std::env::var("MINIO_REGION").unwrap_or_else(|_| "us-east-1".to_string()); // MINIOではregionが必須ではないので
+
   let credentials = Credentials::new(
-    access_key,
-    secret_key,
+    access_key, secret_key,
     None, // session_token: 一時認証トークン。MinIOでは通常不要
     None, // expiry: 認証情報の有効期限
     "minio",
   );
 
   let sdk_config = aws_sdk_s3::config::Builder::new()
-		.behavior_version(BehaviorVersion::v2026_01_12())	// latest()は良くないっぽいので固定
+    .behavior_version(BehaviorVersion::v2026_01_12()) // latest()は良くないっぽいので固定
     .endpoint_url(endpoint)
     .region(Region::new(region))
     .credentials_provider(credentials)
@@ -87,7 +86,6 @@ pub async fn establish_storage_client() -> Client {
     .force_path_style(true)
     .build();
 
-  
   Client::from_conf(sdk_config)
 }
 

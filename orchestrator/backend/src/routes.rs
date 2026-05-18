@@ -1,5 +1,5 @@
 use axum::{
-  routing::{get, delete, put},
+  routing::{delete, get, put},
   Router,
 };
 use utoipa::OpenApi;
@@ -8,12 +8,8 @@ use utoipa_swagger_ui::SwaggerUi;
 use crate::state::AppState;
 
 use crate::handlers::experiment::{
-  create_experiment,
-	delete_experiment, delete_task,
-	get_all_experiments,
-	get_all_tasks,
-  reflect_experiment_results,
-  claim_experiment,
+  claim_experiment, create_experiment, delete_experiment, delete_task, get_all_experiments,
+  get_all_tasks, reflect_experiment_results,
 };
 
 use crate::handlers::file::get_file;
@@ -49,42 +45,29 @@ use crate::handlers::file::get_file;
 )]
 pub struct ApiDoc; // utoipaで生成されたOpenAPIドキュメントを保持する構造体
 
-
 const SWAGGER_UI_PATH: &str = "/docs";
 const OPENAPI_JSON_PATH: &str = "/api-docs/openapi.json";
 
-
 /// ルーティング
 pub fn app_routes(state: AppState) -> Router {
-
   let api_router = Router::new()
     .route(
       "/api/experiments",
-      get(get_all_experiments).post(create_experiment).put(reflect_experiment_results),
+      get(get_all_experiments)
+        .post(create_experiment)
+        .put(reflect_experiment_results),
     )
-		.route(
-			"/api/experiments/claim",
-			put(claim_experiment),
-		)
+    .route("/api/experiments/claim", put(claim_experiment))
+    .route("/api/experiments/{id}", delete(delete_experiment))
+    .route("/api/tasks", get(get_all_tasks))
+    .route("/api/tasks/{id}", delete(delete_task))
     .route(
-      "/api/experiments/{id}",
-      delete(delete_experiment),
+      // *keyは任意のパスを受け取れる test/sample.logなど / を含めることができる
+      // 今回はkeyをURLエンコードしているため * である必要はない
+      //一部プロキシは%2Fですら特別扱いするためちゃんとやるならクエリとかが良い
+      "/api/files/{*key}",
+      get(get_file),
     )
-    .route(
-      "/api/tasks",
-      get(get_all_tasks),
-    )
-    .route(
-      "/api/tasks/{id}",
-      delete(delete_task),
-    )
-		.route(
-			// *keyは任意のパスを受け取れる test/sample.logなど / を含めることができる
-			// 今回はkeyをURLエンコードしているため * である必要はない
-			//一部プロキシは%2Fですら特別扱いするためちゃんとやるならクエリとかが良い
-			"/api/files/{*key}",
-			get(get_file),
-		)
     .with_state(state);
 
   Router::new()

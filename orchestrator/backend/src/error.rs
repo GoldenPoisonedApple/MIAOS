@@ -18,7 +18,7 @@ pub enum ServerError {
   #[error("Celery error: {0}")]
   CeleryError(#[from] celery::error::CeleryError),
 
-	/// S3エラー
+  /// S3エラー
   #[error("S3 error: {0}")]
   S3Error(#[from] aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::get_object::GetObjectError>),
 

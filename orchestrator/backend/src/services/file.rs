@@ -13,11 +13,11 @@ impl<S: StorageRepositoryTrait> StorageService<S> {
     Self { storage_repository }
   }
 
-	/// オブジェクトを取得する
-	/// * key: &str - オブジェクトのキー
-	/// * 戻り値: Result<GetObjectOutput, ServerError> - オブジェクトの取得結果
+  /// オブジェクトを取得する
+  /// * key: &str - オブジェクトのキー
+  /// * 戻り値: Result<GetObjectOutput, ServerError> - オブジェクトの取得結果
   pub async fn fetch(&self, key: &str) -> Result<GetObjectOutput, ServerError> {
-		// 無効なパスの場合はエラーを返す
+    // 無効なパスの場合はエラーを返す
     if key.contains("..") {
       return Err(ServerError::InvalidPath(format!("invalid key: {key}")));
     }

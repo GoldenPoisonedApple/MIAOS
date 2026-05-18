@@ -1,18 +1,16 @@
 use crate::entities::experiment::MiaMethod;
-use time::OffsetDateTime;
 use time::macros::format_description;
-
+use time::OffsetDateTime;
 
 /// 実験名のデフォルト値
 pub fn EXPERIMENT_NAME() -> String {
-	let format = format_description!("[year]-[month]-[day]_[hour]-[minute]-[second]");
-	OffsetDateTime::now_utc().format(&format).unwrap()
+  let format = format_description!("[year]-[month]-[day]_[hour]-[minute]-[second]");
+  OffsetDateTime::now_utc().format(&format).unwrap()
 }
 /// 備考のデフォルト値
 pub const EXPERIMENT_NOTES: Option<String> = None;
 /// 攻撃手法
 pub const MIA_METHOD: MiaMethod = MiaMethod::OfflineLira;
-
 
 /// ターゲットモデルを読み込むかどうか
 pub const LOAD_TARGET_MODEL: bool = false;

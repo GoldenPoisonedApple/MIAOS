@@ -45,29 +45,31 @@ pub async fn remove_test_tasks(task_repository: &TaskRepository) {
 }
 
 /// テスト用の実験結果を反映するrequestを作成する
-pub fn update_experiment_request_factory(experiment_id: i64, status: ExperimentStatus) -> UpdateResultsRequest {
-	
-	UpdateResultsRequest {
-		experiment_id,
-		worker_name: "test_worker".to_string(),
-		global_auc: Some(0.5),
-		tpr_at_1_fpr: Some(0.5),
-		threshold_at_1_fpr: Some(0.5),
-		tpr_at_01_fpr: Some(0.5),
-		threshold_at_01_fpr: Some(0.5),
-		other_metrics: serde_json::json!({}),
-		total_time: Some(10.0),
-		files: serde_json::json!({}),
-		status,
-		error_message: None,
-	}
+pub fn update_experiment_request_factory(
+  experiment_id: i64,
+  status: ExperimentStatus,
+) -> UpdateResultsRequest {
+  UpdateResultsRequest {
+    experiment_id,
+    worker_name: "test_worker".to_string(),
+    global_auc: Some(0.5),
+    tpr_at_1_fpr: Some(0.5),
+    threshold_at_1_fpr: Some(0.5),
+    tpr_at_01_fpr: Some(0.5),
+    threshold_at_01_fpr: Some(0.5),
+    other_metrics: serde_json::json!({}),
+    total_time: Some(10.0),
+    files: serde_json::json!({}),
+    status,
+    error_message: None,
+  }
 }
 
 /// テスト用の実験を作成するrequestを作成する
 pub fn create_experiment_request_factory(name: &str) -> CreateExperimentRequest {
-	CreateExperimentRequest {
-		name: name.to_string(),
-		notes: Some("backend_test".to_string()),
-		..Default::default()
-	}
+  CreateExperimentRequest {
+    name: name.to_string(),
+    notes: Some("backend_test".to_string()),
+    ..Default::default()
+  }
 }
