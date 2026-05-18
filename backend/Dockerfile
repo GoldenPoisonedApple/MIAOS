@@ -41,7 +41,7 @@
 		&& rm -rf /var/lib/apt/lists/*
 
 	# 環境変数の設定 なぜかこれしないとcargoが使えない
-	RUN export PATH="/usr/local/cargo/bin:/usr/local/rustup/bin:$PATH"
+	ENV PATH="/usr/local/cargo/bin:/usr/local/rustup/bin:${PATH}"
 
 	RUN rustup component add rustfmt
 
@@ -53,18 +53,17 @@
 	
 	# 依存関係取得
 	COPY --from=planner /app/recipe.json recipe.json
+	# ローカルの依存クレートコピー
+	COPY libs ./libs
 	# 依存関係ビルド
 	RUN cargo chef cook --recipe-path recipe.json
-	# # ソースコードコピー
-	# COPY . .
 	
 	# ポート公開
 	EXPOSE 3000
 	
 	# ソースコードはホストからバインドマウントすることを想定
 	# ホットリロードで起動
-	CMD ["cargo", "watch", "-x", "run"]
-	
+	CMD ["cargo", "watch", "-x", "run"]	
 	
 	# ---------------------------------------------------
 	# Builder Stage: 本番用ビルド
@@ -73,6 +72,8 @@
 	
 	# 依存関係取得
 	COPY --from=planner /app/recipe.json recipe.json
+	# ローカルの依存クレートコピー
+	COPY libs ./libs
 	# 依存関係のみをビルド: 本番用
 	RUN cargo chef cook --release --recipe-path recipe.json
 	

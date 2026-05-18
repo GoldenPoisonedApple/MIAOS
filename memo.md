@@ -264,6 +264,17 @@ CIはMakefile作ろう
 フィルタ、順番情報をバックエンドに記録
 
 
+モノレポ化
+git subtreeが良い
+
+git remote add repo-a git@github.com:xxx/repo-a.git
+git fetch repo-a
+git subtree add --prefix=apps/repo-a repo-a main // ブランチ取り込み
+
+masterとworkerに分けようかな
+
+Turborepo: モノレポ用ビルドシステム(変更検知、再ビルド) 今回は使わないけどあってもいいね CIやbuild用の最適化ツールとして解釈している
+
 ### 優先度: 中
 
 多分 色んな所でMakefile作った方がいいな

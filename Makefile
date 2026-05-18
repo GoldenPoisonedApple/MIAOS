@@ -6,6 +6,10 @@
 # コンテナ管理
 # ------------------------------
 
+# メモ
+# バックエンドだけ再起動
+# docker compose up -d --build backend
+
 # 開発モードで起動
 dev:
 	docker compose up -d --build
