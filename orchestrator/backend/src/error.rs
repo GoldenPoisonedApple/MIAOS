@@ -20,7 +20,9 @@ pub enum ServerError {
 
   /// S3エラー
   #[error("S3 error: {0}")]
-  S3Error(#[from] Box<aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::get_object::GetObjectError>>),
+  S3Error(
+    #[from] Box<aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::get_object::GetObjectError>>,
+  ),
 
   /// Poolエラー
   #[error("Pool error: {0}")]
