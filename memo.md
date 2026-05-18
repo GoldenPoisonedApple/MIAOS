@@ -265,6 +265,25 @@ Tasks: [Task { id: 1107cc26-b460-4405-8b07-96ff7007f7d2, task: "mia_tasks.run_at
 ブラウザは全てバックエンドを通っていて、MINIOが内部ネットワーク完結なので Backend Proxy の方向性で
 
 
+# モノレポ化しました
+仕様変更、CI/CDが楽になる
+
+git subtreeが良い
+
+1. 新しいリポジトリを作成
+2. orchestratorを統合してマージ
+	- git remote add orchestrator git@github.com:GoldenPoisonedApple/MIAOS.git
+	- git fetch orchestrator
+	- git subtree add --prefix=orchestrator orchestrator main
+3. workerを統合してマージ
+	- git remote add worker git@github.com:GoldenPoisonedApple/mia-test.git
+	- git fetch worker
+	- git subtree add --prefix=worker worker main
+
+Turborepo: モノレポ用ビルドシステム(変更検知、再ビルド) 今回は使わないけどあってもいいね CIやbuild用の最適化ツールとして解釈している
+
+
+
 ## TODO
 ### 優先度: 高
 CI作る: テストの時はワーカー動かしてるとできないから、ワーカー閉じないとね
@@ -275,16 +294,6 @@ CIはMakefile作ろう
 フィルタ、順番情報をバックエンドに記録
 
 
-モノレポ化
-git subtreeが良い
-
-git remote add repo-a git@github.com:xxx/repo-a.git
-git fetch repo-a
-git subtree add --prefix=apps/repo-a repo-a main // ブランチ取り込み
-
-masterとworkerに分けようかな
-
-Turborepo: モノレポ用ビルドシステム(変更検知、再ビルド) 今回は使わないけどあってもいいね CIやbuild用の最適化ツールとして解釈している
 
 ### 優先度: 中
 
