@@ -4,10 +4,12 @@ Membership Inference Attack Orchestration System
 実験はidで管理することに
 <- わざわざ名前にしなくても良い、idでも一意性が付く、検索容易性がある、覚えやすく入力しやすい
 
-次はリポジトリ全部一つにまとめた方がいいな...
-その方が統合テスト楽だし、開発環境でもできるし...
-
 sudo chown -R $USER:$USER .
+
+
+## compose
+composeは基本的にcontainer_nameはつけないほうがいいかと: 一貫性が無くなる, スケールできなくなる, ネットワーク解決が名前依存になってしまって困る
+devcontainerの設定を追加、左下のボタンから選択
 
 ## バックエンド
 なんかcargoが効かないので応急処置

@@ -1,0 +1,16 @@
+{
+  "name": "MIAOS Backend",
+  "dockerComposeFile": "../../orchestrator/docker-compose.yaml",
+  "service": "backend",
+  "workspaceFolder": "/app",
+  "remoteEnv": {
+    "PATH": "/usr/local/cargo/bin:/usr/local/rustup/bin:${containerEnv:PATH}"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer"
+      ]
+    }
+  }
+}
