@@ -1,0 +1,3 @@
+[tool.ruff]
+# ruffで無視するファイル
+exclude = ["src/server_client"]

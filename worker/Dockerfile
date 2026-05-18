@@ -33,7 +33,8 @@ RUN pip install --no-cache-dir \
 		boto3 \
 		requests \
 		python-dotenv \
-		openapi-python-client
+		openapi-python-client \
+		ruff
 
 ENV TORCH_HOME=/workspace/.cache/torch
 
