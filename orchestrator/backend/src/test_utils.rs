@@ -1,6 +1,3 @@
-// src/test_utils.rs (共通モジュール)
-#![cfg(test)]
-
 use std::sync::Once;
 
 use crate::dto::experiment::{CreateExperimentRequest, UpdateResultsRequest};

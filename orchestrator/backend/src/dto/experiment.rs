@@ -54,7 +54,7 @@ pub struct CreateExperimentRequest {
 impl Default for CreateExperimentRequest {
   fn default() -> Self {
     Self {
-      name: EXPERIMENT_NAME(),
+      name: default_experiment_name(),
       notes: EXPERIMENT_NOTES,
       method: MIA_METHOD,
       // 条件
