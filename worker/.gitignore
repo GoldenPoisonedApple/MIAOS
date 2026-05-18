@@ -1,0 +1,8 @@
+data/
+/models/
+__pycache__/
+.vscode/
+.env
+
+# OpenAPI
+openapi.json
