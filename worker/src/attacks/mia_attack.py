@@ -118,13 +118,13 @@ class MIA_Attack(ABC):
 		plt.legend(loc="lower right")
 		plt.grid(True, which="both", ls="--", alpha=0.5)
 		# 保存
-		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, f"roc_curve.png")
+		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, "roc_curve.png")
 		plt.savefig(roc_plot_path, dpi=300, bbox_inches='tight')
 		plt.close()
 		self.logger.info(f"Saved ROC curve plot to: {roc_plot_path}")
   
 		# ------- 総合評価 -------  
-		self.logger.info(f"--- Results ---")
+		self.logger.info("--- Results ---")
 		self.logger.info(f"Global AUC: {roc_auc:.4f}")
 	
 		tpr_at_1_fpr, threshold_at_1_fpr = MIA_Attack.get_tpr_and_threshold(fpr, tpr, thresholds, 0.01)

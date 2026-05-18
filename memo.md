@@ -119,6 +119,22 @@ default-run = "server"
 ```
 でもよく考えたらURLでJSON取ってこれるからいらんかった
 
+- ホスト側の環境構築
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# シェル再起動
+
+# Dockerfileの rust:1.93 に固定
+rustup toolchain install 1.93
+rustup default 1.93
+
+# 現在のバージョン確認
+rustc --version
+cargo --version
+```
+
+
 ## フロントエンド
 utoipaとの連携
 
@@ -263,6 +279,9 @@ Tasks: [Task { id: 1107cc26-b460-4405-8b07-96ff7007f7d2, task: "mia_tasks.run_at
 
 ブラウザは全てバックエンドを通っていて、MINIOが内部ネットワーク完結なので Backend Proxy の方向性で
 
+## worker
+CIのためruffを導入
+
 
 # モノレポ化しました
 仕様変更、CI/CDが楽になる
@@ -282,6 +301,8 @@ git subtreeが良い
 Turborepo: モノレポ用ビルドシステム(変更検知、再ビルド) 今回は使わないけどあってもいいね CIやbuild用の最適化ツールとして解釈している
 
 これでテスト環境をまるまる簡単に構築できるようになったので、わざわざテスト用のワーカー作る必要が無くなった
+
+
 
 
 ## TODO

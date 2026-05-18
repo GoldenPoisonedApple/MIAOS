@@ -1,6 +1,6 @@
 import torchvision
 import torchvision.transforms as transforms
-from torch.utils.data import DataLoader, Subset, ConcatDataset, Dataset
+from torch.utils.data import DataLoader, ConcatDataset, Dataset
 import src.core.config as cfg
 from src.server_client.models import CreateExperimentRequest
 import numpy as np

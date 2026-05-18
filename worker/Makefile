@@ -52,6 +52,21 @@ remove:
 	docker stop ito_research
 	docker rm ito_research
 
+# フォーマット
+.PHONY: format
+format:
+	ruff format src
+
+# 静的解析
+.PHONY: lint
+lint:
+	ruff check src
+
+# チェック
+.PHONY: check
+check:
+	ruff check src
+
 # ファイルの所有者を変更
 .PHONY: chown
 chown:

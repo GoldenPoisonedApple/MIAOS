@@ -1,8 +1,5 @@
 import time
 import torch
-import argparse
-from tqdm import trange
-from datetime import datetime
 import os
 import logging
 import sys
@@ -103,7 +100,7 @@ def run_experiment(request: CreateExperimentRequest, work_dir: str, assigned_mod
 	# ----------------------------------
 	# シャドーモデルの訓練と評価
 	# ----------------------------------
-	logger.info(f"[Phase 3] Training shadow models...")
+	logger.info("[Phase 3] Training shadow models...")
 	p3_start_time = time.time()
 	shadow_models = []
 	if not request.load_shadow_model:
