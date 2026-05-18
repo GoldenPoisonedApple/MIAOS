@@ -21,12 +21,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	tracing::info!("Starting server...");
 	
 	// DB
-	let pool = establish_db_connection().await;
-  let experiment_repository = ExperimentRepository::new(pool);
+	let db_pool = establish_db_connection().await;
+	// migrate適用
+	tracing::info!("Running database migrations...");
+	sqlx::migrate!("./migrations")
+			.run(db_pool.get_postgres_connection_pool())	// プールの参照取得
+			.await.unwrap();
+	tracing::info!("Migrations completed.");
+  let experiment_repository = ExperimentRepository::new(db_pool);
 	// Redis
-  let pool = establish_redis_connection().await;
+  let redis_pool = establish_redis_connection().await;
   let celery_app = establish_celery_app().await;
-  let task_repository = TaskRepository::new(pool, celery_app);
+  let task_repository = TaskRepository::new(redis_pool, celery_app);
 	// サービス組み立て
   let experiment_service = Arc::new(ExperimentService::new(
     experiment_repository,
