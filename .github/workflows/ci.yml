@@ -1,0 +1,185 @@
+name: CI
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  paths:
+    name: Paths filter
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      worker: ${{ steps.filter.outputs.worker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'orchestrator/backend/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'orchestrator/frontend/**'
+              - '.github/workflows/ci.yml'
+            worker:
+              - 'worker/**'
+              - '.github/workflows/ci.yml'
+
+  backend:
+    name: Backend (Rust)
+    runs-on: ubuntu-latest
+    needs: paths
+    if: needs.paths.outputs.backend == 'true'
+    defaults:
+      run:
+        working-directory: orchestrator/backend
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/miaos_test
+      REDIS_URL: redis://127.0.0.1:6379
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_ENDPOINT: http://127.0.0.1:9000
+      MINIO_BUCKET_NAME: miaos-ci
+      MINIO_REGION: us-east-1
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: miaos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d miaos_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      minio:
+        image: minio/minio:latest
+        command: server /data
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -fsS http://127.0.0.1:9000/minio/health/live || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev postgresql-client
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.93"
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: orchestrator/backend
+
+      # taiki-e/install-action を使用してバイナリを直接取得し、コンパイル時間を排除
+      - name: Install sqlx-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: sqlx-cli
+
+      - name: Run database migrations
+        run: sqlx migrate run
+
+      - name: Seed test object to MinIO
+        env:
+          AWS_ACCESS_KEY_ID: minioadmin
+          AWS_SECRET_ACCESS_KEY: minioadmin
+        run: |
+          aws s3 mb "s3://${MINIO_BUCKET_NAME}" --endpoint-url "${MINIO_ENDPOINT}" || true
+          echo -n 'hello world' > /tmp/sample.log
+          aws s3 cp /tmp/sample.log "s3://${MINIO_BUCKET_NAME}/test/sample.log" --endpoint-url "${MINIO_ENDPOINT}"
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: cargo test
+        run: cargo test --all-features
+
+  frontend:
+    name: Frontend (Node)
+    runs-on: ubuntu-latest
+    needs: paths
+    if: needs.paths.outputs.frontend == 'true'
+    defaults:
+      run:
+        working-directory: orchestrator/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: orchestrator/frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  worker:
+    name: Worker (Ruff)
+    runs-on: ubuntu-latest
+    needs: paths
+    if: needs.paths.outputs.worker == 'true'
+    defaults:
+      run:
+        working-directory: worker
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Ruff format check
+        run: ruff format --check src --extend-exclude=src/server_client
+
+      - name: Ruff check
+        run: ruff check src --extend-exclude=src/server_client

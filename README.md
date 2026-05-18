@@ -1,6 +1,5 @@
 # MIAOS
-Membership Infference Attack Orchestration System
-
+Membership Inference Attack Orchestration System
 
 
 ## Dependencies
