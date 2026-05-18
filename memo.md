@@ -9,7 +9,11 @@ sudo chown -R $USER:$USER .
 
 ## compose
 composeは基本的にcontainer_nameはつけないほうがいいかと: 一貫性が無くなる, スケールできなくなる, ネットワーク解決が名前依存になってしまって困る
-devcontainerの設定を追加、左下のボタンから選択
+ctl+shift+P
+>Dev Containers: Open Folder in Container
+で.devcontainerが存在する場所を開く
+選択して実行
+.devcontainerはそれぞれのコンテナのrootに設置してもいいかもしれない
 
 ## バックエンド
 なんかcargoが効かないので応急処置

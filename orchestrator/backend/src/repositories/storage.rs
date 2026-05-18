@@ -37,7 +37,7 @@ impl StorageRepositoryTrait for StorageRepository {
         if e.to_string().contains("NoSuchKey") {
           ServerError::NotFound(format!("key not found: {key}"))
         } else {
-          ServerError::S3Error(e.into())
+          ServerError::S3Error(e)
         }
       })
   }

@@ -45,8 +45,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	// 状態
 	let state = AppState {
-		experiment_service: experiment_service,
-		storage_service: storage_service,
+		experiment_service,
+		storage_service,
 	};
 
 	// ルーティング

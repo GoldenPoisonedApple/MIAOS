@@ -87,8 +87,8 @@ pub async fn establish_storage_client() -> Client {
     .force_path_style(true)
     .build();
 
-  let client = Client::from_conf(sdk_config);
-  client
+  
+  Client::from_conf(sdk_config)
 }
 
 /// Bucketの名前取得

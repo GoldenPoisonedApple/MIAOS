@@ -208,7 +208,8 @@ mod tests {
 
 	/// モデルファクトリ
 	fn create_model() -> Model {
-		let model = Model {
+		
+		Model {
 			id: 1,
 			name: "test_experiment".to_string(),
 			notes: Some("backend_test".to_string()),
@@ -238,9 +239,8 @@ mod tests {
 			other_metrics: None,
 			total_time: None,
 			files: None,
-			created_at: TimeDateTimeWithTimeZone::from(OffsetDateTime::now_utc()),
-		};
-		model
+			created_at: OffsetDateTime::now_utc(),
+		}
 	}
 	
 	/// 実験を完了状態にし、結果を反映するテスト

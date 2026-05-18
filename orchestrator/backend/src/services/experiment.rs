@@ -130,9 +130,7 @@ mod tests {
     remove_test_tasks(&task_repository).await;
 
     // サービスインスタンス作成
-    let service = ExperimentService::new(experiment_repository, task_repository);
-
-    service
+    ExperimentService::new(experiment_repository, task_repository)
   }
 
 	/// task_repositoryのモック
@@ -167,9 +165,9 @@ mod tests {
 		remove_test_experiments(&experiment_repository).await;
 
 		// サービスインスタンス作成
-		let service = ExperimentService::new(experiment_repository, task_repository);
+		
 
-		service
+		ExperimentService::new(experiment_repository, task_repository)
 	}
 
   /// 実験の作成テスト
