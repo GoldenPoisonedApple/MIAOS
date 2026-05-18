@@ -209,8 +209,8 @@ jobs:
 
       - name: Ruff format check
         # 生成ファイルは除外
-        run: ruff format --check src --extend-exclude=src/server_client
+        run: ruff format --check src # --check: 修正はしない
 
       - name: Ruff check
         # 生成ファイルは除外
-        run: ruff check src --extend-exclude=src/server_client
+        run: ruff check src
