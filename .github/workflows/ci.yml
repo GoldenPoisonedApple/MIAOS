@@ -1,30 +1,41 @@
 name: CI
 
+# 並行実行の制御
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }} # 同一ワークフローで、ブランチからの実行であることを認識
+  cancel-in-progress: true  # 同じgroupでに属する新しいワークフローがトリガーされたとき、古いワークフローを強制的にキャンセルする
 
+# ワークフローのトリガー条件
 on:
+  # 直接pushされた場合
   push:
     branches:
       - main
+  # PRされた場合
   pull_request:
     branches:
       - main
 
+# jobは基本的に並列実行
+# stepsは上から順に直列実行
 jobs:
+  # 変更されたファイルパスを検知、どのジョブを実行するかを制御 pathsという名前は任意
   paths:
     name: Paths filter
     runs-on: ubuntu-latest
+    # 判定結果をoutputsに格納
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       worker: ${{ steps.filter.outputs.worker }}
+    # ワークフローのステップ
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v4 # ソースコードを実行環境にチェックアウト
+      - uses: dorny/paths-filter@v3 # 差分検出
         id: filter
         with:
+          # 判定の定義
+          # CIの定義ファイル自体に変更があった場合、全てのテストを実行
           filters: |
             backend:
               - 'orchestrator/backend/**'
@@ -36,15 +47,19 @@ jobs:
               - 'worker/**'
               - '.github/workflows/ci.yml'
 
+  # バックエンドのテスト
   backend:
     name: Backend (Rust)
     runs-on: ubuntu-latest
-    needs: paths
+    needs: paths # pathsの判定結果を利用 pathsジョブの正常終了を待つ
+    # backendジョブを実行するかどうかの判定
     if: needs.paths.outputs.backend == 'true'
+    # 作業ディレクトリ設定
     defaults:
       run:
         working-directory: orchestrator/backend
 
+    # 環境変数設定
     env:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/miaos_test
       REDIS_URL: redis://127.0.0.1:6379
@@ -54,6 +69,7 @@ jobs:
       MINIO_BUCKET_NAME: miaos-ci
       MINIO_REGION: us-east-1
 
+    # 依存システムの定義 コンテナの起動(stepsが開始される前に起動され、完了と共に破棄)
     services:
       postgres:
         image: postgres:15-alpine
@@ -87,26 +103,33 @@ jobs:
           MINIO_ROOT_PASSWORD: minioadmin
         ports:
           - 9000:9000
+        # >- : 改行はスペースに変換される CLI引数なので
         options: >-
           --health-cmd "curl -fsS http://127.0.0.1:9000/minio/health/live || exit 1"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
 
+    # ジョブのメイン処理
     steps:
       - uses: actions/checkout@v4
 
       - name: Install system packages
+        # | : 改行をそのまま保持 スクリプトとして複数行実行するので
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libssl-dev postgresql-client
 
-      - uses: dtolnay/rust-toolchain@stable
+      # cargoを使えるようにしている(cargoを含むRustツールチェーン一式を用意)
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.93"
-          components: rustfmt, clippy
+          components: rustfmt, clippy # 追加ツールの指定
 
-      - uses: Swatinem/rust-cache@v2
+      # キャッシュ機能を使ってビルド時間を短縮
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: orchestrator/backend
 
@@ -116,9 +139,12 @@ jobs:
         with:
           tool: sqlx-cli
 
+      # DBマイグレーションを実行
       - name: Run database migrations
         run: sqlx migrate run
 
+      # MinIOにテストデータを投入
+      # repository/storageのテストで必要なため
       - name: Seed test object to MinIO
         env:
           AWS_ACCESS_KEY_ID: minioadmin
@@ -128,14 +154,17 @@ jobs:
           echo -n 'hello world' > /tmp/sample.log
           aws s3 cp /tmp/sample.log "s3://${MINIO_BUCKET_NAME}/test/sample.log" --endpoint-url "${MINIO_ENDPOINT}"
 
+      # フォーマットが正しいかどうか
       - name: cargo fmt
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all -- --check # --check: 正しくなくても書き換えない
 
+      # コードの静的解析
       - name: cargo clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings # -D warnings: 警告もエラー扱い
 
+      # テストを実行
       - name: cargo test
-        run: cargo test --all-features
+        run: cargo test --all-features -- --test-threads=1 # --test-threads=1: DB等があるのでテストを並列実行しない
 
   frontend:
     name: Frontend (Node)
@@ -179,7 +208,9 @@ jobs:
         run: pip install ruff
 
       - name: Ruff format check
+        # 生成ファイルは除外
         run: ruff format --check src --extend-exclude=src/server_client
 
       - name: Ruff check
+        # 生成ファイルは除外
         run: ruff check src --extend-exclude=src/server_client
