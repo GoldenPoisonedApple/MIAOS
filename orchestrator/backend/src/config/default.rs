@@ -1,12 +1,7 @@
 use crate::entities::experiment::MiaMethod;
-use time::macros::format_description;
-use time::OffsetDateTime;
 
 /// 実験名のデフォルト値
-pub fn default_experiment_name() -> String {
-  let format = format_description!("[year]-[month]-[day]_[hour]-[minute]-[second]");
-  OffsetDateTime::now_utc().format(&format).unwrap()
-}
+pub const EXPERIMENT_NAME: &str = "default_experiment";
 /// 備考のデフォルト値
 pub const EXPERIMENT_NOTES: Option<String> = None;
 /// 攻撃手法
