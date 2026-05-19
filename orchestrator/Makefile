@@ -46,24 +46,3 @@ frontshell:
 # redisコンテナに入る
 redisshell:
 	docker compose exec redis /bin/sh
-
-
-# ------------------------------
-# Migration
-# ------------------------------
-# マイグレーションファイルの作成
-# 使用法: make migrate-add NAME=create_users_table
-migrate-add:
-	docker compose exec backend sqlx migrate add -r $(NAME)
-
-# マイグレーションの適用
-migrate:
-	docker compose exec backend sqlx migrate run
-
-# マイグレーションの取り消し
-migrate-revert:
-	docker compose exec backend sqlx migrate revert
-
-# マイグレーション状態の確認
-migrate-info:
-	docker compose exec backend sqlx migrate info
