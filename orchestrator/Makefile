@@ -1,6 +1,5 @@
 # Makefile
 # PHONY: ファイルではないという指定(ファイルは更新されていないと実行されない): 命令である
-.PHONY: dev prod down logs
 
 # ------------------------------
 # コンテナ管理
@@ -15,14 +14,17 @@ chown:
 # docker compose up -d --build backend
 
 # 開発モードで起動
+.PHONY: dev
 dev:
 	docker compose up -d --build
 
 # 停止(開発)
+.PHONY: down
 down:
 	docker compose down
 
 # ログ監視(開発)
+.PHONY: logs
 logs:
 	docker compose logs -f
 
@@ -32,17 +34,32 @@ logs:
 
 # docker compose execが要求するのはコンテナ名ではなくサービス名
 # DBコンテナに入る
+.PHONY: dbshell
 dbshell:
 	docker compose exec db /bin/sh
 
 # Backendコンテナに入る
+.PHONY: backshell
 backshell:
 	docker compose exec backend /bin/sh
 
 # Frontendコンテナに入る
+.PHONY: frontshell
 frontshell:
 	docker compose exec frontend /bin/sh
 
 # redisコンテナに入る
+.PHONY: redisshell
 redisshell:
 	docker compose exec redis /bin/sh
+
+# ------------------------------
+# コンテナ内で特定のコマンドを実行
+# ------------------------------
+.PHONY: backcmd
+backcmd:
+	docker compose exec backend $(CMD)
+
+.PHONY: frontcmd
+frontcmd:
+	docker compose exec frontend $(CMD)

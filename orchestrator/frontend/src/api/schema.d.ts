@@ -166,7 +166,7 @@ export interface components {
             method: components["schemas"]["MiaMethod"];
             /**
              * @description 実験名
-             * @default 2026-05-17_10-12-32
+             * @default default_experiment
              */
             name: string;
             /**

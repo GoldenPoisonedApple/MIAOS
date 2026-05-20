@@ -31,7 +31,7 @@ class CreateExperimentRequest:
         load_target_model (bool | Unset): ターゲットモデルを読み込むかどうか Default: False.
         max_epochs (int | Unset): 最大エポック数 Default: 200.
         method (MiaMethod | Unset):  Default: MiaMethod.OFFLINELIRA.
-        name (str | Unset): 実験名 Default: '2026-05-13_19-11-43'.
+        name (str | Unset): 実験名 Default: 'default_experiment'.
         notes (None | str | Unset): 備考
         num_shadow_models (int | Unset): シャドウモデル数 Default: 100.
         seed (int | Unset): シード値 Default: 42.
@@ -49,7 +49,7 @@ class CreateExperimentRequest:
     load_target_model: bool | Unset = False
     max_epochs: int | Unset = 200
     method: MiaMethod | Unset = MiaMethod.OFFLINELIRA
-    name: str | Unset = "2026-05-13_19-11-43"
+    name: str | Unset = "default_experiment"
     notes: None | str | Unset = UNSET
     num_shadow_models: int | Unset = 100
     seed: int | Unset = 42

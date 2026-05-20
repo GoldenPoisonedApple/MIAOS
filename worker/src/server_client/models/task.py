@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar
 from uuid import UUID
 
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
-
-from ..types import UNSET, Unset
 
 if TYPE_CHECKING:
     from ..models.task_args_control import TaskArgsControl
@@ -26,17 +24,17 @@ class Task:
         args_control (TaskArgsControl): 制御情報
         args_keyword (TaskArgsKeyword): キーワード引数
         args_positional (TaskArgsPositional): 位置引数
+        experiment_id (int): 実験ID
         id (UUID): id
         task (str): タスク名
-        error_message (None | str | Unset): エラーメッセージ
     """
 
     args_control: TaskArgsControl
     args_keyword: TaskArgsKeyword
     args_positional: TaskArgsPositional
+    experiment_id: int
     id: UUID
     task: str
-    error_message: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -46,15 +44,11 @@ class Task:
 
         args_positional = self.args_positional.to_dict()
 
+        experiment_id = self.experiment_id
+
         id = str(self.id)
 
         task = self.task
-
-        error_message: None | str | Unset
-        if isinstance(self.error_message, Unset):
-            error_message = UNSET
-        else:
-            error_message = self.error_message
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -63,12 +57,11 @@ class Task:
                 "args_control": args_control,
                 "args_keyword": args_keyword,
                 "args_positional": args_positional,
+                "experiment_id": experiment_id,
                 "id": id,
                 "task": task,
             }
         )
-        if error_message is not UNSET:
-            field_dict["error_message"] = error_message
 
         return field_dict
 
@@ -85,26 +78,19 @@ class Task:
 
         args_positional = TaskArgsPositional.from_dict(d.pop("args_positional"))
 
+        experiment_id = d.pop("experiment_id")
+
         id = UUID(d.pop("id"))
 
         task = d.pop("task")
-
-        def _parse_error_message(data: object) -> None | str | Unset:
-            if data is None:
-                return data
-            if isinstance(data, Unset):
-                return data
-            return cast(None | str | Unset, data)
-
-        error_message = _parse_error_message(d.pop("error_message", UNSET))
 
         task = cls(
             args_control=args_control,
             args_keyword=args_keyword,
             args_positional=args_positional,
+            experiment_id=experiment_id,
             id=id,
             task=task,
-            error_message=error_message,
         )
 
         task.additional_properties = d
