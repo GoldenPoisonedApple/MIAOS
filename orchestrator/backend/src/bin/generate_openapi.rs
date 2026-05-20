@@ -1,15 +1,14 @@
 // バイナリクレート
 
 use server::routes::ApiDoc;
-use std::fs;
 use utoipa::OpenApi;
 
 fn main() {
   // 綺麗にフォーマットされたJSONを生成
   let doc = ApiDoc::openapi().to_pretty_json().unwrap();
 
-  // プロジェクトのルートディレクトリに出力
-  fs::write("openapi.json", doc).expect("JSONの書き込みに失敗しました");
+  // 標準出力にJSON文字列だけを出力する
+  println!("{}", doc);
 
-  println!("openapi.json を生成しました！");
+  eprintln!("openapi.json を生成しました！");
 }

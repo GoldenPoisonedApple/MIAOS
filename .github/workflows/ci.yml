@@ -16,6 +16,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 # jobは基本的に並列実行
 # stepsは上から順に直列実行
 jobs:
@@ -36,15 +39,18 @@ jobs:
         with:
           # 判定の定義
           # CIの定義ファイル自体に変更があった場合、全てのテストを実行
+          # API仕様の変更によるテストも実行
           filters: |
             backend:
               - 'orchestrator/backend/**'
               - '.github/workflows/ci.yml'
             frontend:
               - 'orchestrator/frontend/**'
+              - 'schema/openapi.json'
               - '.github/workflows/ci.yml'
             worker:
               - 'worker/**'
+              - 'schema/openapi.json'
               - '.github/workflows/ci.yml'
 
   # バックエンドのテスト
@@ -166,6 +172,12 @@ jobs:
       - name: cargo test
         run: cargo test --all-features -- --test-threads=1 # --test-threads=1: DB等があるのでテストを並列実行しない
 
+      # OpenAPIの整合性確認
+      - name: Check OpenAPI JSON sync
+        run: |
+          make -C orchestrator generate-openapi
+          git diff --exit-code schema/openapi.json || (echo "Error: openapi.json is out of sync. Please run schema generator locally and commit." && exit 1)
+
   frontend:
     name: Frontend (Node)
     runs-on: ubuntu-latest
@@ -185,11 +197,18 @@ jobs:
           cache-dependency-path: orchestrator/frontend/package-lock.json
 
       - run: npm ci
+      
+      # OpenAPIの整合性確認
+      - name: Check OpenAPI difference
+        run: |
+          make openapi
+          git diff --exit-code || (echo "Error: Frontend generated types are out of sync." && exit 1)
+
       - run: npm run lint
       - run: npm run build
 
   worker:
-    name: Worker (Ruff)
+    name: Worker
     runs-on: ubuntu-latest
     needs: paths
     if: needs.paths.outputs.worker == 'true'
@@ -203,6 +222,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
       - name: Install Ruff
         run: pip install ruff
@@ -214,3 +234,10 @@ jobs:
       - name: Ruff check
         # 生成ファイルは除外
         run: ruff check src
+
+      # OpenAPIの整合性確認
+      - name: Check OpenAPI difference
+        run: |
+          pip install openapi-python-client
+          make openapi
+          git diff --exit-code || (echo "Error: Worker generated types are out of sync." && exit 1)

@@ -54,12 +54,14 @@ redisshell:
 	docker compose exec redis /bin/sh
 
 # ------------------------------
-# コンテナ内で特定のコマンドを実行
+# OpenAPI
 # ------------------------------
-.PHONY: backcmd
-backcmd:
-	docker compose exec backend $(CMD)
+# JSONファイル生成
+.PHONY: generate-openapi
+generate-openapi:
+	docker compose exec backend cargo run --bin generate_openapi > ../schema/openapi.json
 
-.PHONY: frontcmd
-frontcmd:
-	docker compose exec frontend $(CMD)
+# フロントエンドでOpenAPIを使用
+.PHONY: reflect-openapi
+reflect-openapi:
+	docker compose exec frontend make openapi

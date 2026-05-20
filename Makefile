@@ -6,6 +6,6 @@ chown:
 # OpenAPIの整合性確保
 .PHONY: openapi
 openapi:
-	${MAKE} -C orchestrator frontcmd CMD="make openapi"
-	${MAKE} -C worker cmd CMD="make openapi"
-
+	${MAKE} -C orchestrator generate-openapi
+	${MAKE} -C orchestrator reflect-openapi
+	${MAKE} -C worker reflect-openapi
