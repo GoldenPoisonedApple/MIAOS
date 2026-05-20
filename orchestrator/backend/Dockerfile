@@ -45,6 +45,10 @@
 	# フォーマットと静的解析のツールをインストール
 	RUN rustup component add rustfmt clippy
 
+	# audit: 依存関係のセキュリティスキャン用
+	RUN cargo install --locked cargo-audit
+	# もっと厳しくポリシーまでスキャンするやつ
+	RUN cargo install --locked cargo-deny
 	
 	# SQLx CLI: データベースマイグレーション用
 	RUN cargo install --locked sqlx-cli --no-default-features --features postgres
