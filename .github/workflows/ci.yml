@@ -175,8 +175,8 @@ jobs:
       # OpenAPIの整合性確認
       - name: Check OpenAPI JSON sync
         run: |
-          make -C orchestrator generate-openapi
-          git diff --exit-code schema/openapi.json || (echo "Error: openapi.json is out of sync. Please run schema generator locally and commit." && exit 1)
+          cargo run --bin generate_openapi > $GITHUB_WORKSPACE/schema/openapi.json
+          git diff --exit-code || (echo "Error: openapi.json is out of sync. Please run schema generator locally and commit." && exit 1)
 
   frontend:
     name: Frontend (Node)
@@ -201,7 +201,7 @@ jobs:
       # OpenAPIの整合性確認
       - name: Check OpenAPI difference
         run: |
-          make openapi
+          openapi-typescript $GITHUB_WORKSPACE/schema/openapi.json -o src/api/schema.d.ts 
           git diff --exit-code || (echo "Error: Frontend generated types are out of sync." && exit 1)
 
       - run: npm run lint
@@ -239,5 +239,5 @@ jobs:
       - name: Check OpenAPI difference
         run: |
           pip install openapi-python-client
-          make openapi
+          openapi-python-client generate --meta none --output-path src/server_client --overwrite $GITHUB_WORKSPACE/schema/openapi.json
           git diff --exit-code || (echo "Error: Worker generated types are out of sync." && exit 1)
