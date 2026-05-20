@@ -54,7 +54,7 @@ pub struct CreateExperimentRequest {
 impl Default for CreateExperimentRequest {
   fn default() -> Self {
     Self {
-      name: EXPERIMENT_NAME(),
+      name: EXPERIMENT_NAME.to_string(),
       notes: EXPERIMENT_NOTES,
       method: MIA_METHOD,
       // 条件
@@ -137,18 +137,17 @@ pub struct UpdateResultsRequest {
   #[schema(value_type = Object)]
   pub files: Value,
 
-	/// 実験結果 ステータス
-	pub status: ExperimentStatus,
-	/// エラーメッセージ
-	pub error_message: Option<String>,
+  /// 実験結果 ステータス
+  pub status: ExperimentStatus,
+  /// エラーメッセージ
+  pub error_message: Option<String>,
 }
-
 
 /// 処理取得の報告リクエスト
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct ClaimExperimentRequest {
-	/// 実験ID
-	pub id: i64,
-	/// ワーカー名
-	pub worker_name: String,
+  /// 実験ID
+  pub id: i64,
+  /// ワーカー名
+  pub worker_name: String,
 }

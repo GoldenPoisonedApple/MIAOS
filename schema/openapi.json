@@ -1,0 +1,776 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "server",
+    "description": "Backend of MIAOS(Member Inference Attack Orchestration System)",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/experiments": {
+      "get": {
+        "tags": [
+          "Experiments"
+        ],
+        "summary": "実験の一覧取得",
+        "operationId": "get_all_experiments",
+        "responses": {
+          "200": {
+            "description": "実験の一覧を取得",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Model"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Experiments"
+        ],
+        "summary": "実験の結果反映",
+        "operationId": "reflect_experiment_results",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateResultsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "実験結果が正常に反映された",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Model"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "指定された実験が見つからない"
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Experiments"
+        ],
+        "summary": "実験の作成",
+        "operationId": "create_experiment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExperimentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "実験が正常に作成された",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Model"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      }
+    },
+    "/api/experiments/claim": {
+      "put": {
+        "tags": [
+          "Experiments"
+        ],
+        "summary": "処理取得の報告",
+        "operationId": "claim_experiment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimExperimentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "処理取得が正常に報告された",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Model"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "指定された実験が見つからない"
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      }
+    },
+    "/api/experiments/{id}": {
+      "delete": {
+        "tags": [
+          "Experiments"
+        ],
+        "summary": "実験の削除\nPath: /experiments/{id} のような指定の場合 idを取ってこれるエクストラクタ",
+        "operationId": "delete_experiment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "削除する実験のID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "実験が正常に削除された",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      }
+    },
+    "/api/files/{key}": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "ファイルの取得",
+        "operationId": "get_file",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ファイルが正常に取得された",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ファイルが見つからない"
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      }
+    },
+    "/api/tasks": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "タスクの一覧取得",
+        "operationId": "get_all_tasks",
+        "responses": {
+          "200": {
+            "description": "タスクの一覧を取得",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Task"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}": {
+      "delete": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "タスクの削除",
+        "operationId": "delete_task",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "削除するタスクのID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "タスクが正常に削除された",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ClaimExperimentRequest": {
+        "type": "object",
+        "description": "処理取得の報告リクエスト",
+        "required": [
+          "id",
+          "worker_name"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "実験ID"
+          },
+          "worker_name": {
+            "type": "string",
+            "description": "ワーカー名"
+          }
+        }
+      },
+      "CreateExperimentRequest": {
+        "type": "object",
+        "description": "実験の作成リクエスト",
+        "properties": {
+          "base_experiment_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "既存実験結果を流用する実験結果",
+            "default": null
+          },
+          "batch_size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "バッチサイズ",
+            "default": 256
+          },
+          "hyperparameters": {
+            "type": "object",
+            "description": "その他のハイパーパラメータ"
+          },
+          "load_attack_model": {
+            "type": "boolean",
+            "description": "攻撃モデルを読み込むかどうか",
+            "default": false
+          },
+          "load_shadow_model": {
+            "type": "boolean",
+            "description": "シャドウモデルを読み込むかどうか",
+            "default": false
+          },
+          "load_target_model": {
+            "type": "boolean",
+            "description": "ターゲットモデルを読み込むかどうか",
+            "default": false
+          },
+          "max_epochs": {
+            "type": "integer",
+            "format": "int32",
+            "description": "最大エポック数",
+            "default": 200
+          },
+          "method": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MiaMethod",
+                "description": "攻撃手法"
+              }
+            ],
+            "default": "OfflineLira"
+          },
+          "name": {
+            "type": "string",
+            "description": "実験名",
+            "default": "default_experiment"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "備考",
+            "default": null
+          },
+          "num_shadow_models": {
+            "type": "integer",
+            "format": "int32",
+            "description": "シャドウモデル数",
+            "default": 100
+          },
+          "seed": {
+            "type": "integer",
+            "format": "int32",
+            "description": "シード値",
+            "default": 42
+          },
+          "shadow_test_size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "シャドウモデルのテストサイズ",
+            "default": 10520
+          },
+          "shadow_train_size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "シャドウモデルのトレーニングサイズ",
+            "default": 10520
+          },
+          "target_test_size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "ターゲットモデルのテストサイズ",
+            "default": 10520
+          },
+          "target_train_size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "ターゲットモデルのトレーニングサイズ",
+            "default": 10520
+          }
+        }
+      },
+      "ExperimentStatus": {
+        "type": "string",
+        "enum": [
+          "Waiting",
+          "Running",
+          "Succeeded",
+          "Failed"
+        ]
+      },
+      "MiaMethod": {
+        "type": "string",
+        "enum": [
+          "OfflineLira",
+          "Shokri"
+        ]
+      },
+      "Model": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "method",
+          "batch_size",
+          "max_epochs",
+          "num_shadow_models",
+          "target_train_size",
+          "target_test_size",
+          "shadow_train_size",
+          "shadow_test_size",
+          "seed",
+          "hyperparameters",
+          "load_target_model",
+          "load_shadow_model",
+          "load_attack_model",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "base_experiment_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "既存実験結果を流用する実験結果"
+          },
+          "batch_size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "バッチサイズ"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "完了日時"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "作成日時"
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "エラーメッセージ"
+          },
+          "files": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "global_auc": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "全体のAUC"
+          },
+          "hyperparameters": {
+            "type": "object",
+            "description": "その他のハイパーパラメータ"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "主キー"
+          },
+          "load_attack_model": {
+            "type": "boolean",
+            "description": "攻撃モデルを読み込むかどうか"
+          },
+          "load_shadow_model": {
+            "type": "boolean",
+            "description": "シャドウモデルを読み込むかどうか"
+          },
+          "load_target_model": {
+            "type": "boolean",
+            "description": "ターゲットモデルを読み込むかどうか"
+          },
+          "max_epochs": {
+            "type": "integer",
+            "format": "int32",
+            "description": "最大エポック数"
+          },
+          "method": {
+            "$ref": "#/components/schemas/MiaMethod",
+            "description": "攻撃手法"
+          },
+          "name": {
+            "type": "string",
+            "description": "実験名"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "備考"
+          },
+          "num_shadow_models": {
+            "type": "integer",
+            "format": "int32",
+            "description": "シャドウモデル数"
+          },
+          "other_metrics": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "その他のメトリクス"
+          },
+          "seed": {
+            "type": "integer",
+            "format": "int32",
+            "description": "シード値"
+          },
+          "shadow_test_size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "シャドウモデルのテストサイズ"
+          },
+          "shadow_train_size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "シャドウモデルのトレーニングサイズ"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ExperimentStatus",
+            "description": "ステータス"
+          },
+          "target_test_size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "ターゲットモデルのテストサイズ"
+          },
+          "target_train_size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "ターゲットモデルのトレーニングサイズ"
+          },
+          "threshold_at_01_fpr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "0.1%FPRでの閾値"
+          },
+          "threshold_at_1_fpr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "1%FPRでの閾値"
+          },
+          "total_time": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "トータルの実行時間(秒)"
+          },
+          "tpr_at_01_fpr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "0.1%FPRでのTPR"
+          },
+          "tpr_at_1_fpr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "1%FPRでのTPR"
+          },
+          "worker_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "作業PC名"
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "description": "タスク",
+        "required": [
+          "id",
+          "task",
+          "experiment_id",
+          "args_positional",
+          "args_keyword",
+          "args_control"
+        ],
+        "properties": {
+          "args_control": {
+            "type": "object",
+            "description": "制御情報"
+          },
+          "args_keyword": {
+            "type": "object",
+            "description": "キーワード引数"
+          },
+          "args_positional": {
+            "type": "object",
+            "description": "位置引数"
+          },
+          "experiment_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "実験ID"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "id"
+          },
+          "task": {
+            "type": "string",
+            "description": "タスク名"
+          }
+        }
+      },
+      "UpdateResultsRequest": {
+        "type": "object",
+        "description": "実験の結果更新リクエスト",
+        "required": [
+          "experiment_id",
+          "worker_name",
+          "other_metrics",
+          "files",
+          "status"
+        ],
+        "properties": {
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "エラーメッセージ"
+          },
+          "experiment_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "実験ID"
+          },
+          "files": {
+            "type": "object",
+            "description": "その他のファイルのパス"
+          },
+          "global_auc": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "全体のAUC"
+          },
+          "other_metrics": {
+            "type": "object",
+            "description": "拡張メトリクス"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ExperimentStatus",
+            "description": "実験結果 ステータス"
+          },
+          "threshold_at_01_fpr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "0.1%FPRでの閾値"
+          },
+          "threshold_at_1_fpr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "1%FPRでの閾値"
+          },
+          "total_time": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "トータルの実行時間(秒)"
+          },
+          "tpr_at_01_fpr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "0.1%FPRでのTPR"
+          },
+          "tpr_at_1_fpr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "1%FPRでのTPR"
+          },
+          "worker_name": {
+            "type": "string",
+            "description": "作業PC名"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Experiments",
+      "description": "実験管理API"
+    },
+    {
+      "name": "Tasks",
+      "description": "タスク管理API"
+    },
+    {
+      "name": "Files",
+      "description": "ファイル管理API"
+    }
+  ]
+}

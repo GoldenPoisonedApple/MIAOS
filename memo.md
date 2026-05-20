@@ -4,10 +4,16 @@ Membership Inference Attack Orchestration System
 実験はidで管理することに
 <- わざわざ名前にしなくても良い、idでも一意性が付く、検索容易性がある、覚えやすく入力しやすい
 
-次はリポジトリ全部一つにまとめた方がいいな...
-その方が統合テスト楽だし、開発環境でもできるし...
-
 sudo chown -R $USER:$USER .
+
+
+## compose
+composeは基本的にcontainer_nameはつけないほうがいいかと: 一貫性が無くなる, スケールできなくなる, ネットワーク解決が名前依存になってしまって困る
+ctl+shift+P
+>Dev Containers: Open Folder in Container
+で.devcontainerが存在する場所を開く
+選択して実行
+.devcontainerはそれぞれのコンテナのrootに設置してもいいかもしれない
 
 ## バックエンド
 なんかcargoが効かないので応急処置
@@ -118,6 +124,22 @@ Cargo.tomlに追記
 default-run = "server"
 ```
 でもよく考えたらURLでJSON取ってこれるからいらんかった
+
+- ホスト側の環境構築
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# シェル再起動
+
+# Dockerfileの rust:1.93 に固定
+rustup toolchain install 1.93
+rustup default 1.93
+
+# 現在のバージョン確認
+rustc --version
+cargo --version
+```
+
 
 ## フロントエンド
 utoipaとの連携
@@ -263,6 +285,9 @@ Tasks: [Task { id: 1107cc26-b460-4405-8b07-96ff7007f7d2, task: "mia_tasks.run_at
 
 ブラウザは全てバックエンドを通っていて、MINIOが内部ネットワーク完結なので Backend Proxy の方向性で
 
+## worker
+CIのためruffを導入
+
 
 # モノレポ化しました
 仕様変更、CI/CDが楽になる
@@ -283,6 +308,13 @@ Turborepo: モノレポ用ビルドシステム(変更検知、再ビルド) 今
 
 これでテスト環境をまるまる簡単に構築できるようになったので、わざわざテスト用のワーカー作る必要が無くなった
 
+# CI
+それぞれの環境でのlint, format
+OpenAPIでの整合性確保
+- openapi.jsonはGit管理するのがベストプラクティスらしい
+	APIの変更がgit管理で可視化される, CIの完全並列化, APIの仕様だけ先に変更することで他をブロックせずに開発可能
+
+cargo auditを実行したいところだが、依存クレートの依存クレートが怒られていて非常に面倒くさいためやっていない
 
 ## TODO
 ### 優先度: 高
@@ -292,7 +324,7 @@ CIはMakefile作ろう
 
 フィルタ、順番情報をバックエンドに記録
 
-
+CI: openAPIの整合性を測った方がいいのでは
 
 ### 優先度: 中
 

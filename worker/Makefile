@@ -16,11 +16,14 @@ export
 # 一行にしないと、各行別のシェルのため意味がない
 
 
-# OpenAPIからPythonクライアントを生成
-.PHONY: openapi
-openapi:
-	openapi-python-client generate --url $(OPENAPI_URL) --meta none --output-path src/server_client --overwrite
+# ファイルの所有者を変更
+.PHONY: chown
+chown:
+	sudo chown -R $(shell whoami):$(shell whoami) .
 
+# ------------------------------
+# コンテナ管理
+# ------------------------------
 # ビルド
 .PHONY: build
 build:
@@ -36,15 +39,15 @@ dev:
 shell:
 	docker exec -it ito_research bash
 
+# 特定のコマンドを実行
+.PHONY: cmd
+cmd:
+	docker exec ito_research $(CMD)
+
 # 実行
 .PHONY: run
 run:
 	docker run -d --gpus all --name ito_research -it --rm --shm-size=8g -v $(CURDIR):/workspace -e PYTHONPATH=/workspace --env-file .env mia_ito bash -c "celery -A src.workers.celery_tasks worker --loglevel=info -P solo"
-
-# コンテナ内実行
-.PHONY: celery
-celery:
-	celery -A src.workers.celery_tasks worker --loglevel=info -P solo
 
 # コンテナを停止・削除
 .PHONY: remove
@@ -52,13 +55,41 @@ remove:
 	docker stop ito_research
 	docker rm ito_research
 
-# ファイルの所有者を変更
-.PHONY: chown
-chown:
-	sudo chown -R $(shell whoami):$(shell whoami) .
-
 # ログ
 # docker logs -f <container_id>
 
 # 保存場所の指定 読み込みは同じ、出力は特定場所
 # docker run -d --gpus all -it --rm --shm-size=8g -v $(pwd):/workspace:ro -v /tmp/mia_ito:/workspace/models mia_ito python main.py
+
+.PHONY: reflect-openapi
+reflect-openapi:
+	docker exec ito_research make openapi
+
+# ------------------------------
+# コンテナ内実行
+# ------------------------------
+# OpenAPIからPythonクライアントを生成
+.PHONY: openapi
+openapi:
+	openapi-python-client generate --url $(OPENAPI_URL) --meta none --output-path src/server_client --overwrite
+
+# Celeryを起動
+.PHONY: celery
+celery:
+	celery -A src.workers.celery_tasks worker --loglevel=info -P solo
+
+
+# フォーマット
+.PHONY: format
+format:
+	ruff format src
+
+# 静的解析
+.PHONY: lint
+lint:
+	ruff check src
+
+# チェック
+.PHONY: check
+check:
+	ruff check src

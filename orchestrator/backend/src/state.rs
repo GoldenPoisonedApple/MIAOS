@@ -3,9 +3,8 @@ use crate::repositories::storage::StorageRepository;
 use crate::repositories::task::TaskRepository;
 use crate::services::experiment::ExperimentService;
 use crate::services::file::StorageService;
-use std::sync::Arc;
 use axum::extract::FromRef;
-
+use std::sync::Arc;
 
 // DIコンテナの役割を果たす
 /// AppState: アプリケーションの状態を保持する

@@ -42,6 +42,7 @@ aws-sdk-s3 = "1.132.0"
 urlencoding = "2.1.3"
 
 # cargo build --releaseには含まれない
+# --dev
 [dev-dependencies]
 # for the test
 mockall = "0.14.0"

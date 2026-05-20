@@ -22,24 +22,25 @@ MIAOS_API_URL: str = os.getenv("MIAOS_API_URL")
 # デバイス
 DEVICE: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # データセットの保存先ディレクトリ
-DATA_DIR: str = './data'
+DATA_DIR: str = "./data"
 # モデルの保存先ディレクトリ
-MODEL_DIR: str = './models'
+MODEL_DIR: str = "./models"
 # キャッシュ
-LOCAL_CACHE_DIR: str = './cache'
+LOCAL_CACHE_DIR: str = "./cache"
 # ターゲットモデルの保存名
-TARGET_MODEL_NAME: str = 'target_model.pth'	
+TARGET_MODEL_NAME: str = "target_model.pth"
 # シャドーモデルの保存名
-SHADOW_MODEL_NAME: str = 'shadow_models.pth'
+SHADOW_MODEL_NAME: str = "shadow_models.pth"
 # 攻撃モデルの保存名
-ATTACK_MODEL_NAME: str = 'attack_models.pth'
+ATTACK_MODEL_NAME: str = "attack_models.pth"
 
 # クラスの数
 NUM_CLASSES: int = 100
 # 攻撃モデルのエポック数
 ATTACK_MODEL_EPOCHS: int = 10
 
+
 # 攻撃手法の列挙型
 class MIAMethod(Enum):
-	OFFLINE_LIRA = "Offline LiRA"
-	SHOKRI = "Shokri"
+    OFFLINE_LIRA = "Offline LiRA"
+    SHOKRI = "Shokri"

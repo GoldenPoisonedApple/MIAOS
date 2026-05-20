@@ -7,7 +7,9 @@ use utoipa::ToSchema;
 
 use crate::dto::experiment::{ClaimExperimentRequest, UpdateResultsRequest};
 
-#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema)]
+#[derive(
+  Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
+)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "experiment_status")]
 pub enum ExperimentStatus {
   #[sea_orm(string_value = "WAITING")]
@@ -20,7 +22,9 @@ pub enum ExperimentStatus {
   Failed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema)]
+#[derive(
+  Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
+)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "mia_method")]
 pub enum MiaMethod {
   #[sea_orm(string_value = "offline_lira")]
@@ -130,7 +134,6 @@ pub enum Relation {
 /// データベースに保存する直前 or 直後に特定の処理を挟むためのトレイト
 impl ActiveModelBehavior for ActiveModel {}
 
-
 // Rich Domain Modelを頑張る
 // createの処理については idがないのでどうしようもない 新規作成時に複雑なビジネスロジックがないのでDTOをそのままrepositoryにねじ込む構造
 // 複雑なロジックがある場合は、serviceとrepositoryの間のDTOを作成するのが良いかと
@@ -144,133 +147,131 @@ impl Model {
 
     // 結果の反映
     self.worker_name = Some(results.worker_name);
-		// 結果
+    // 結果
     self.global_auc = results.global_auc;
     self.tpr_at_1_fpr = results.tpr_at_1_fpr;
     self.threshold_at_1_fpr = results.threshold_at_1_fpr;
     self.tpr_at_01_fpr = results.tpr_at_01_fpr;
     self.threshold_at_01_fpr = results.threshold_at_01_fpr;
     self.other_metrics = Some(results.other_metrics);
-		// 時間
+    // 時間
     self.total_time = results.total_time;
-		// ファイル
+    // ファイル
     self.files = Some(results.files);
   }
 
-	/// 処理取得の報告
-	pub fn claim(&mut self, claim: ClaimExperimentRequest) {
-		self.status = ExperimentStatus::Running;
-		self.worker_name = Some(claim.worker_name);
-	}
+  /// 処理取得の報告
+  pub fn claim(&mut self, claim: ClaimExperimentRequest) {
+    self.status = ExperimentStatus::Running;
+    self.worker_name = Some(claim.worker_name);
+  }
 
-	// SeaORMの仕様のせいでつくってる変換 Updateを通知してあげる
-	pub fn into_active_model_for_update(self) -> ActiveModel {
-		ActiveModel {
-			id: Unchanged(self.id),	// 更新対象ではないのでUnchanged
-			name: Set(self.name),
-			notes: Set(self.notes),
-			method: Set(self.method),
-			batch_size: Set(self.batch_size),
-			max_epochs: Set(self.max_epochs),
-			num_shadow_models: Set(self.num_shadow_models),
-			target_train_size: Set(self.target_train_size),
-			target_test_size: Set(self.target_test_size),
-			shadow_train_size: Set(self.shadow_train_size),
-			shadow_test_size: Set(self.shadow_test_size),
-			seed: Set(self.seed),
-			hyperparameters: Set(self.hyperparameters),
-			base_experiment_id: Set(self.base_experiment_id),
-			load_target_model: Set(self.load_target_model),
-			load_shadow_model: Set(self.load_shadow_model),
-			load_attack_model: Set(self.load_attack_model),
-			status: Set(self.status),
-			worker_name: Set(self.worker_name),
-			completed_at: Set(self.completed_at),
-			error_message: Set(self.error_message),
-			global_auc: Set(self.global_auc),
-			tpr_at_1_fpr: Set(self.tpr_at_1_fpr),
-			threshold_at_1_fpr: Set(self.threshold_at_1_fpr),
-			tpr_at_01_fpr: Set(self.tpr_at_01_fpr),
-			threshold_at_01_fpr: Set(self.threshold_at_01_fpr),
-			other_metrics: Set(self.other_metrics),
-			total_time: Set(self.total_time),
-			files: Set(self.files),
-			created_at: Unchanged(self.created_at),	// 作成日時は更新対象ではないのでUnchanged
-		}
-	}
+  // SeaORMの仕様のせいでつくってる変換 Updateを通知してあげる
+  pub fn into_active_model_for_update(self) -> ActiveModel {
+    ActiveModel {
+      id: Unchanged(self.id), // 更新対象ではないのでUnchanged
+      name: Set(self.name),
+      notes: Set(self.notes),
+      method: Set(self.method),
+      batch_size: Set(self.batch_size),
+      max_epochs: Set(self.max_epochs),
+      num_shadow_models: Set(self.num_shadow_models),
+      target_train_size: Set(self.target_train_size),
+      target_test_size: Set(self.target_test_size),
+      shadow_train_size: Set(self.shadow_train_size),
+      shadow_test_size: Set(self.shadow_test_size),
+      seed: Set(self.seed),
+      hyperparameters: Set(self.hyperparameters),
+      base_experiment_id: Set(self.base_experiment_id),
+      load_target_model: Set(self.load_target_model),
+      load_shadow_model: Set(self.load_shadow_model),
+      load_attack_model: Set(self.load_attack_model),
+      status: Set(self.status),
+      worker_name: Set(self.worker_name),
+      completed_at: Set(self.completed_at),
+      error_message: Set(self.error_message),
+      global_auc: Set(self.global_auc),
+      tpr_at_1_fpr: Set(self.tpr_at_1_fpr),
+      threshold_at_1_fpr: Set(self.threshold_at_1_fpr),
+      tpr_at_01_fpr: Set(self.tpr_at_01_fpr),
+      threshold_at_01_fpr: Set(self.threshold_at_01_fpr),
+      other_metrics: Set(self.other_metrics),
+      total_time: Set(self.total_time),
+      files: Set(self.files),
+      created_at: Unchanged(self.created_at), // 作成日時は更新対象ではないのでUnchanged
+    }
+  }
 }
-
 
 #[cfg(test)]
 mod tests {
-	use super::*;
-	use crate::test_utils::update_experiment_request_factory;
+  use super::*;
+  use crate::test_utils::update_experiment_request_factory;
 
-	/// モデルファクトリ
-	fn create_model() -> Model {
-		let model = Model {
-			id: 1,
-			name: "test_experiment".to_string(),
-			notes: Some("backend_test".to_string()),
-			method: MiaMethod::OfflineLira,
-			batch_size: 10,
-			max_epochs: 10,
-			num_shadow_models: 10,
-			target_train_size: 10,
-			target_test_size: 10,
-			shadow_train_size: 10,
-			shadow_test_size: 10,
-			seed: 10,
-			hyperparameters: serde_json::json!({}),
-			base_experiment_id: None,
-			load_target_model: false,
-			load_shadow_model: false,
-			load_attack_model: false,
-			status: ExperimentStatus::Waiting,
-			worker_name: None,
-			completed_at: None,
-			error_message: None,
-			global_auc: None,
-			tpr_at_1_fpr: None,
-			threshold_at_1_fpr: None,
-			tpr_at_01_fpr: None,
-			threshold_at_01_fpr: None,
-			other_metrics: None,
-			total_time: None,
-			files: None,
-			created_at: TimeDateTimeWithTimeZone::from(OffsetDateTime::now_utc()),
-		};
-		model
-	}
-	
-	/// 実験を完了状態にし、結果を反映するテスト
-	#[test]
-	fn test_complete() {
-		// Arrange
-		let mut experiment = create_model();
-		let request = update_experiment_request_factory(experiment.id, ExperimentStatus::Succeeded);
-		let completed_at = OffsetDateTime::now_utc();
-		// Act
-		experiment.complete(request, completed_at);
-		// Assert
-		assert_eq!(experiment.status, ExperimentStatus::Succeeded); // ステータスがセットされていること
-		assert_eq!(experiment.completed_at, Some(completed_at)); // 完了時刻がセットされている事
-		assert_eq!(experiment.worker_name, Some("test_worker".to_string())); // 結果が反映されていること
-	}
+  /// モデルファクトリ
+  fn create_model() -> Model {
+    Model {
+      id: 1,
+      name: "test_experiment".to_string(),
+      notes: Some("backend_test".to_string()),
+      method: MiaMethod::OfflineLira,
+      batch_size: 10,
+      max_epochs: 10,
+      num_shadow_models: 10,
+      target_train_size: 10,
+      target_test_size: 10,
+      shadow_train_size: 10,
+      shadow_test_size: 10,
+      seed: 10,
+      hyperparameters: serde_json::json!({}),
+      base_experiment_id: None,
+      load_target_model: false,
+      load_shadow_model: false,
+      load_attack_model: false,
+      status: ExperimentStatus::Waiting,
+      worker_name: None,
+      completed_at: None,
+      error_message: None,
+      global_auc: None,
+      tpr_at_1_fpr: None,
+      threshold_at_1_fpr: None,
+      tpr_at_01_fpr: None,
+      threshold_at_01_fpr: None,
+      other_metrics: None,
+      total_time: None,
+      files: None,
+      created_at: OffsetDateTime::now_utc(),
+    }
+  }
 
-	/// 処理取得の報告テスト
-	#[test]
-	fn test_claim() {
-		// Arrange
-		let mut experiment = create_model();
-		let request = ClaimExperimentRequest {
-			id: experiment.id,
-			worker_name: "test_worker".to_string(),
-		};
-		// Act
-		experiment.claim(request);
-		// Assert
-		assert_eq!(experiment.status, ExperimentStatus::Running); // ステータスが実行中となっていること
-		assert_eq!(experiment.worker_name, Some("test_worker".to_string())); // ワーカーがセットされていること
-	}
+  /// 実験を完了状態にし、結果を反映するテスト
+  #[test]
+  fn test_complete() {
+    // Arrange
+    let mut experiment = create_model();
+    let request = update_experiment_request_factory(experiment.id, ExperimentStatus::Succeeded);
+    let completed_at = OffsetDateTime::now_utc();
+    // Act
+    experiment.complete(request, completed_at);
+    // Assert
+    assert_eq!(experiment.status, ExperimentStatus::Succeeded); // ステータスがセットされていること
+    assert_eq!(experiment.completed_at, Some(completed_at)); // 完了時刻がセットされている事
+    assert_eq!(experiment.worker_name, Some("test_worker".to_string())); // 結果が反映されていること
+  }
+
+  /// 処理取得の報告テスト
+  #[test]
+  fn test_claim() {
+    // Arrange
+    let mut experiment = create_model();
+    let request = ClaimExperimentRequest {
+      id: experiment.id,
+      worker_name: "test_worker".to_string(),
+    };
+    // Act
+    experiment.claim(request);
+    // Assert
+    assert_eq!(experiment.status, ExperimentStatus::Running); // ステータスが実行中となっていること
+    assert_eq!(experiment.worker_name, Some("test_worker".to_string())); // ワーカーがセットされていること
+  }
 }

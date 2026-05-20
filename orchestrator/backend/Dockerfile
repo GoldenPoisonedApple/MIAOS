@@ -7,7 +7,9 @@
 	# 必要なシステムパッケージのインストール
 	# - pkg-config, libssl-dev: Rustのコンパイルに必要
 	# - lld, clang: 高速なリンカー(任意だが推奨)
-	RUN apt-get update && apt-get install -y \
+	# bookworm のセキュリティ更新を取り込み（スキャナの libssl / perl 等の CVE を減らす）
+	# --no-install-recommends: 不要なパッケージをインストールしない Dockerfileでは標準 サイズを減らしアタック面を軽減
+	RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
 		pkg-config \
 		libssl-dev \
 		lld \
@@ -34,17 +36,19 @@
 	WORKDIR /app
 	
 	# 開発に必要なツールのインストール
-	RUN apt-get update && apt-get install -y \
+	RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
 		curl \
 		git \
 		make \
 		&& rm -rf /var/lib/apt/lists/*
 
-	# 環境変数の設定 なぜかこれしないとcargoが使えない
-	ENV PATH="/usr/local/cargo/bin:/usr/local/rustup/bin:${PATH}"
+	# フォーマットと静的解析のツールをインストール
+	RUN rustup component add rustfmt clippy
 
-	RUN rustup component add rustfmt
-
+	# audit: 依存関係のセキュリティスキャン用
+	RUN cargo install --locked cargo-audit
+	# もっと厳しくポリシーまでスキャンするやつ
+	RUN cargo install --locked cargo-deny
 	
 	# SQLx CLI: データベースマイグレーション用
 	RUN cargo install --locked sqlx-cli --no-default-features --features postgres
@@ -90,7 +94,7 @@
 	WORKDIR /app
 	
 	# 実行時に必要な SSL ライブラリ等のみインストール
-	RUN apt-get update && apt-get install -y \
+	RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
 		ca-certificates \
 		libssl3 \
 		&& rm -rf /var/lib/apt/lists/*
