@@ -1,9 +1,9 @@
 services:
   ito_research:
-    # まだGHCRにはpushしてない
-    # image: ghcr.io/<org>/miaos-worker:${TAG:-latest}       
-    build:
-      target: prod
+    # build:
+    #   target: prod
+    image: ghcr.io/MIAOS/worker:${IMAGE_TAG:-latest}
+    pull_policy: always
 
     # タスク保護 実行中のタスクが完了してから終了: 16時間まで待つ
     # SIGTERMが送信されてから、SIGKILLが送信されるまでの時間

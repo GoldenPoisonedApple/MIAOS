@@ -7,10 +7,6 @@ concurrency:
 
 # ワークフローのトリガー条件
 on:
-  # # 直接pushされた場合
-  # push:
-  #   branches:
-  #     - main
   # PRされた場合
   pull_request:
     branches: [main]

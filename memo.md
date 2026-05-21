@@ -16,6 +16,8 @@ ctl+shift+P
 選択して実行
 .devcontainerはそれぞれのコンテナのrootに設置してもいいかもしれない
 
+ビルドはDockerfileでcomposeは起動や依存関係管理なのね
+
 ## バックエンド
 なんかcargoが効かないので応急処置
 ```bash
@@ -215,6 +217,11 @@ KEYS *
 # キューの中身確認 0(最初)から-1(最後まで)
 LRANGE celery 0 -1
 ```
+
+celeryはタスクを取得するときにBRPOPLPUSHでキューから処理中リスト(redisの内部)に移動する
+そのためacks_late=Trueしても他のworkerが仕事を取ることは無い
+
+
 #### なんと
 Redisをブローカーとして使用した場合に、送信するメッセージに exchange キーを含め忘れると言うバグがあり、直されていない
 似たようなことをやるならRabbitMQがよさそうではある

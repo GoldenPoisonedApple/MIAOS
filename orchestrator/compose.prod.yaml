@@ -6,14 +6,18 @@ services:
 
   frontend:
     restart: unless-stopped
-    build:
-      target: prod  # ビルドステージ指定
+    # build:
+    #   target: prod  # ビルドステージ指定
+    image: ghcr.io/MIAOS/orchestrator-frontend:${IMAGE_TAG:-latest}
+    pull_policy: always
     ports:
       - "80:80"
 
   backend:
     restart: unless-stopped
-    build:
-      target: prod
+    # build:
+    #   target: prod
+    image: ghcr.io/MIAOS/orchestrator-backend:${IMAGE_TAG:-latest}
+    pull_policy: always
     environment:
       - LOG_LEVEL=info
