@@ -105,7 +105,7 @@ services:
         condition: service_healthy # MinIOのヘルスチェック待機
     volumes:
       - ./backend:/app
-      - target_cache:/app/target # ビルドキャッシュを永続化して、ビルド時間短縮、 cargo watch競合回避
+      - target_cache:/app/target # ビルドキャッシュを永続化して、ビルド時間短縮、 cargo watch競合回避 dockerは深いパスのマウントのパスを優先
       - cargo_cache:/usr/local/cargo/registry # Cargoの依存キャッシュも永続化
     ports:
       - "3000:3000"

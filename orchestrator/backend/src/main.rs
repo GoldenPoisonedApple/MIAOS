@@ -29,8 +29,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   tracing::info!("Running database migrations...");
   sqlx::migrate!("./migrations")
     .run(db_pool.get_postgres_connection_pool()) // プールの参照取得
-    .await
-    .unwrap();
+    .await?;
+
   tracing::info!("Migrations completed.");
   let experiment_repository = ExperimentRepository::new(db_pool);
   // Redis
