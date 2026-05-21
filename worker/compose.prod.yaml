@@ -5,8 +5,10 @@ services:
     build:
       target: prod
 
-    # タスク保護
-    stop_grace_period: 1h
+    # タスク保護 実行中のタスクが完了してから終了: 16時間まで待つ
+    # SIGTERMが送信されてから、SIGKILLが送信されるまでの時間
+    # CeleryはSIGTERMを受け取ると、タスクを完了させて終了させる
+    stop_grace_period: 16h
     volumes:
       - miaos_worker_data:/workspace/data # データセット
       - miaos_worker_cache:/workspace/cache # キャッシュ(他の実験結果など)

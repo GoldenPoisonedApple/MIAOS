@@ -23,7 +23,15 @@ from src.server_client.api.experiments import (
 )
 
 app = Celery("mia_tasks", broker=cfg.REDIS_URL)
-
+# 全タスクのデフォルト値設定
+app.conf.update(
+    broker_transport_options={
+        # これを超えるとRedisが「ワーカーが死んだ」と判断し再キューイングする。
+        "visibility_timeout": cfg.CELERY_VISIBILITY_TIMEOUT,
+    },
+    task_acks_late=True,	# タスク完了後にACK brokerにタスクを残す
+    task_reject_on_worker_lost=True,	# ワーカーが死んだ場合、タスクを再キューイングする
+)
 
 # メイン処理
 # 送信処理以外を担う
@@ -109,7 +117,11 @@ def main(id: int, params) -> UpdateResultsRequest:
 
 
 # タスクの取得、送信処理を担う
-@app.task(name="mia_tasks.run_attack")
+@app.task(
+    name="mia_tasks.run_attack",
+	acks_late=True,             # タスク完了後にACK
+    reject_on_worker_lost=True, # ワーカー異常終了時にrequeue
+)
 def execute_attack_task(_params):
     """
     _params: {"mia_method": "Shokri", "batch_size": 128, ...} のような辞書
