@@ -1,0 +1,19 @@
+services:
+  minio:
+    # NASをマウントしたディレクトリをMinIOの保存領域として指定
+    volumes:
+      - /mnt/kslib/minio_data:/data
+
+  frontend:
+    restart: unless-stopped
+    build:
+      target: prod  # ビルドステージ指定
+    ports:
+      - "80:80"
+
+  backend:
+    restart: unless-stopped
+    build:
+      target: prod
+    environment:
+      - LOG_LEVEL=info

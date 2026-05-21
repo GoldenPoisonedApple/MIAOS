@@ -1,6 +1,9 @@
 {
   "name": "MIAOS Frontend",
-  "dockerComposeFile": "../../orchestrator/docker-compose.yaml",
+  "dockerComposeFile": [
+		"../../orchestrator/compose.base.yaml",
+		"../../orchestrator/compose.dev.yaml"
+	],
   "service": "frontend",
   "workspaceFolder": "/app",
   "customizations": {
