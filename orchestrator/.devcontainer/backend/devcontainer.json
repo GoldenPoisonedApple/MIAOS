@@ -1,8 +1,8 @@
 {
   "name": "MIAOS Backend",
   "dockerComposeFile": [
-		"../../orchestrator/compose.base.yaml",
-		"../../orchestrator/compose.dev.yaml"
+		"../orchestrator/compose.base.yaml",
+		"../orchestrator/compose.dev.yaml"
 	],
   "service": "backend",
   "workspaceFolder": "/app",

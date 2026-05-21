@@ -1,0 +1,17 @@
+{
+  "name": "MIAOS Worker",
+  "dockerComposeFile": [
+		"../compose.base.yaml",
+		"../compose.dev.yaml"
+	],
+  "service": "ito_research",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anysphere.cursorpyright",
+				"donjayamanne.python-extension-pack"
+      ]
+    }
+  }
+}
