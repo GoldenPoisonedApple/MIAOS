@@ -227,7 +227,7 @@ jobs:
           script: |
             set -euo pipefail
             # ホームディレクトリ以下に配置
-            cd $HOME/miaos
+            cd $HOME/MIAOS/
             git pull origin main
 
             cd orchestrator
@@ -296,7 +296,7 @@ jobs:
           script: |
             set -euo pipefail
             # ホームディレクトリ以下に配置
-            cd $HOME/miaos
+            cd $HOME/MIAOS/
             git pull origin main
 
             cd worker
