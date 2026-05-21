@@ -5,6 +5,7 @@ services:
 
   frontend:
     build:
+      context: ./frontend
       target: dev  # ビルドステージ指定
     working_dir: /app
     environment:
@@ -18,6 +19,7 @@ services:
 
   backend:
     build:
+      context: ./backend
       target: dev # ビルドステージ指定
     working_dir: /app
     environment:

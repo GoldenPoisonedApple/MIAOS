@@ -101,6 +101,7 @@ WORKDIR /app
 # 実行時に必要な SSL ライブラリ等のみインストール
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
 	ca-certificates \
+	curl \
 	libssl3 \
 	&& rm -rf /var/lib/apt/lists/*
 

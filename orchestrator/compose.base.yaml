@@ -64,8 +64,6 @@ services:
 
   frontend:
     init: true  # ゾンビプロセスを防ぐ
-    build:
-      context: ./frontend   # ./frontend の Dockerfile を使用
     depends_on:
       - backend
     networks:
@@ -74,8 +72,6 @@ services:
 
   backend:
     init: true  # ゾンビプロセスを防ぐ
-    build:
-      context: ./backend  # ./backend の Dockerfile を使用
     environment:
       - TZ=Asia/Tokyo
       - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
