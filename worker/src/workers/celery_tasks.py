@@ -29,9 +29,10 @@ app.conf.update(
         # これを超えるとRedisが「ワーカーが死んだ」と判断し再キューイングする。
         "visibility_timeout": cfg.CELERY_VISIBILITY_TIMEOUT,
     },
-    task_acks_late=True,	# タスク完了後にACK brokerにタスクを残す
-    task_reject_on_worker_lost=True,	# ワーカーが死んだ場合、タスクを再キューイングする
+    task_acks_late=True,  # タスク完了後にACK brokerにタスクを残す
+    task_reject_on_worker_lost=True,  # ワーカーが死んだ場合、タスクを再キューイングする
 )
+
 
 # メイン処理
 # 送信処理以外を担う
@@ -119,8 +120,8 @@ def main(id: int, params) -> UpdateResultsRequest:
 # タスクの取得、送信処理を担う
 @app.task(
     name="mia_tasks.run_attack",
-	acks_late=True,             # タスク完了後にACK
-    reject_on_worker_lost=True, # ワーカー異常終了時にrequeue
+    acks_late=True,  # タスク完了後にACK
+    reject_on_worker_lost=True,  # ワーカー異常終了時にrequeue
 )
 def execute_attack_task(_params):
     """
