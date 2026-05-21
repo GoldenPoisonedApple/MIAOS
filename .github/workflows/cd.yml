@@ -225,6 +225,7 @@ jobs:
           proxy_host: ${{ secrets.BASTION_HOST }}
           proxy_username: ${{ secrets.BASTION_USER }}
           proxy_key: ${{ secrets.DEPLOY_SSH_KEY }}
+          proxy_port: ${{ secrets.BASTION_PORT }}
           script: |
             set -euo pipefail
             # ホームディレクトリ以下に配置
@@ -292,6 +293,7 @@ jobs:
           proxy_host: ${{ secrets.BASTION_HOST }}
           proxy_username: ${{ secrets.BASTION_USER }}
           proxy_key: ${{ secrets.DEPLOY_SSH_KEY }}
+          proxy_port: ${{ secrets.BASTION_PORT }}
           # command_timeout: タスク完了待ちの上限（最長タスク時間 + バッファ）
           command_timeout: 1000m
           script: |
