@@ -4,6 +4,7 @@ Membership Inference Attack Orchestration System
 実験はidで管理することに
 <- わざわざ名前にしなくても良い、idでも一意性が付く、検索容易性がある、覚えやすく入力しやすい
 
+git ls-files | tree --fromfile
 sudo chown -R $USER:$USER .
 
 
@@ -51,6 +52,7 @@ cargo test -- --test-threads=1
 # 特定のものだけ実行 ログも見る
 cargo test repositories::task -- --nocapture
 ```
+なんと#[sqlx::test]にするとテストごとに独立したトランザクションを実施し終了時にロールバックで戻すので並列で行うことが可能になる
 
 色々考えたがいい方法が無かったので
 noteが backend_test のデータはテスト用とするカスの手法
@@ -172,6 +174,8 @@ npm run gen:api
 ```
 
 生成も、どうせ変更を加えた時にするので、gitignoreに入れない方がいいらしい
+持ってきてそのまま実行可能だし
+複数人開発となるとコンフリクトの温床となるため、やらんほうがいいらしい
 
 ## DB
 
@@ -319,12 +323,13 @@ cargo auditを実行したいところだが、依存クレートの依存クレ
 ## TODO
 ### 優先度: 高
 CI作る:
+sqlは専用テストしてredisはモックにすれば並列テスト可能
 いや違う、redisだけは外部依存だからモックでテストするようにしないといけない taskのreposityでデフォルトテストはしない方向で
 CIはMakefile作ろう
 
 フィルタ、順番情報をバックエンドに記録
 
-CI: openAPIの整合性を測った方がいいのでは
+CD
 
 ### 優先度: 中
 
@@ -332,7 +337,11 @@ CI: openAPIの整合性を測った方がいいのでは
 
 タスクの中に条件ぶち込まなくてもClaimの返り値で条件取得できるから、タスクにはidだけ入れておけばいいのでは？
 
+Jsonからコード生成できるようにしたいよね
+
 ### 優先度: 低
+
+config.py の ./cache, ./models, ./data はコンテナ内の /workspace 配下に書かれます。appuser + chown のおかげで 書き込み自体は通る はずです。ただしコンテナ再作成で消える
 
 CORS設定とか
 

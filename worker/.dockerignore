@@ -1,0 +1,15 @@
+# Docker build 時に「コンテキストに含めないファイル」を指定
+# ビルドが早くなる, イメージサイズを小さく
+# データセット
+/data/
+/models/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+.ruff_cache/
+
+# env
+.env

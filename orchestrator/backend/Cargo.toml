@@ -52,3 +52,11 @@ tower = "0.5.2"
 # ビルド時に、公式の0.5.5を手元のlibs/rusty-celeryで上書きする 送信メッセージにexchangeキーがないためエラーとなる パッチコードで上書き
 [patch.crates-io]
 celery = { path = "libs/rusty-celery" }
+
+
+[profile.dev]
+debug = 1 # ローカル開発時のコンパイルを少し速くする (デフォルトは2)
+
+[profile.test]
+debug = 0 # CIテスト時はデバッグ情報(スタックトレースの詳細度)を削って高速化
+opt-level = 0 # 最適化はしない（コンパイル速度優先）

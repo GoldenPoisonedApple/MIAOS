@@ -1,5 +1,7 @@
+# データセット
 /data/
 /models/
+
 __pycache__/
 .vscode/
 .env

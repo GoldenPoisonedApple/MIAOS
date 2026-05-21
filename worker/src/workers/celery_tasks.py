@@ -44,6 +44,7 @@ def main(id: int, params) -> UpdateResultsRequest:
 
         # 他のPCのNASと衝突しないよう、一時ディレクトリを生成
         # ここにおける一時ディレクトリはコンテナ内の /tmp/ 配下に作成される
+        # withを抜けると自動で削除される
         with tempfile.TemporaryDirectory(prefix="ito_research_") as temp_dir:
             # パイプライン実行 (結果は temp_dir に保存される)
             metrics = run_experiment(

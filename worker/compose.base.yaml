@@ -1,0 +1,23 @@
+services:
+  ito_research:
+    restart: unless-stopped
+    init: true  # ゾンビプロセスを防ぐ
+    build:
+      context: .    
+    # 共有メモリサイズ (--shm-size=8g) PyTorchのDataLoader等で必須
+    shm_size: 8gb
+    
+    environment:
+      PYTHONPATH: /workspace
+      TZ: Asia/Tokyo
+      PC_NAME: ${PC_NAME}
+      REDIS_URL: ${REDIS_URL}
+      MINIO_URL: ${MINIO_URL}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME}
+      MIAOS_API_URL: ${MIAOS_API_URL}
+      OPENAPI_URL: ${OPENAPI_URL}
+      
+    # GPUの割り当て (--gpus all)
+    gpus: all
