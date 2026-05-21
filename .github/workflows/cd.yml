@@ -70,6 +70,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.worker == 'true'
     runs-on: ubuntu-latest
+    environment: production
     outputs:
       # steps.set-matrixの出力結果をジョブ全体の出力として定義
       hosts: ${{ steps.set-matrix.outputs.hosts }}
