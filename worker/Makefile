@@ -3,6 +3,10 @@
 include .env
 export
 
+# 変数定義 := 即時評価, = 遅延評価(使うときに評価)
+COMPOSE_DEV := -f compose.base.yaml -f compose.dev.yaml
+COMPOSE_PROD := -f compose.base.yaml -f compose.prod.yaml
+
 # こういうやり方もある: Shellスクリプト(自由度が高い)
 # 例
 # openapi:
@@ -24,46 +28,45 @@ chown:
 # ------------------------------
 # コンテナ管理
 # ------------------------------
-# ビルド
-.PHONY: build
-build:
-	docker build -t mia_ito .
-
-# 開発用立上げ
+# 立上げ(開発)
 .PHONY: dev
 dev:
-	docker run -d --gpus all --name ito_research -it --shm-size=8g -v $(CURDIR):/workspace -e PYTHONPATH=/workspace --env-file .env mia_ito
+	docker compose $(COMPOSE_DEV) up -d --build
 
-# コンテナに入る
+# 立上げ(本番)
+.PHONY: prod
+prod:
+	docker compose $(COMPOSE_PROD) up -d --build
+
+# コンテナに入る(開発)
 .PHONY: shell
 shell:
-	docker exec -it ito_research bash
+	docker compose $(COMPOSE_DEV) exec ito_research bash
 
-# 特定のコマンドを実行
-.PHONY: cmd
-cmd:
-	docker exec ito_research $(CMD)
-
-# 実行
-.PHONY: run
-run:
-	docker run -d --gpus all --name ito_research -it --rm --shm-size=8g -v $(CURDIR):/workspace -e PYTHONPATH=/workspace --env-file .env mia_ito bash -c "celery -A src.workers.celery_tasks worker --loglevel=info -P solo"
-
-# コンテナを停止・削除
-.PHONY: remove
-remove:
-	docker stop ito_research
-	docker rm ito_research
-
-# ログ
-# docker logs -f <container_id>
-
-# 保存場所の指定 読み込みは同じ、出力は特定場所
-# docker run -d --gpus all -it --rm --shm-size=8g -v $(pwd):/workspace:ro -v /tmp/mia_ito:/workspace/models mia_ito python main.py
-
+# OpenAPIからPythonクライアントを生成(開発)
 .PHONY: reflect-openapi
 reflect-openapi:
-	docker exec ito_research make openapi
+	docker compose $(COMPOSE_DEV) exec ito_research make openapi
+
+# 停止(開発)
+.PHONY: down
+down:
+	docker compose $(COMPOSE_DEV) down
+
+# 停止(本番)
+.PHONY: prod-down
+prod-down:
+	docker compose $(COMPOSE_PROD) down
+
+# ログ(開発)
+.PHONY: logs
+logs:
+	docker compose $(COMPOSE_DEV) logs -f
+
+# ログ(本番)
+.PHONY: prod-logs
+prod-logs:
+	docker compose $(COMPOSE_PROD) logs -f
 
 # ------------------------------
 # コンテナ内実行

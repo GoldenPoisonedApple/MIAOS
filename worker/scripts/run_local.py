@@ -20,12 +20,15 @@ def main():
 	work_dir = os.path.join(cfg.MODEL_DIR, datetime.now().strftime("%Y-%m-%d_%H-%M"))
 	os.makedirs(work_dir, exist_ok=True)
 	# 手動実行の場合 MODEL_DIR 配下に存在するはず
-	assigned_model_path = os.path.join(cfg.MODEL_DIR, args.assigned_model_path)
+	if args.assigned_model_path != "":
+		assigned_model_path = os.path.join(cfg.MODEL_DIR, args.assigned_model_path)
+	else:
+		assigned_model_path = None
 	# Configオブジェクトを作成
 	request = CreateExperimentRequest(
 		name=datetime.now().strftime("%Y-%m-%d_%H-%M"),
 		method=MiaMethod.OFFLINELIRA,
-		max_epochs=2,
+		max_epochs=10,
 		batch_size=128,
 		num_shadow_models=2,
 		target_train_size=10520,
@@ -37,7 +40,6 @@ def main():
 		load_target_model=args.load_target_model,
 		load_shadow_model=args.load_shadow_models,
 		load_attack_model=args.load_attack_models,
-		hyperparameters={}
 	)
 
 	# 3. パイプライン実行

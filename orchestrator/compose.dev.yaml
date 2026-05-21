@@ -1,0 +1,38 @@
+services:
+  minio:
+    volumes:
+      - minio_data:/data
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev  # ビルドステージ指定
+    working_dir: /app
+    environment:
+      - CHOKIDAR_USEPOLLING=true    # ファイル変更検知を確実にする
+    volumes:
+      - ./frontend:/app             # ホストのソースコードを同期
+      - /app/node_modules           # コンテナ内の依存関係を守る(ホスト側で上書きしない)
+    ports:
+      - "80:80"
+
+
+  backend:
+    build:
+      context: ./backend
+      target: dev # ビルドステージ指定
+    working_dir: /app
+    environment:
+      - LOG_LEVEL=debug
+    volumes:
+      - ./backend:/app
+      - target_cache:/app/target # ビルドキャッシュを永続化して、ビルド時間短縮、 cargo watch競合回避 dockerは深いパスのマウントのパスを優先
+      - cargo_cache:/usr/local/cargo/registry # Cargoの依存キャッシュも永続化
+    ports:
+      - "3000:3000"
+
+
+volumes:
+  minio_data:
+  target_cache:
+  cargo_cache:

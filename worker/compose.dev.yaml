@@ -1,0 +1,11 @@
+services:
+  ito_research:
+    build:
+      context: .
+      target: dev
+    stdin_open: true  # 標準入力を開放
+    tty: true  # ターミナル割り当て
+
+    volumes:
+      - ./:/workspace
+

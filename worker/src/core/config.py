@@ -1,24 +1,21 @@
 import os
 import torch
 from enum import Enum
-from dotenv import load_dotenv
 
-load_dotenv()
 # ワーカーのPC名
-PC_NAME: str = os.getenv("PC_NAME")
+PC_NAME: str = os.environ["PC_NAME"]
 # RedisのURL
-REDIS_URL: str = os.getenv("REDIS_URL")
+REDIS_URL: str = os.environ["REDIS_URL"]
 # MinIOのURL
-MINIO_URL: str = os.getenv("MINIO_URL")
+MINIO_URL: str = os.environ["MINIO_URL"]
 # MinIOのアクセスキー
-MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY")
+MINIO_ACCESS_KEY: str = os.environ["MINIO_ACCESS_KEY"]
 # MinIOのシークレットキー
-MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY")
+MINIO_SECRET_KEY: str = os.environ["MINIO_SECRET_KEY"]
 # MinIOのバケット名
-MINIO_BUCKET_NAME: str = os.getenv("MINIO_BUCKET_NAME")
+MINIO_BUCKET_NAME: str = os.environ["MINIO_BUCKET_NAME"]
 # MIAOS APIのURL
-MIAOS_API_URL: str = os.getenv("MIAOS_API_URL")
-
+MIAOS_API_URL: str = os.environ["MIAOS_API_URL"]
 # デバイス
 DEVICE: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # データセットの保存先ディレクトリ
@@ -38,6 +35,9 @@ ATTACK_MODEL_NAME: str = "attack_models.pth"
 NUM_CLASSES: int = 100
 # 攻撃モデルのエポック数
 ATTACK_MODEL_EPOCHS: int = 10
+
+# workerタイムアウト時間(秒) 16時間
+CELERY_VISIBILITY_TIMEOUT: int = 60 * 60 * 16
 
 
 # 攻撃手法の列挙型

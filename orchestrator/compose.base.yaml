@@ -5,13 +5,17 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
-    command: redis-server --save 60 1 --loglevel warning
+    command: >
+      redis-server
+      --save 60 1
+      --loglevel warning
+      --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     networks:
       - default
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -27,9 +31,6 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    # kslibをマウントしたディレクトリをMinIOの保存領域として指定
-    volumes:
-      - /mnt/kslib/minio_data:/data
     command: server /data --console-address ":9001"
     networks:
       - default
@@ -63,33 +64,16 @@ services:
 
   frontend:
     init: true  # ゾンビプロセスを防ぐ
-    restart: unless-stopped
-    build:
-      context: ./frontend   # ./frontend の Dockerfile を使用
-      target: dev  # ビルドステージ指定
-    # restart: unless-stopped は設けない: エラーログを残す、chargo watch でのホットリロードとの競合を避ける
-    environment:
-      - APP_ENV=dev                 # アプリ側で開発モードを認識させる
-      - CHOKIDAR_USEPOLLING=true    # ファイル変更検知を確実にする
-    volumes:
-      - ./frontend:/app             # ホストのソースコードを同期
-      - /app/node_modules           # コンテナ内の依存関係を守る(ホスト側で上書きしない)
-    ports:
-      - "80:80"
     depends_on:
       - backend
+    networks:
+      - default
 
 
   backend:
     init: true  # ゾンビプロセスを防ぐ
-    restart: unless-stopped
-    build:
-      context: ./backend  # ./backend の Dockerfile を使用
-      target: dev
-    working_dir: /app
     environment:
       - TZ=Asia/Tokyo
-      - APP_ENV=dev
       - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       - REDIS_URL=${REDIS_URL}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT}
@@ -103,12 +87,6 @@ services:
         condition: service_healthy # Redisのヘルスチェック待機
       minio:
         condition: service_healthy # MinIOのヘルスチェック待機
-    volumes:
-      - ./backend:/app
-      - target_cache:/app/target # ビルドキャッシュを永続化して、ビルド時間短縮、 cargo watch競合回避
-      - cargo_cache:/usr/local/cargo/registry # Cargoの依存キャッシュも永続化
-    ports:
-      - "3000:3000"
     networks:
       - default
 
@@ -117,5 +95,3 @@ services:
 volumes:
   redis_data:
   db_data:
-  target_cache:
-  cargo_cache:

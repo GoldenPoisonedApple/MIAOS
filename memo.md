@@ -4,6 +4,7 @@ Membership Inference Attack Orchestration System
 実験はidで管理することに
 <- わざわざ名前にしなくても良い、idでも一意性が付く、検索容易性がある、覚えやすく入力しやすい
 
+git ls-files | tree --fromfile
 sudo chown -R $USER:$USER .
 
 
@@ -14,6 +15,8 @@ ctl+shift+P
 で.devcontainerが存在する場所を開く
 選択して実行
 .devcontainerはそれぞれのコンテナのrootに設置してもいいかもしれない
+
+ビルドはDockerfileでcomposeは起動や依存関係管理なのね
 
 ## バックエンド
 なんかcargoが効かないので応急処置
@@ -51,6 +54,7 @@ cargo test -- --test-threads=1
 # 特定のものだけ実行 ログも見る
 cargo test repositories::task -- --nocapture
 ```
+なんと#[sqlx::test]にするとテストごとに独立したトランザクションを実施し終了時にロールバックで戻すので並列で行うことが可能になる
 
 色々考えたがいい方法が無かったので
 noteが backend_test のデータはテスト用とするカスの手法
@@ -172,6 +176,8 @@ npm run gen:api
 ```
 
 生成も、どうせ変更を加えた時にするので、gitignoreに入れない方がいいらしい
+持ってきてそのまま実行可能だし
+複数人開発となるとコンフリクトの温床となるため、やらんほうがいいらしい
 
 ## DB
 
@@ -211,6 +217,11 @@ KEYS *
 # キューの中身確認 0(最初)から-1(最後まで)
 LRANGE celery 0 -1
 ```
+
+celeryはタスクを取得するときにBRPOPLPUSHでキューから処理中リスト(redisの内部)に移動する
+そのためacks_late=Trueしても他のworkerが仕事を取ることは無い
+
+
 #### なんと
 Redisをブローカーとして使用した場合に、送信するメッセージに exchange キーを含め忘れると言うバグがあり、直されていない
 似たようなことをやるならRabbitMQがよさそうではある
@@ -316,23 +327,39 @@ OpenAPIでの整合性確保
 
 cargo auditを実行したいところだが、依存クレートの依存クレートが怒られていて非常に面倒くさいためやっていない
 
+# CD
+GHCR(GitHub Container Registry)っていう成果物のコンテナ置き場にアップロード
+各PCにssh接続して、pullしてくる方針に
+
+本当はk3sとかでArgoCD (GitOps)でやるのが良いんだろうけど大変すぎる
+
+### GitHub
+- Environmentsでssh情報とかのsecrets情報登録
+- Actions -> General: Workflow permissions = Read and write permissions
+
+
+
 ## TODO
 ### 優先度: 高
 CI作る:
+sqlは専用テストしてredisはモックにすれば並列テスト可能
 いや違う、redisだけは外部依存だからモックでテストするようにしないといけない taskのreposityでデフォルトテストはしない方向で
-CIはMakefile作ろう
 
 フィルタ、順番情報をバックエンドに記録
 
-CI: openAPIの整合性を測った方がいいのでは
 
 ### 優先度: 中
 
-多分 色んな所でMakefile作った方がいいな
-
 タスクの中に条件ぶち込まなくてもClaimの返り値で条件取得できるから、タスクにはidだけ入れておけばいいのでは？
 
+Jsonからコード生成できるようにしたいよね
+
+branchのルールやりたい GitHub
+
+
 ### 優先度: 低
+
+config.py の ./cache, ./models, ./data はコンテナ内の /workspace 配下に書かれます。appuser + chown のおかげで 書き込み自体は通る はずです。ただしコンテナ再作成で消える
 
 CORS設定とか
 

@@ -18,8 +18,9 @@ use server::state::AppState;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
   // ロガー
+  let log_level = std::env::var("LOG_LEVEL").unwrap_or("info".to_string());
   tracing_subscriber::fmt()
-    .with_max_level(tracing::Level::DEBUG)
+    .with_env_filter(tracing_subscriber::EnvFilter::new(log_level))
     .init();
   tracing::info!("Starting server...");
 
@@ -29,8 +30,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   tracing::info!("Running database migrations...");
   sqlx::migrate!("./migrations")
     .run(db_pool.get_postgres_connection_pool()) // プールの参照取得
-    .await
-    .unwrap();
+    .await?;
+
   tracing::info!("Migrations completed.");
   let experiment_repository = ExperimentRepository::new(db_pool);
   // Redis
