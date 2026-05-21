@@ -14,31 +14,80 @@ permissions:
   contents: read
   packages: write  # ghcr.io push に必要
 
+env:
+  REGISTRY: ghcr.io
 
 jobs:
   # ─────────────────────────────────────────
-  # Workerマトリックスのセットアップジョブ
+  # 変更検知（CI と同様の paths-filter）
+  # ─────────────────────────────────────────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      orchestrator: ${{ steps.flags.outputs.orchestrator }}
+      worker: ${{ steps.flags.outputs.worker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            orchestrator-backend:
+              - 'orchestrator/backend/**'
+            orchestrator-frontend:
+              - 'orchestrator/frontend/**'
+            orchestrator-compose:
+              - 'orchestrator/compose*.yaml'
+            worker:
+              - 'worker/**'
+            cd:
+              - '.github/workflows/cd.yml'
+      - id: flags
+        run: |
+          # デフォルト値
+          orchestrator=false
+          worker=false
+          # orchestrator判定
+          if [[ "${{ steps.filter.outputs.orchestrator-backend }}" == "true" \
+             || "${{ steps.filter.outputs.orchestrator-frontend }}" == "true" \
+             || "${{ steps.filter.outputs.orchestrator-compose }}" == "true" \
+             || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
+            orchestrator=true
+          fi
+          # worker判定
+          if [[ "${{ steps.filter.outputs.worker }}" == "true" \
+             || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
+            worker=true
+          fi
+          # 変数を追加して出力
+          echo "orchestrator=$orchestrator" >> "$GITHUB_OUTPUT"
+          echo "worker=$worker" >> "$GITHUB_OUTPUT"
+
+  # ─────────────────────────────────────────
+  # Worker マトリックス
   # ─────────────────────────────────────────
   setup-worker-matrix:
+    needs: changes
+    if: needs.changes.outputs.worker == 'true'
     runs-on: ubuntu-latest
     outputs:
       # steps.set-matrixの出力結果をジョブ全体の出力として定義
       hosts: ${{ steps.set-matrix.outputs.hosts }}
     steps:
-      - uses: actions/checkout@v4
-
       # validate
-      - run: echo '${{ secrets.WORKER_HOSTS }}' | jq .
-
+      # JSON配列 かつ 要素数が0より大きいかどうかをチェック
+      - run: |
+          echo '${{ secrets.WORKER_HOSTS }}' | jq -e 'type == "array" and length > 0'
       - id: set-matrix
         # GITHUB_OUTPUT環境変数(出力ファイル)にキーと値のペアを追記し、後続ジョブに渡す
         run: echo "hosts=${{ secrets.WORKER_HOSTS }}" >> "$GITHUB_OUTPUT"
-
 
   # ─────────────────────────────────────────
   # イメージビルド & Push
   # ─────────────────────────────────────────
   build-orchestrator-backend:
+    needs: changes
+    if: needs.changes.outputs.orchestrator == 'true'
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -50,7 +99,7 @@ jobs:
       # ghcr.ioにログイン
       - uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -58,15 +107,15 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          # push先のイメージ名
-          images: ghcr.io/${{ github.repository }}/orchestrator-backend
+          # イメージの名前を指定
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/orchestrator-backend
           # sha: コミット単位で一意なハッシュを付与
           # latest: latestタグをつける 1つのタグは常に1つのイメージしかさせないため常に最新版を指す
           tags: |
             type=sha,prefix=,format=short
             type=raw,value=latest
 
-      # イメージのビルド & push
+      # イメージのビルドとpush
       - id: build
         uses: docker/build-push-action@v6
         with:
@@ -84,8 +133,9 @@ jobs:
           cache-from: type=gha,scope=build-orchestrator-backend
           cache-to: type=gha,mode=max,scope=build-orchestrator-backend
 
-
   build-orchestrator-frontend:
+    needs: changes
+    if: needs.changes.outputs.orchestrator == 'true'
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -94,18 +144,16 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}/orchestrator-frontend
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/orchestrator-frontend
           tags: |
             type=sha,prefix=,format=short
             type=raw,value=latest
-
       - id: build
         uses: docker/build-push-action@v6
         with:
@@ -118,6 +166,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=build-orchestrator-frontend
 
   build-worker:
+    needs: changes
+    if: needs.changes.outputs.worker == 'true'
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -126,20 +176,20 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}/worker
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/worker
           tags: |
             type=sha,prefix=,format=short
             type=raw,value=latest
       - id: build
         uses: docker/build-push-action@v6
         with:
-          context: ito_research
+          context: worker
           target: prod
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -151,15 +201,22 @@ jobs:
   # Orchestrator デプロイ（1台）
   # ─────────────────────────────────────────
   deploy-orchestrator:
-    needs: [build-orchestrator-backend, build-orchestrator-frontend]
+    needs:
+      - changes
+      - build-orchestrator-backend
+      - build-orchestrator-frontend
+    if: needs.changes.outputs.orchestrator == 'true'
     runs-on: ubuntu-latest
-    environment: production  # GitHub Environment による手動承認ゲートを設定可能
+    environment: production
     steps:
       - name: Deploy orchestrator
         uses: appleboy/ssh-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_PREFIX: ${{ github.repository }}
+          IMAGE_TAG: ${{ github.sha }}
         with:
           host: ${{ secrets.ORCHESTRATOR_HOST }}
           username: ${{ secrets.ORCHESTRATOR_USER }}
@@ -169,13 +226,22 @@ jobs:
           proxy_key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             set -euo pipefail
-            cd /opt/miaos/orchestrator
+            # ホームディレクトリ以下に配置
+            cd $HOME/miaos
             git pull origin main
 
-            echo "$GITHUB_TOKEN" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
+            cd orchestrator
+            # 環境変数を設定
+            export REGISTRY="${REGISTRY}"
+            # Docker image は大文字禁止: 小文字に変換
+            export IMAGE_PREFIX="${IMAGE_PREFIX,,}"
+            export IMAGE_TAG="${IMAGE_TAG}"
+
+            # ghcr.ioにログイン
+            # --password-stdin: 標準入力からパスワードを読み込む セキュリティ上の利点: historyにパスワードが残らない
+            echo "$GITHUB_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
 
             # 新イメージを取得
-            export IMAGE_TAG="${{ github.sha }}"
             docker compose -f compose.base.yaml -f compose.prod.yaml pull backend frontend
 
             # サービスを再起動（既存コンテナを置き換え）
@@ -184,11 +250,9 @@ jobs:
             docker compose -f compose.base.yaml -f compose.prod.yaml \
               up -d --no-deps --remove-orphans backend frontend
 
-            # ヘルスチェック（backend が起動するまで待機）
-            timeout 60 bash -c \
-              'until docker compose -f compose.base.yaml -f compose.prod.yaml \
-                ps backend | grep -q "healthy"; do sleep 3; done'
-            
+            # ヘルスチェック
+            docker compose -f compose.base.yaml -f compose.prod.yaml up -d --wait --wait-timeout 120 backend
+
             # 不要になったイメージの削除
             # -a: 全てのイメージを削除
             # -f: 強制的に削除
@@ -199,7 +263,8 @@ jobs:
   # Worker デプロイ（複数台）
   # ─────────────────────────────────────────
   deploy-workers:
-    needs: [build-worker, setup-worker-matrix]
+    needs: [changes, build-worker, setup-worker-matrix]
+    if: needs.changes.outputs.worker == 'true'
     runs-on: ubuntu-latest
     environment: production
     strategy:
@@ -216,6 +281,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_PREFIX: ${{ github.repository }}
+          IMAGE_TAG: ${{ github.sha }}
         with:
           host: ${{ matrix.host }}
           username: ${{ secrets.WORKER_USER }}
@@ -227,14 +295,18 @@ jobs:
           command_timeout: 1000m
           script: |
             set -euo pipefail
-            cd /opt/miaos/worker
+            # ホームディレクトリ以下に配置
+            cd $HOME/miaos
             git pull origin main
 
-            echo "$GITHUB_TOKEN" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
+            cd worker
+            export REGISTRY="${REGISTRY}"
+            export IMAGE_PREFIX="${IMAGE_PREFIX,,}"
+            export IMAGE_TAG="${IMAGE_TAG}"
 
-
+            echo "$GITHUB_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
+            
             # 1. 新イメージを取得（実行中コンテナに影響なし）
-            export IMAGE_TAG="${{ github.sha }}"
             docker compose -f compose.base.yaml -f compose.prod.yaml pull ito_research
 
             # 2. 現在のコンテナを graceful stop

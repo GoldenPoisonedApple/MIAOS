@@ -327,6 +327,18 @@ OpenAPIでの整合性確保
 
 cargo auditを実行したいところだが、依存クレートの依存クレートが怒られていて非常に面倒くさいためやっていない
 
+# CD
+GHCR(GitHub Container Registry)っていう成果物のコンテナ置き場にアップロード
+各PCにssh接続して、pullしてくる方針に
+
+本当はk3sとかでArgoCD (GitOps)でやるのが良いんだろうけど大変すぎる
+
+### GitHub
+- Environmentsでssh情報とかのsecrets情報登録
+- Actions -> General: Workflow permissions = Read and write permissions
+
+
+
 ## TODO
 ### 優先度: 高
 CI作る:
@@ -335,13 +347,15 @@ sqlは専用テストしてredisはモックにすれば並列テスト可能
 
 フィルタ、順番情報をバックエンドに記録
 
-CD
 
 ### 優先度: 中
 
 タスクの中に条件ぶち込まなくてもClaimの返り値で条件取得できるから、タスクにはidだけ入れておけばいいのでは？
 
 Jsonからコード生成できるようにしたいよね
+
+branchのルールやりたい GitHub
+
 
 ### 優先度: 低
 
