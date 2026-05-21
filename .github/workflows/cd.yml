@@ -234,7 +234,7 @@ jobs:
 
             cd orchestrator
             # 環境変数を設定
-            export REGISTRY="${REGISTRY}"
+            export REGISTRY="${REGISTRY:-ghcr.io}"
             # Docker image は大文字禁止: 小文字に変換
             export IMAGE_PREFIX="${IMAGE_PREFIX,,}"
             export IMAGE_TAG="${IMAGE_TAG}"
@@ -303,7 +303,7 @@ jobs:
             git pull origin main
 
             cd worker
-            export REGISTRY="${REGISTRY}"
+            export REGISTRY="${REGISTRY:-ghcr.io}"
             export IMAGE_PREFIX="${IMAGE_PREFIX,,}"
             export IMAGE_TAG="${IMAGE_TAG}"
 
