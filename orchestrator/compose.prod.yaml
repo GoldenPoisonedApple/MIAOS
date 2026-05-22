@@ -6,14 +6,14 @@ services:
 
   frontend:
     restart: unless-stopped
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_PREFIX}/orchestrator-frontend:${IMAGE_TAG:-latest}
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_PREFIX}/orchestrator-frontend@${FRONTEND_DIGEST}
     pull_policy: always
     ports:
       - "80:80"
 
   backend:
     restart: unless-stopped
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_PREFIX}/orchestrator-backend:${IMAGE_TAG:-latest}
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_PREFIX}/orchestrator-backend@${BACKEND_DIGEST}
     pull_policy: always
     environment:
       - LOG_LEVEL=info

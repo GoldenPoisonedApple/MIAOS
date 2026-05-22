@@ -1,6 +1,6 @@
 services:
   ito_research:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_PREFIX}/worker:${IMAGE_TAG:-latest}
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_PREFIX}/worker@${WORKER_DIGEST}
     pull_policy: always
 
     # タスク保護 実行中のタスクが完了してから終了: 16時間まで待つ
