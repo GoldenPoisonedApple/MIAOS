@@ -64,26 +64,6 @@ jobs:
           echo "worker=$worker" >> "$GITHUB_OUTPUT"
 
   # ─────────────────────────────────────────
-  # Worker マトリックス
-  # ─────────────────────────────────────────
-  setup-worker-matrix:
-    needs: changes
-    if: needs.changes.outputs.worker == 'true'
-    runs-on: ubuntu-latest
-    environment: production
-    outputs:
-      # steps.set-matrixの出力結果をジョブ全体の出力として定義
-      hosts: ${{ steps.set-matrix.outputs.hosts }}
-    steps:
-      # validate
-      # JSON配列 かつ 要素数が0より大きいかどうかをチェック
-      - run: |
-          echo '${{ secrets.WORKER_HOSTS }}' | base64 -d | jq -e 'type == "array" and length > 0'
-      - id: set-matrix
-        # GITHUB_OUTPUT環境変数(出力ファイル)にキーと値のペアを追記し、後続ジョブに渡す
-        run: echo "hosts=$(echo '${{ secrets.WORKER_HOSTS }}' | base64 -d | jq -c '.')" >> "$GITHUB_OUTPUT"
-
-  # ─────────────────────────────────────────
   # イメージビルド & Push
   # ─────────────────────────────────────────
   build-orchestrator-backend:
@@ -269,16 +249,15 @@ jobs:
   # Worker デプロイ（複数台）
   # ─────────────────────────────────────────
   deploy-workers:
-    needs: [changes, build-worker, setup-worker-matrix]
+    needs: [changes, build-worker]
     if: needs.changes.outputs.worker == 'true'
     runs-on: ubuntu-latest
     environment: production
     strategy:
       matrix:
-        # WORKER_HOSTS: GitHub Secret に JSON 配列で登録
+        # WORKER_HOSTS: GitHub Variable に JSON 配列で登録: Secretでも結局Actionsの所に表示されるので
         # 例: ["10.0.0.1", "10.0.0.2", "10.0.0.3"]
-        # needsコンテキスト経由でセットアップジョブの出力(JSON配列)を参照し、パースする
-        host: ${{ fromJSON(needs.setup-worker-matrix.outputs.hosts) }}
+        host: ${{ fromJSON(vars.WORKER_HOSTS) }}
       # max-parallel: 1        # 1台ずつ順番にデプロイ 確実に1台は動作させたい時に使用
       fail-fast: false       # 1台失敗しても他の台はロールバックしない(全てデプロイを試みる)
     steps:

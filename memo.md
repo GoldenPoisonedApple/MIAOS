@@ -369,6 +369,8 @@ digest運用とタグ運用
 ```
 どうしようもないのでbase64で入力、内部でデコードすることで違う値として伏字にされない
 
+やったけど結局GitHubActionsの所に表示されちゃうからVariableで良かったかもな...
+
 ### GitHub
 - Environmentsでssh情報とかのsecrets情報登録
 - Actions -> General: Workflow permissions = Read and write permissions
@@ -396,6 +398,7 @@ branchのルールやりたい GitHub
 
 強制終了でタスクがちゃんと戻るか検証
 
+build-workerが長い キャッシュホントに使えてる？何も変えてないのに5分かかってるよ
 
 ### 優先度: 低
 http://localhost:3000/healthみたいにhealthchack用のAPIを作った方がいいね
