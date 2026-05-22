@@ -212,6 +212,7 @@ jobs:
     steps:
       - name: Deploy orchestrator
         uses: appleboy/ssh-action@v1
+        # ランナー側の環境変数を指定
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
@@ -227,7 +228,7 @@ jobs:
           proxy_key: ${{ secrets.DEPLOY_SSH_KEY }}
           proxy_port: ${{ secrets.BASTION_PORT }}
           # ワークフローのenvはリモートに渡されないので明示的に指定
-          envs: GITHUB_TOKEN, GITHUB_ACTOR, REGISTRY, IMAGE_PREFIX, IMAGE_TAG
+          envs: GITHUB_TOKEN,GITHUB_ACTOR,REGISTRY,IMAGE_PREFIX,IMAGE_TAG
           script: |
             set -euo pipefail
             # ホームディレクトリ以下に配置
@@ -297,7 +298,7 @@ jobs:
           proxy_key: ${{ secrets.DEPLOY_SSH_KEY }}
           proxy_port: ${{ secrets.BASTION_PORT }}
           # ワークフローのenvはリモートに渡されないので明示的に指定
-          envs: GITHUB_TOKEN, GITHUB_ACTOR, REGISTRY, IMAGE_PREFIX, IMAGE_TAG
+          envs: GITHUB_TOKEN,GITHUB_ACTOR,REGISTRY,IMAGE_PREFIX,IMAGE_TAG
           # command_timeout: タスク完了待ちの上限（最長タスク時間 + バッファ）
           command_timeout: 60m
           script: |
