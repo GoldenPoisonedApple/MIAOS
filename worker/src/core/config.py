@@ -5,17 +5,17 @@ from enum import Enum
 # ワーカーのPC名
 PC_NAME: str = os.environ["PC_NAME"]
 # RedisのURL
-REDIS_URL: str = os.environ["REDIS_URL"]
+_REDIS_URL: str = os.environ["REDIS_URL"]
 # MinIOのURL
-MINIO_URL: str = os.environ["MINIO_URL"]
+_MINIO_URL: str = os.environ["MINIO_URL"]
 # MinIOのアクセスキー
-MINIO_ACCESS_KEY: str = os.environ["MINIO_ACCESS_KEY"]
+_MINIO_ACCESS_KEY: str = os.environ["MINIO_ACCESS_KEY"]
 # MinIOのシークレットキー
-MINIO_SECRET_KEY: str = os.environ["MINIO_SECRET_KEY"]
+_MINIO_SECRET_KEY: str = os.environ["MINIO_SECRET_KEY"]
 # MinIOのバケット名
-MINIO_BUCKET_NAME: str = os.environ["MINIO_BUCKET_NAME"]
+_MINIO_BUCKET_NAME: str = os.environ["MINIO_BUCKET_NAME"]
 # MIAOS APIのURL
-MIAOS_API_URL: str = os.environ["MIAOS_API_URL"]
+_MIAOS_API_URL: str = os.environ["MIAOS_API_URL"]
 # デバイス
 DEVICE: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # データセットの保存先ディレクトリ

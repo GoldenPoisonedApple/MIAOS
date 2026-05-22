@@ -22,7 +22,7 @@ from src.server_client.api.experiments import (
     claim_experiment,
 )
 
-app = Celery("mia_tasks", broker=cfg.REDIS_URL)
+app = Celery("mia_tasks", broker=cfg._REDIS_URL)
 # 全タスクのデフォルト値設定
 app.conf.update(
     broker_transport_options={
@@ -129,7 +129,7 @@ def execute_attack_task(_params):
     _params: {"mia_method": "Shokri", "batch_size": 128, ...} のような辞書
     """
     # クライアントを作成
-    client = Client(base_url=cfg.MIAOS_API_URL)
+    client = Client(base_url=cfg._MIAOS_API_URL)
 
     # idを取得、削除
     id: int = _params.pop("experiment_id")
