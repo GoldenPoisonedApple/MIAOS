@@ -74,7 +74,12 @@ prod-logs:
 # ------------------------------
 .PHONY: deploy-manual
 deploy-manual:
-	IMAGE_TAG=${IMAGE_TAG:-latest} docker compose $(COMPOSE_DEPLOY_MANUAL) up -d --no-deps --remove-orphans ito_research
+	IMAGE_TAG=${IMAGE_TAG:-latest} docker compose $(COMPOSE_DEPLOY_MANUAL) up -d
+
+# ログ
+.PHONY: deploy-manual-logs
+deploy-manual-logs:
+	docker compose $(COMPOSE_DEPLOY_MANUAL) logs -f
 
 # ------------------------------
 # コンテナ内実行

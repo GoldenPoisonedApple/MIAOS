@@ -18,6 +18,8 @@ ctl+shift+P
 
 ビルドはDockerfileでcomposeは起動や依存関係管理なのね
 
+logはプロジェクト名が同じなら、共有されるらしい。
+
 ## バックエンド
 なんかcargoが効かないので応急処置
 ```bash
