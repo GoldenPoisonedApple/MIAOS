@@ -99,6 +99,7 @@ def main(id: int, params) -> UpdateResultsRequest:
             error_message=None,
         )
     except Exception as e:
+        print(f"Error: {e}")
         # ペイロード作成
         payload = UpdateResultsRequest(
             experiment_id=id,

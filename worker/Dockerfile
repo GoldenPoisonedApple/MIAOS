@@ -81,14 +81,12 @@ RUN useradd -ms /bin/bash appuser \
 	&& chown -R appuser:appuser /workspace
 
 # entrypoint スクリプト配置: 本番コンテナは非ルートだが、マウントしたボリュームはroot所有のため実行できない問題用
+# ボリュームの所有権をappuserに変更後、appuserで実行
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # ソースコードをコピー
 COPY --chown=appuser:appuser src/ /workspace/src/
-
-# 実行ユーザーを切り替え
-USER appuser
 
 # ENTRYPOINT: コンテナ起動時に必ず実行されるコマンドの指定 ラッパーのような役割を果たす
 # 内部的には docker-entrypoint.sh celery -A src.workers.celery_tasks worker --loglevel=info -P solo が実行される
