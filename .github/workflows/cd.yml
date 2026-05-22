@@ -78,10 +78,10 @@ jobs:
       # validate
       # JSON配列 かつ 要素数が0より大きいかどうかをチェック
       - run: |
-          echo '${{ secrets.WORKER_HOSTS }}' | jq -e 'type == "array" and length > 0'
+          echo '${{ secrets.WORKER_HOSTS }}' | base64 -d | jq -e 'type == "array" and length > 0'
       - id: set-matrix
         # GITHUB_OUTPUT環境変数(出力ファイル)にキーと値のペアを追記し、後続ジョブに渡す
-        run: echo "hosts=$(echo '${{ secrets.WORKER_HOSTS }}' | jq -c '.')" >> "$GITHUB_OUTPUT"
+        run: echo "hosts=$(echo '${{ secrets.WORKER_HOSTS }}' | base64 -d | jq -c '.')" >> "$GITHUB_OUTPUT"
 
   # ─────────────────────────────────────────
   # イメージビルド & Push

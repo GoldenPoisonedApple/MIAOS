@@ -351,6 +351,24 @@ digest運用とタグ運用
 - degest: 完全固定 再現性 動的更新が不可能 本番リリース向け
 - tag: 自動更新可能 手動更新可能 事故は発生する
 
+いくらやってもmatrixがうまくいかん
+原因: Secretのマスキングは「登録されたSecret値がGITHUB_OUTPUTに現れたら伏字にする」という仕組み。つまり Secretのまま使う限り、どう書いてもGITHUB_OUTPUT経由では値が消える。
+こいつが空文字列になる
+```yaml
+    outputs:
+      # steps.set-matrixの出力結果をジョブ全体の出力として定義
+      hosts: ${{ steps.set-matrix.outputs.hosts }}
+    steps:
+      # validate
+      # JSON配列 かつ 要素数が0より大きいかどうかをチェック
+      - run: |
+          echo '${{ secrets.WORKER_HOSTS }}' | jq -e 'type == "array" and length > 0'
+      - id: set-matrix
+        # GITHUB_OUTPUT環境変数(出力ファイル)にキーと値のペアを追記し、後続ジョブに渡す
+        run: echo "hosts=$(echo '${{ secrets.WORKER_HOSTS }}' | jq -c '.')" >> "$GITHUB_OUTPUT"
+```
+どうしようもないのでbase64で入力、内部でデコードすることで違う値として伏字にされない
+
 ### GitHub
 - Environmentsでssh情報とかのsecrets情報登録
 - Actions -> General: Workflow permissions = Read and write permissions
