@@ -1,21 +1,10 @@
 services:
-  redis:
-    profiles: ["infra"]
-
   minio:
-    # init時にcreate_bucketsのdepends_onが見えるように、initプロファイルも指定
-    profiles: ["infra", "init"]
     # NASをマウントしたディレクトリをMinIOの保存領域として指定
     volumes:
       - /mnt/kslib/minio_data:/data
 
-  db:
-    profiles: ["infra"]
-  create_buckets:
-    profiles: ["init"]
-
   frontend:
-    profiles: ["app"]
     restart: unless-stopped
     image: ${REGISTRY:-ghcr.io}/${IMAGE_PREFIX}/orchestrator-frontend@${FRONTEND_DIGEST}
     pull_policy: always
@@ -23,7 +12,6 @@ services:
       - "80:80"
 
   backend:
-    profiles: ["app"]
     restart: unless-stopped
     image: ${REGISTRY:-ghcr.io}/${IMAGE_PREFIX}/orchestrator-backend@${BACKEND_DIGEST}
     pull_policy: always

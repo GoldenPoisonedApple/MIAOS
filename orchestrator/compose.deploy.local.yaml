@@ -5,6 +5,7 @@ services:
   minio:
     volumes:
       - minio_data:/data
+
   frontend:
     restart: unless-stopped
     image: ghcr.io/goldenpoisonedapple/miaos/orchestrator-frontend:${IMAGE_TAG:-latest}

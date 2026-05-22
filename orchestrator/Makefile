@@ -5,7 +5,8 @@
 COMPOSE_DEV := -f compose.base.yaml -f compose.dev.yaml
 COMPOSE_PROD := -f compose.base.yaml -f compose.prod.yaml
 COMPOSE_DEPLOY := -f compose.base.yaml -f compose.deploy.yaml
-COMPOSE_DEPLOY_MANUAL := -f compose.base.yaml -f compose.deploy.manual.yaml
+COMPOSE_DEPLOY_LOCAL := -f compose.base.yaml -f compose.deploy.local.yaml
+COMPOSE_DEPLOY_INIT := -f compose.base.yaml -f compose.deploy.init.yaml
 
 # ------------------------------
 # コンテナ管理
@@ -91,16 +92,14 @@ reflect-openapi:
 # ------------------------------
 # 手動デプロイ
 # ------------------------------
-# --no-deps: 依存サービスは再起動しない
-# --remove-orphans: 不要なコンテナを削除
-.PHONY: deploy-manual
-deploy-manual:
-	IMAGE_TAG=${IMAGE_TAG:-latest} docker compose $(COMPOSE_DEPLOY_MANUAL) up -d
+.PHONY: deploy-local
+deploy-local:
+	IMAGE_TAG=${IMAGE_TAG:-latest} docker compose $(COMPOSE_DEPLOY_LOCAL) up -d
 
 # ログ
-.PHONY: deploy-manual-logs
-deploy-manual-logs:
-	docker compose $(COMPOSE_DEPLOY_MANUAL) logs -f
+.PHONY: deploy-local-logs
+deploy-local-logs:
+	docker compose $(COMPOSE_DEPLOY_LOCAL) logs -f
 
 
 # ------------------------------
@@ -109,5 +108,5 @@ deploy-manual-logs:
 # frontendとbackendはデプロイで来るので行わない
 .PHONY: deploy-init
 deploy-init:
-	docker compose $(COMPOSE_DEPLOY) --profile infra up -d --wait --wait-timeout 120
-	docker compose $(COMPOSE_DEPLOY) --profile init run --rm create_buckets
+	docker compose $(COMPOSE_DEPLOY_INIT) --profile infra up -d --wait --wait-timeout 120
+	docker compose $(COMPOSE_DEPLOY_INIT) --profile init run --rm create_buckets
