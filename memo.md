@@ -20,6 +20,18 @@ ctl+shift+P
 
 logはプロジェクト名が同じなら、共有されるらしい。
 
+yamlのブロックスカラー
+```yaml
+- >
+	hoge
+	fuga
+# ["hoge fuga\n"] スペース変換
+- |
+	hoge
+	fuga
+# ["hoge\nfuga\n"] 改行のまま
+```
+
 ## バックエンド
 なんかcargoが効かないので応急処置
 ```bash
@@ -368,6 +380,8 @@ branchのルールやりたい GitHub
 
 
 ### 優先度: 低
+http://localhost:3000/healthみたいにhealthchack用のAPIを作った方がいいね
+
 ruty-celeryのwarning消す datatimeのやつ
 
 CORS設定とか
