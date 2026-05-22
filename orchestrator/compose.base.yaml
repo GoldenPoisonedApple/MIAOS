@@ -89,6 +89,12 @@ services:
         condition: service_healthy # MinIOのヘルスチェック待機
     networks:
       - default
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/tasks"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
 
 
 
