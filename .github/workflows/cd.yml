@@ -226,6 +226,8 @@ jobs:
           proxy_username: ${{ secrets.BASTION_USER }}
           proxy_key: ${{ secrets.DEPLOY_SSH_KEY }}
           proxy_port: ${{ secrets.BASTION_PORT }}
+          # ワークフローのenvはリモートに渡されないので明示的に指定
+          envs: GITHUB_TOKEN, GITHUB_ACTOR, REGISTRY, IMAGE_PREFIX, IMAGE_TAG
           script: |
             set -euo pipefail
             # ホームディレクトリ以下に配置
@@ -294,6 +296,8 @@ jobs:
           proxy_username: ${{ secrets.BASTION_USER }}
           proxy_key: ${{ secrets.DEPLOY_SSH_KEY }}
           proxy_port: ${{ secrets.BASTION_PORT }}
+          # ワークフローのenvはリモートに渡されないので明示的に指定
+          envs: GITHUB_TOKEN, GITHUB_ACTOR, REGISTRY, IMAGE_PREFIX, IMAGE_TAG
           # command_timeout: タスク完了待ちの上限（最長タスク時間 + バッファ）
           command_timeout: 60m
           script: |
