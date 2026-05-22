@@ -1,6 +1,5 @@
 services:
   ito_research:
-    restart: unless-stopped
     init: true  # ゾンビプロセスを防ぐ
     # 共有メモリサイズ (--shm-size=8g) PyTorchのDataLoader等で必須
     shm_size: 8gb

@@ -1,0 +1,21 @@
+# 手動デプロイ用
+# 本番デプロイ用と異なりタグ指定
+
+services:
+  minio:
+    volumes:
+      - minio_data:/data
+  frontend:
+    restart: unless-stopped
+    image: ghcr.io/goldenpoisonedapple/miaos/orchestrator-frontend:${IMAGE_TAG:-latest}
+    ports:
+      - "80:80"
+
+  backend:
+    restart: unless-stopped
+    image: ghcr.io/goldenpoisonedapple/miaos/orchestrator-backend:${IMAGE_TAG:-latest}
+    environment:
+      - LOG_LEVEL=info
+
+volumes:
+  minio_data:

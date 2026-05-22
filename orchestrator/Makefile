@@ -4,6 +4,8 @@
 # 変数定義 := 即時評価, = 遅延評価(使うときに評価)
 COMPOSE_DEV := -f compose.base.yaml -f compose.dev.yaml
 COMPOSE_PROD := -f compose.base.yaml -f compose.prod.yaml
+COMPOSE_DEPLOY := -f compose.base.yaml -f compose.deploy.yaml
+COMPOSE_DEPLOY_MANUAL := -f compose.base.yaml -f compose.deploy.manual.yaml
 
 # ------------------------------
 # コンテナ管理
@@ -84,3 +86,13 @@ generate-openapi:
 .PHONY: reflect-openapi
 reflect-openapi:
 	docker compose $(COMPOSE_DEV) exec frontend make openapi
+
+
+# ------------------------------
+# 手動デプロイ
+# ------------------------------
+# --no-deps: 依存サービスは再起動しない
+# --remove-orphans: 不要なコンテナを削除
+.PHONY: deploy-manual
+deploy-manual:
+	IMAGE_TAG=${IMAGE_TAG:-latest} docker compose $(COMPOSE_DEPLOY_MANUAL) up -d
