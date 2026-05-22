@@ -247,16 +247,17 @@ jobs:
             echo "$GITHUB_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
 
             # 新イメージを取得
-            docker compose -f compose.base.yaml -f compose.deploy.yaml pull backend frontend
+            # upだけでも良いがpull失敗なのかbuild失敗なのかを切り分けられる
+            docker compose -f compose.base.yaml -f compose.deploy.yaml --profile app pull backend frontend
 
             # サービスを再起動（既存コンテナを置き換え）
             # --no-deps: 依存サービス(postgres等)は再起動しない
             # --remove-orphans: 不要なコンテナを削除
-            docker compose -f compose.base.yaml -f compose.deploy.yaml \
+            docker compose -f compose.base.yaml -f compose.deploy.yaml --profile app \
               up -d --no-deps --remove-orphans backend frontend
 
             # ヘルスチェック
-            docker compose -f compose.base.yaml -f compose.deploy.yaml up -d --wait --wait-timeout 120 backend
+            docker compose -f compose.base.yaml -f compose.deploy.yaml --profile app up -d --wait --wait-timeout 120 backend
 
             # 不要になったイメージの削除
             # -a: 全てのイメージを削除

@@ -101,3 +101,13 @@ deploy-manual:
 .PHONY: deploy-manual-logs
 deploy-manual-logs:
 	docker compose $(COMPOSE_DEPLOY_MANUAL) logs -f
+
+
+# ------------------------------
+# 初期化
+# ------------------------------
+# frontendとbackendはデプロイで来るので行わない
+.PHONY: deploy-init
+deploy-init:
+	docker compose $(COMPOSE_DEPLOY) --profile infra up -d --wait --wait-timeout 120
+	docker compose $(COMPOSE_DEPLOY) --profile init run --rm create_buckets
