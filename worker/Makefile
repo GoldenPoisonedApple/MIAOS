@@ -6,6 +6,7 @@ export
 # 変数定義 := 即時評価, = 遅延評価(使うときに評価)
 COMPOSE_DEV := -f compose.base.yaml -f compose.dev.yaml
 COMPOSE_PROD := -f compose.base.yaml -f compose.prod.yaml
+COMPOSE_DEPLOY_MANUAL := -f compose.base.yaml -f compose.deploy.manual.yaml
 
 # こういうやり方もある: Shellスクリプト(自由度が高い)
 # 例
@@ -67,6 +68,18 @@ logs:
 .PHONY: prod-logs
 prod-logs:
 	docker compose $(COMPOSE_PROD) logs -f
+
+# ------------------------------
+# 手動デプロイ
+# ------------------------------
+.PHONY: deploy-manual
+deploy-manual:
+	IMAGE_TAG=${IMAGE_TAG:-latest} docker compose $(COMPOSE_DEPLOY_MANUAL) up -d
+
+# ログ
+.PHONY: deploy-manual-logs
+deploy-manual-logs:
+	docker compose $(COMPOSE_DEPLOY_MANUAL) logs -f
 
 # ------------------------------
 # コンテナ内実行

@@ -1,0 +1,14 @@
+services:
+  ito_research:
+    restart: unless-stopped
+    image: ghcr.io/goldenpoisonedapple/miaos/worker:${IMAGE_TAG:-latest}
+
+    # 手動なのでタスク保護とか無い
+    # stop_grace_period: 1h
+    volumes:
+      - miaos_worker_data:/workspace/data # データセット
+      - miaos_worker_cache:/workspace/cache # キャッシュ(他の実験結果など)
+
+volumes:
+  miaos_worker_data:
+  miaos_worker_cache:

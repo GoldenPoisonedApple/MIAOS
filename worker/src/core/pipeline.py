@@ -74,8 +74,13 @@ def run_experiment(
             )
 
     # メタ情報表示
-    logger.info("Configurations:")
+    logger.info("Request information:")
     for key, value in request.to_dict().items():
+        if not key.startswith("_"):  # アンダースコアから始まるものは非表示
+            logger.info(f"  {key}: {value}")
+    # cfg情報
+    logger.info("Configuration information:")
+    for key, value in cfg.__dict__.items():
         if not key.startswith("_"):  # アンダースコアから始まるものは非表示
             logger.info(f"  {key}: {value}")
 

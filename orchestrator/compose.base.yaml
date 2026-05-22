@@ -41,6 +41,29 @@ services:
       retries: 5
       start_period: 10s
 
+  # MINIO デフォルトでバケット作成
+  create_buckets:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    # 30秒待っても接続できなかったらエラー
+    # set -e: エラーが発生したらスクリプトを終了
+    # $(seq 1 30);: 1から30までの数列を生成
+    # --ignore-existing: 既にバケットが存在してても良い
+    entrypoint: >
+      /bin/sh -c "
+      set -e;
+      for i in $(seq 1 30); do
+        mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} && break;
+        sleep 1;
+      done;
+      mc mb --ignore-existing local/${MINIO_BUCKET_NAME};
+      exit 0;
+      "
+    networks:
+      - default
+
   # 実行結果・メタデータ管理用 (PostgreSQL)
   db:
     image: postgres:15-alpine
@@ -65,7 +88,8 @@ services:
   frontend:
     init: true  # ゾンビプロセスを防ぐ
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - default
 
@@ -89,6 +113,12 @@ services:
         condition: service_healthy # MinIOのヘルスチェック待機
     networks:
       - default
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/tasks"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
 
 
 

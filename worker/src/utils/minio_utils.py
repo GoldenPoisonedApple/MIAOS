@@ -11,9 +11,9 @@ mimetypes.add_type("text/plain", ".log")
 def get_s3_client():
     return boto3.client(
         "s3",
-        endpoint_url=cfg.MINIO_URL,
-        aws_access_key_id=cfg.MINIO_ACCESS_KEY,
-        aws_secret_access_key=cfg.MINIO_SECRET_KEY,
+        endpoint_url=cfg._MINIO_URL,
+        aws_access_key_id=cfg._MINIO_ACCESS_KEY,
+        aws_secret_access_key=cfg._MINIO_SECRET_KEY,
     )
 
 
@@ -30,7 +30,7 @@ def download_model_dir(experiment_id: int) -> str:
     paginator = s3.get_paginator("list_objects_v2")
     # page: 一度に全てのファイルリストを返すとメモリ不足になるため、ページに分けて取得
     for page in paginator.paginate(
-        Bucket=cfg.MINIO_BUCKET_NAME, Prefix=f"{experiment_id}/"
+        Bucket=cfg._MINIO_BUCKET_NAME, Prefix=f"{experiment_id}/"
     ):
         # Contentsがない場合はスキップ
         if "Contents" not in page:
@@ -63,7 +63,7 @@ def download_model_dir(experiment_id: int) -> str:
             print(
                 f"[{cfg.PC_NAME}] Downloading: {remote_file_path} -> {local_file_path}"
             )
-            s3.download_file(cfg.MINIO_BUCKET_NAME, remote_file_path, local_file_path)
+            s3.download_file(cfg._MINIO_BUCKET_NAME, remote_file_path, local_file_path)
 
     return local_dir_path
 
@@ -88,9 +88,10 @@ def upload_results_dir(local_dir: str, remote_prefix: str):
             print(f"[{cfg.PC_NAME}] Uploading: {local_file_path} -> {remote_file_path}")
             # なんかエラーでるからここで生成しているけど、接続確率のオーバーヘッドがある
             s3 = get_s3_client()
+            # アップロード
             s3.upload_file(
                 local_file_path,
-                cfg.MINIO_BUCKET_NAME,
+                cfg._MINIO_BUCKET_NAME,
                 remote_file_path,
                 ExtraArgs={"ContentType": content_type},
             )

@@ -68,16 +68,27 @@ CMD ["bash"]
 FROM base AS prod
 WORKDIR /workspace
 
+# 権限降下用（gosu）と entrypoint
+RUN apt-get update && apt-get install -y --no-install-recommends \
+	gosu \
+	&& rm -rf /var/lib/apt/lists/*
+
 # 非rootユーザー作成
 # TORCH_HOMEのためディレクトリ作成
+# ボリュームのマウント先作成
 RUN useradd -ms /bin/bash appuser \
-	&& mkdir -p /workspace/.cache/torch \
+	&& mkdir -p /workspace/.cache/torch /workspace/data /workspace/cache \
 	&& chown -R appuser:appuser /workspace
+
+# entrypoint スクリプト配置: 本番コンテナは非ルートだが、マウントしたボリュームはroot所有のため実行できない問題用
+# ボリュームの所有権をappuserに変更後、appuserで実行
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # ソースコードをコピー
 COPY --chown=appuser:appuser src/ /workspace/src/
 
-# 実行ユーザーを切り替え
-USER appuser
-
+# ENTRYPOINT: コンテナ起動時に必ず実行されるコマンドの指定 ラッパーのような役割を果たす
+# 内部的には docker-entrypoint.sh celery -A src.workers.celery_tasks worker --loglevel=info -P solo が実行される
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["celery", "-A", "src.workers.celery_tasks", "worker", "--loglevel=info", "-P", "solo"]
