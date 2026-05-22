@@ -36,8 +36,8 @@ NUM_CLASSES: int = 100
 # 攻撃モデルのエポック数
 ATTACK_MODEL_EPOCHS: int = 10
 
-# workerタイムアウト時間(秒) 16時間
-CELERY_VISIBILITY_TIMEOUT: int = 60 * 60 * 16
+# workerタイムアウト時間(秒) 1時間
+CELERY_VISIBILITY_TIMEOUT: int = 60 * 60 * 1
 
 
 # 攻撃手法の列挙型

@@ -358,6 +358,8 @@ Jsonからコード生成できるようにしたいよね
 
 branchのルールやりたい GitHub
 
+強制終了でタスクがちゃんと戻るか検証
+
 
 ### 優先度: 低
 ruty-celeryのwarning消す datatimeのやつ
