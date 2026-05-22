@@ -81,7 +81,7 @@ jobs:
           echo '${{ secrets.WORKER_HOSTS }}' | jq -e 'type == "array" and length > 0'
       - id: set-matrix
         # GITHUB_OUTPUT環境変数(出力ファイル)にキーと値のペアを追記し、後続ジョブに渡す
-        run: echo "hosts=${{ secrets.WORKER_HOSTS }}" >> "$GITHUB_OUTPUT"
+        run: echo "hosts=$(echo '${{ secrets.WORKER_HOSTS }}' | jq -c '.')" >> "$GITHUB_OUTPUT"
 
   # ─────────────────────────────────────────
   # イメージビルド & Push
