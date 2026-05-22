@@ -220,7 +220,7 @@ jobs:
           IMAGE_PREFIX: ${{ github.repository }}
           BACKEND_DIGEST: ${{ needs.build-orchestrator-backend.outputs.digest }}
           FRONTEND_DIGEST: ${{ needs.build-orchestrator-frontend.outputs.digest }}
-          with:
+        with:
           host: ${{ secrets.ORCHESTRATOR_HOST }}
           username: ${{ secrets.ORCHESTRATOR_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
