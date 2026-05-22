@@ -3,7 +3,8 @@ services:
     profiles: ["infra"]
 
   minio:
-    profiles: ["infra"]
+    # init時にcreate_bucketsのdepends_onが見えるように、initプロファイルも指定
+    profiles: ["infra", "init"]
     # NASをマウントしたディレクトリをMinIOの保存領域として指定
     volumes:
       - /mnt/kslib/minio_data:/data
