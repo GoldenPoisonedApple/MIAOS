@@ -1,9 +1,4 @@
 services:
-  minio:
-    # NASをマウントしたディレクトリをMinIOの保存領域として指定
-    volumes:
-      - /mnt/kslib/minio_data:/data
-
   frontend:
     restart: unless-stopped
     image: ${REGISTRY:-ghcr.io}/${IMAGE_PREFIX}/orchestrator-frontend@${FRONTEND_DIGEST}
