@@ -177,6 +177,8 @@ jobs:
           cargo run --bin generate_openapi > $GITHUB_WORKSPACE/schema/openapi.json
           git diff --exit-code || (echo "Error: openapi.json is out of sync. Please run schema generator locally and commit." && exit 1)
 
+      # docker buildx(高性能ビルド環境)初期化
+      - uses: docker/setup-buildx-action@v3
       # 本番環境ビルド検証
       - name: Build backend for production
         uses: docker/build-push-action@v6
@@ -215,8 +217,9 @@ jobs:
           git diff --exit-code || (echo "Error: Frontend generated types are out of sync." && exit 1)
 
       - run: npm run lint
-      - run: npm run build
 
+      # docker buildx(高性能ビルド環境)初期化
+      - uses: docker/setup-buildx-action@v3
       # 本番環境ビルド検証
       - name: Build frontend for production
         uses: docker/build-push-action@v6
@@ -267,6 +270,8 @@ jobs:
           uv run --frozen openapi-python-client generate --meta none --output-path src/server_client --overwrite --path $GITHUB_WORKSPACE/schema/openapi.json
           git diff --exit-code || (echo "Error: Worker generated types are out of sync." && exit 1)
 
+      # docker buildx(高性能ビルド環境)初期化
+      - uses: docker/setup-buildx-action@v3
       # 本番環境ビルド検証
       - name: Build worker for production
         uses: docker/build-push-action@v6
