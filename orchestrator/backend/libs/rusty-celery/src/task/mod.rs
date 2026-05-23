@@ -1,7 +1,11 @@
 //! Provides the [`Task`] trait as well as options for configuring tasks.
 
+// This file has been modified by ito in 2026.
+// Modifications include:
+// - Fix retry_with_countdown and retry_eta errors: NaiveDateTime::from_timestamp_opt has been deprecated -> DateTime::<Utc>::from_timestamp
+
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use rand::distributions::{Distribution, Uniform};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -114,15 +118,23 @@ pub trait Task: Send + Sync + std::marker::Sized {
                 let now_secs = now.as_secs() as u32;
                 let now_millis = now.subsec_millis();
                 let eta_secs = now_secs + countdown;
-                Some(DateTime::<Utc>::from_naive_utc_and_offset(
-                    NaiveDateTime::from_timestamp_opt(eta_secs as i64, now_millis * 1000)
-                        .ok_or_else(|| {
-                            TaskError::UnexpectedError(format!(
-                                "Invalid countdown seconds {countdown}",
-                            ))
-                        })?,
-                    Utc,
-                ))
+                // Modified by Ito 2026/05/23: タイムゾーンを指定
+                // Some(DateTime::<Utc>::from_naive_utc_and_offset(
+                //     NaiveDateTime::from_timestamp_opt(eta_secs as i64, now_millis * 1000)
+                //         .ok_or_else(|| {
+                //             TaskError::UnexpectedError(format!(
+                //                 "Invalid countdown seconds {countdown}",
+                //             ))
+                //         })?,
+                //     Utc,
+                // ))
+                let dt = DateTime::<Utc>::from_timestamp(eta_secs as i64, now_millis * 1000)
+                      .ok_or_else(|| {
+                          TaskError::UnexpectedError(format!(
+                              "Invalid countdown seconds {countdown}",
+                          ))
+                      })?;
+                Some(dt)
             }
             Err(_) => None,
         };
@@ -153,8 +165,11 @@ pub trait Task: Send + Sync + std::marker::Sized {
                 let now_millis = now.subsec_millis();
                 let eta_secs = now_secs + delay_secs;
                 let eta_millis = now_millis + delay_millis;
-                NaiveDateTime::from_timestamp_opt(eta_secs as i64, eta_millis * 1000)
-                    .map(|eta| DateTime::<Utc>::from_naive_utc_and_offset(eta, Utc))
+                // Modified by Ito 2026/05/23: タイムゾーンを指定
+                // NaiveDateTime::from_timestamp_opt(eta_secs as i64, eta_millis * 1000)
+                //     .map(|eta| DateTime::<Utc>::from_naive_utc_and_offset(eta, Utc))
+
+                DateTime::<Utc>::from_timestamp(eta_secs as i64, eta_millis * 1000)
             }
             Err(_) => None,
         }
