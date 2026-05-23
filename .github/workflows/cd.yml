@@ -234,6 +234,7 @@ jobs:
           script: |
             set -euo pipefail
             # ホームディレクトリ以下に配置
+            mkdir -p $HOME/MIAOS/
             cd $HOME/MIAOS/
             git pull origin main
 
@@ -307,6 +308,7 @@ jobs:
           script: |
             set -euo pipefail
             # ホームディレクトリ以下に配置
+            mkdir -p $HOME/MIAOS/
             cd $HOME/MIAOS/
             git pull origin main
 
@@ -326,7 +328,7 @@ jobs:
             docker compose -f compose.base.yaml -f compose.deploy.yaml stop ito_research
 
             # 3. 新イメージで起動
-            docker compose -f compose.base.yaml -f compose.deploy.yaml up -d --no-deps ito_research
+            docker compose -f compose.base.yaml -f compose.deploy.yaml up -d --no-deps --wait --wait-timeout 120 ito_research
 
             # 4. 不要になったイメージの削除
             docker image prune -f --filter "dangling=true"
