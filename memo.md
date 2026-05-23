@@ -400,6 +400,17 @@ branchのルールやりたい GitHub
 
 build-workerが長い キャッシュホントに使えてる？何も変えてないのに5分かかってるよ
 
+
+celery -A src.workers.celery_tasks inspect
+で
+active
+reserved
+scheduled
+stats
+registred
+conf
+とか見れるっぽいね
+
 ### 優先度: 低
 http://localhost:3000/healthみたいにhealthchack用のAPIを作った方がいいね
 
@@ -407,15 +418,14 @@ ruty-celeryのwarning消す datatimeのやつ
 
 MIAOS APIへの送信失敗: Time zone offset must be 1, 3, 5 or 6 characters
 datetimeとかなんとかだった気がする
+明示的FAILEDとかできるね今なら ACKでredisにもどせる
 
 CORS設定とか
 
 
-こういうの見れたらいいよね
-[Pending]  12件
-[Running]   3件
-[Success] 120件
-[Failed]    2件
+Dependabot というものがあるらしい
+依存ライブラリのアップデートを自動で提案してくれるGitHubのボット
+
 
 
 Pythonの型だとidが振ってこんぞ(正確には振ってくるけど型にした時に落ちる)

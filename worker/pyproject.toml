@@ -1,3 +1,32 @@
+[project]
+name = "mia-project"
+version = "0.1.0"
+# nvcr.io/nvidia/pytorch:26.03-py3はUbuntu24.04に合わせて 3.12がインストールされているため
+requires-python = ">=3.12"
+
+dependencies = [
+  "numpy",
+  "scikit-learn",
+  "matplotlib",
+  "tqdm",
+  "pandas",
+  "celery",
+  "redis",
+  "minio",
+  "boto3",
+  "requests",
+  "python-dotenv"
+]
+
+# --extraで指定
+[project.optional-dependencies]
+dev = [
+  "jupyterlab",
+  "ruff",
+  "openapi-python-client"
+]
+
+
 [tool.ruff]
 # ruffで無視するファイル
 exclude = ["src/server_client"]

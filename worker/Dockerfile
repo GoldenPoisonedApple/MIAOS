@@ -20,22 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # [修正点]
 # NGCコンテナには最適化済みのPyTorchが含まれているため、pytorchのインストールは不要
-
-# その他の依存パッケージのインストール
-# 本当はpipもバージョン固定した方がいいんだとは思う requirements.txtとか
-RUN pip install --no-cache-dir --upgrade pip \
-	&& pip install --no-cache-dir \
-	numpy \
-	scikit-learn \
-	matplotlib \
-	tqdm \
-	pandas \
-	celery \
-	redis \
-	minio \
-	boto3 \
-	requests \
-	python-dotenv
+# uvも含まれていた
+# 依存関係インストール
+COPY pyproject.toml uv.lock ./
+# --frozen: 依存関係を固定: ロックファイルを変更しない 依存関係の更新を行わない
+RUN uv sync --frozen
 
 ENV TORCH_HOME=/workspace/.cache/torch
 
@@ -54,11 +43,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	&& rm -rf /var/lib/apt/lists/*
 
 # 依存関係のインストール
-RUN pip install --no-cache-dir --upgrade pip \
-	&& pip install --no-cache-dir \
-	jupyterlab \
-	openapi-python-client \
-	ruff
+# --extra dev: dev依存追加
+RUN uv sync --frozen --extra dev
 
 CMD ["bash"]
 

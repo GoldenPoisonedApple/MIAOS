@@ -109,3 +109,9 @@ lint:
 .PHONY: check
 check:
 	ruff check src
+
+# 依存関係の更新(ロックファイルを更新)
+# uv lock + uv sync みたいな感じ
+.PHONY: sync
+sync:
+	uv sync --update
