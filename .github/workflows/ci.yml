@@ -218,25 +218,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      # uv インストール
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-          cache: pip
 
-      - name: Install Ruff
-        run: pip install ruff
+      # 依存関係インストール
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev
 
+      # format check
       - name: Ruff format check
         # 生成ファイルは除外
-        run: ruff format --check src # --check: 修正はしない
+        # --check: 修正はしない
+        # --frozen: uv.lockとpyproject.tomlに不整合があった場合はエラーとなる
+        run: uv run --frozen ruff format --check src
 
+      # lint
       - name: Ruff check
         # 生成ファイルは除外
-        run: ruff check src
+        run: uv run --frozen ruff check src
 
       # OpenAPIの整合性確認
       - name: Check OpenAPI difference
         run: |
-          pip install openapi-python-client
-          openapi-python-client generate --meta none --output-path src/server_client --overwrite --path $GITHUB_WORKSPACE/schema/openapi.json
+          uv run --frozen openapi-python-client generate --meta none --output-path src/server_client --overwrite --path $GITHUB_WORKSPACE/schema/openapi.json
           git diff --exit-code || (echo "Error: Worker generated types are out of sync." && exit 1)

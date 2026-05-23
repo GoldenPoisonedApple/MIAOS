@@ -19,7 +19,7 @@ services:
     # GPUの割り当て (--gpus all)
     gpus: all
     healthcheck:
-      test: ["CMD-SHELL", "celery -A src.workers.celery_tasks inspect ping --timeout 10 2>/dev/null | grep -q 'pong'"]
+      test: ["CMD-SHELL", "uv run --frozen celery -A src.workers.celery_tasks inspect ping --timeout 10 2>/dev/null | grep -q 'pong'"]
       interval: 5s
       timeout: 3s
       retries: 6

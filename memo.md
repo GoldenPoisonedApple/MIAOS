@@ -313,6 +313,20 @@ Tasks: [Task { id: 1107cc26-b460-4405-8b07-96ff7007f7d2, task: "mia_tasks.run_at
 ## worker
 CIのためruffを導入
 
+uv導入
+依存関係を記述可能
+
+```bash
+pip install uv
+# pyproject.tomlに依存関係記述
+# lockファイル生成
+uv lock
+# 依存関係インストール
+uv sync --frozen
+# uvの環境で実行
+uv run 
+```
+
 
 # モノレポ化しました
 仕様変更、CI/CDが楽になる

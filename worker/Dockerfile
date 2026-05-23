@@ -21,11 +21,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # [修正点]
 # NGCコンテナには最適化済みのPyTorchが含まれているため、pytorchのインストールは不要
 # uvも含まれていた
+
+
 # 依存関係インストール
 COPY pyproject.toml uv.lock ./
 # --frozen: 依存関係を固定: ロックファイルを変更しない 依存関係の更新を行わない
-RUN uv sync --frozen
+# NGC梱包のPyTorch等にアクセスできなくなるので
+# venvを作りつつもグローバル(システム)に既にインストールされているパッケージにもアクセスできるようにする
+RUN uv venv --system-site-packages .venv && uv sync --frozen
 
+# キャッシュディレクトリを指定
 ENV TORCH_HOME=/workspace/.cache/torch
 
 
@@ -75,6 +80,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 COPY --chown=appuser:appuser src/ /workspace/src/
 
 # ENTRYPOINT: コンテナ起動時に必ず実行されるコマンドの指定 ラッパーのような役割を果たす
-# 内部的には docker-entrypoint.sh celery -A src.workers.celery_tasks worker --loglevel=info -P solo が実行される
+# 内部的には docker-entrypoint.sh uv run --frozen celery -A src.workers.celery_tasks worker --loglevel=info -P solo が実行される
+# uv run --frozen: --frozenによって pyproject.toml uv.lock .venv に不整合があった場合はエラーとなる
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["celery", "-A", "src.workers.celery_tasks", "worker", "--loglevel=info", "-P", "solo"]
+CMD ["uv", "run", "--frozen", "celery", "-A", "src.workers.celery_tasks", "worker", "--loglevel=info", "-P", "solo"]

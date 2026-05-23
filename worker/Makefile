@@ -87,31 +87,31 @@ deploy-manual-logs:
 # OpenAPIからPythonクライアントを生成
 .PHONY: openapi
 openapi:
-	openapi-python-client generate --url $(OPENAPI_URL) --meta none --output-path src/server_client --overwrite
+	uv run openapi-python-client generate --url $(OPENAPI_URL) --meta none --output-path src/server_client --overwrite
 
 # Celeryを起動
 .PHONY: celery
 celery:
-	celery -A src.workers.celery_tasks worker --loglevel=info -P solo
+	uv run celery -A src.workers.celery_tasks worker --loglevel=info -P solo
 
 
 # フォーマット
 .PHONY: format
 format:
-	ruff format src
+	uv run ruff format src
 
 # 静的解析
 .PHONY: lint
 lint:
-	ruff check src
+	uv run ruff check src
 
 # チェック
 .PHONY: check
 check:
-	ruff check src
+	uv run ruff check src
 
-# 依存関係の更新(ロックファイルを更新)
-# uv lock + uv sync みたいな感じ
+# 依存関係の更新(ロックファイルを最新に更新し環境に反映)
+# uv lock --upgrade + uv sync --extra dev
 .PHONY: sync
 sync:
-	uv sync --update
+	uv sync --upgrade --extra dev
