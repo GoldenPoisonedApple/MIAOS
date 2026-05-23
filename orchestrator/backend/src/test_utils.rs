@@ -1,3 +1,4 @@
+#[cfg(feature = "integration-test")]
 use std::sync::Once;
 
 use crate::dto::experiment::{CreateExperimentRequest, UpdateResultsRequest};
@@ -5,7 +6,11 @@ use crate::entities::experiment::ExperimentStatus;
 use crate::repositories::experiment::{ExperimentRepository, ExperimentRepositoryTrait};
 use crate::repositories::task::{TaskRepository, TaskRepositoryTrait};
 
+// 他でもlogger使えば解消するが、今のところintegration-testのみで使うので#[cfg(feature = "integration-test")]を記述
+#[cfg(feature = "integration-test")]
 static INIT: Once = Once::new();
+#[cfg(feature = "integration-test")]
+
 /// テスト用のロガーを初期化する
 /// テストでロガーを使いたい時はそのテストの先頭で呼び出す
 pub fn init_test_logger() {

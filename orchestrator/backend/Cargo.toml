@@ -60,3 +60,7 @@ debug = 1 # ローカル開発時のコンパイルを少し速くする (デフ
 [profile.test]
 debug = 0 # CIテスト時はデバッグ情報(スタックトレースの詳細度)を削って高速化
 opt-level = 0 # 最適化はしない（コンパイル速度優先）
+
+
+[features]
+integration-test = []

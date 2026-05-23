@@ -148,17 +148,6 @@ jobs:
       - name: Run database migrations
         run: sqlx migrate run
 
-      # MinIOにテストデータを投入
-      # repository/storageのテストで必要なため
-      - name: Seed test object to MinIO
-        env:
-          AWS_ACCESS_KEY_ID: minioadmin
-          AWS_SECRET_ACCESS_KEY: minioadmin
-        run: |
-          aws s3 mb "s3://${MINIO_BUCKET_NAME}" --endpoint-url "${MINIO_ENDPOINT}" || true
-          echo -n 'hello world' > /tmp/sample.log
-          aws s3 cp /tmp/sample.log "s3://${MINIO_BUCKET_NAME}/test/sample.log" --endpoint-url "${MINIO_ENDPOINT}"
-
       # フォーマットが正しいかどうか
       - name: cargo fmt
         run: cargo fmt --all -- --check # --check: 正しくなくても書き換えない

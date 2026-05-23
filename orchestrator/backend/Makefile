@@ -16,6 +16,10 @@ lint:
 lint-fix:
 	cargo clippy --all-targets --all-features --fix --allow-dirty --allow-no-vcs
 
+# テスト
+.PHONY : test
+test:
+	cargo test -- --test-threads=1
 
 # CI
 .PHONY: ci

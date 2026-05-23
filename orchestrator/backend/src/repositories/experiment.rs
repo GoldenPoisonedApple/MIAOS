@@ -111,7 +111,7 @@ mod tests {
   }
 
   /// 実験の作成テスト
-  #[tokio::test]
+  #[sqlx::test]
   async fn test_create() {
     // Arrange
     let repository = setup().await;
@@ -128,7 +128,7 @@ mod tests {
   }
 
   /// 実験の結果更新テスト
-  #[tokio::test]
+  #[sqlx::test]
   async fn test_update() {
     // Arrange
     let repository = setup().await;
@@ -143,7 +143,7 @@ mod tests {
   }
 
   /// 実験の取得テスト
-  #[tokio::test]
+  #[sqlx::test]
   async fn test_find_by_id() {
     // Arrange
     let repository = setup().await;
@@ -157,7 +157,7 @@ mod tests {
   }
 
   /// 実験の一覧取得テスト
-  #[tokio::test]
+  #[sqlx::test]
   async fn test_find_all() {
     // Arrange
     let repository = setup().await;
@@ -182,7 +182,7 @@ mod tests {
   }
 
   /// 実験の削除テスト
-  #[tokio::test]
+  #[sqlx::test]
   async fn test_delete_from_id() {
     // Arrange
     let repository = setup().await;
