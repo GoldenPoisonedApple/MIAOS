@@ -408,11 +408,13 @@ sqlは専用テストしてredisはモックにすれば並列テスト可能
 
 Jsonからコード生成できるようにしたいよね
 
-branchのルールやりたい GitHub
-
 強制終了でタスクがちゃんと戻るか検証
 
 build-workerが長い キャッシュホントに使えてる？何も変えてないのに5分かかってるよ
+
+compose多すぎやしないか？
+
+リリースとかTagとかのGitHubやりたいね
 
 
 celery -A src.workers.celery_tasks inspect
