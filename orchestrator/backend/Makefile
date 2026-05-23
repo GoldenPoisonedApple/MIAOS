@@ -16,6 +16,13 @@ lint:
 lint-fix:
 	cargo clippy --all-targets --all-features --fix --allow-dirty --allow-no-vcs
 
+
+# CI
+.PHONY: ci
+ci:
+	cargo fmt --all -- --check
+	cargo clippy --all-targets --all-features -- -D warnings
+
 # ------------------------------
 # Migration
 # ------------------------------

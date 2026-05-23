@@ -105,10 +105,11 @@ format:
 lint:
 	uv run ruff check src
 
-# チェック
-.PHONY: check
-check:
-	uv run ruff check src
+# CI
+.PHONY: ci
+ci:
+	uv run --frozen ruff format --check src
+	uv run --frozen ruff check src
 
 # 依存関係の更新(ロックファイルを最新に更新し環境に反映)
 # uv lock --upgrade + uv sync --extra dev

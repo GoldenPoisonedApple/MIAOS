@@ -8,4 +8,5 @@ services:
 
     volumes:
       - ./:/workspace
+      - /workspace/.venv  # 匿名ボリューム ホストの.venvで上書きしない
 
