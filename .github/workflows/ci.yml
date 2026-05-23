@@ -177,6 +177,17 @@ jobs:
           cargo run --bin generate_openapi > $GITHUB_WORKSPACE/schema/openapi.json
           git diff --exit-code || (echo "Error: openapi.json is out of sync. Please run schema generator locally and commit." && exit 1)
 
+      # 本番環境ビルド検証
+      - name: Build backend for production
+        uses: docker/build-push-action@v6
+        with:
+          context: orchestrator/backend
+          target: prod
+          push: false
+          cache-from: type=gha,scope=build-orchestrator-backend
+          cache-to: type=gha,mode=max,scope=build-orchestrator-backend
+
+
   frontend:
     name: Frontend (Node)
     runs-on: ubuntu-latest
@@ -205,6 +216,16 @@ jobs:
 
       - run: npm run lint
       - run: npm run build
+
+      # 本番環境ビルド検証
+      - name: Build frontend for production
+        uses: docker/build-push-action@v6
+        with:
+          context: orchestrator/frontend
+          target: prod
+          push: false
+          cache-from: type=gha,scope=build-orchestrator-frontend
+          cache-to: type=gha,mode=max,scope=build-orchestrator-frontend
 
   worker:
     name: Worker
@@ -245,3 +266,13 @@ jobs:
         run: |
           uv run --frozen openapi-python-client generate --meta none --output-path src/server_client --overwrite --path $GITHUB_WORKSPACE/schema/openapi.json
           git diff --exit-code || (echo "Error: Worker generated types are out of sync." && exit 1)
+
+      # 本番環境ビルド検証
+      - name: Build worker for production
+        uses: docker/build-push-action@v6
+        with:
+          context: worker
+          target: prod
+          push: false
+          cache-from: type=gha,scope=build-worker
+          cache-to: type=gha,mode=max,scope=build-worker

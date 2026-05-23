@@ -17,9 +17,9 @@ docker-ps:
 chown:
 	sudo chown -R $(shell whoami):$(shell whoami) .
 
-# OpenAPIの整合性確保
-.PHONY: openapi
-openapi:
+# OpenAPIの最新化
+.PHONY: openapi-update
+openapi-update:
 	${MAKE} -C orchestrator generate-openapi
 	${MAKE} -C orchestrator reflect-openapi
 	${MAKE} -C worker reflect-openapi
