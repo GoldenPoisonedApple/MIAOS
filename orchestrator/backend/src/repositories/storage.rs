@@ -43,7 +43,7 @@ impl StorageRepositoryTrait for StorageRepository {
   }
 }
 
-#[cfg(feature = "integration-test")]
+#[cfg(all(test, feature = "integration-test"))]
 // 結合テストのみ 本当は#[tokio::test]の真上に置くが、ここのテストは他に無いので, useとかがwarningになってうるさいからここ
 // サブモジュールにまとめて、下みたいな書き方もできる
 // --features integration-test オプションで実行可能
@@ -55,6 +55,7 @@ impl StorageRepositoryTrait for StorageRepository {
 //   #[tokio::test]
 //   async fn test_get_object() { ... }
 // }
+// test 属性もオンになっていないと test_utilが cfg(test)月なので読み込めない
 mod tests {
   use super::*;
   use crate::infrastructure::{establish_storage_client, get_bucket_name};

@@ -185,7 +185,7 @@ impl TaskRepositoryTrait for TaskRepository {
   }
 }
 
-#[cfg(feature = "integration-test")]
+#[cfg(all(test, feature = "integration-test"))]
 mod tests {
   use super::*;
   use crate::entities::experiment::MiaMethod;
