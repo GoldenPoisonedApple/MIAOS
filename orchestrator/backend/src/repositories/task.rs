@@ -185,7 +185,6 @@ impl TaskRepositoryTrait for TaskRepository {
   }
 }
 
-
 #[cfg(feature = "integration-test")]
 mod tests {
   use super::*;

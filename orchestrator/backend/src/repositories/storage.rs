@@ -69,7 +69,14 @@ mod tests {
     let file_path = "test/sample.log";
     let file_content = "hello world";
     let body = ByteStream::from(file_content.as_bytes().to_vec());
-    client.put_object().bucket(get_bucket_name()).key(file_path).body(body).send().await.unwrap();
+    client
+      .put_object()
+      .bucket(get_bucket_name())
+      .key(file_path)
+      .body(body)
+      .send()
+      .await
+      .unwrap();
     let repository = StorageRepository::new(client.clone(), get_bucket_name());
     // Act
     let object = repository.get_object(file_path).await.unwrap();
@@ -77,7 +84,13 @@ mod tests {
     let content = object.body.collect().await.unwrap().into_bytes();
     let content = String::from_utf8(content.to_vec()).unwrap();
     assert_eq!(content, file_content); // 正常に取得できていること
-    // ファイルを削除
-    client.delete_object().bucket(get_bucket_name()).key(file_path).send().await.unwrap();
+                                       // ファイルを削除
+    client
+      .delete_object()
+      .bucket(get_bucket_name())
+      .key(file_path)
+      .send()
+      .await
+      .unwrap();
   }
 }
