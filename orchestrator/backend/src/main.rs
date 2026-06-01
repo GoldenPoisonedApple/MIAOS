@@ -1,3 +1,4 @@
+use mimalloc::MiMalloc;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -14,6 +15,10 @@ use server::routes::app_routes;
 use server::services::experiment::ExperimentService;
 use server::services::file::StorageService;
 use server::state::AppState;
+
+// メモリ管理最適化
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
