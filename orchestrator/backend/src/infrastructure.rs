@@ -1,4 +1,5 @@
 use crate::dto::task::CreateTaskRequest;
+use crate::error::ServerError;
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 use aws_sdk_s3::Client;
 use deadpool_redis::{Config, Pool, Runtime};
@@ -93,4 +94,20 @@ pub async fn establish_storage_client() -> Client {
 /// * 戻り値: String - Bucketの名前
 pub fn get_bucket_name() -> String {
   std::env::var("MINIO_BUCKET_NAME").expect("MINIO_BUCKET_NAME must be set")
+}
+
+/// DBヘルスチェック
+pub async fn ping_database(db: &DatabaseConnection) -> Result<(), ServerError> {
+  let _ = db.ping().await?;
+  Ok(())
+}
+/// Redisヘルスチェック
+pub async fn ping_redis(pool: &Pool) -> Result<(), ServerError> {
+  let _ = pool.get().await.map_err(|e| ServerError::PoolError(e.to_string()))?;
+  Ok(())
+}
+/// Storageヘルスチェック
+pub async fn ping_storage(client: &Client, bucket: &str) -> Result<(), ServerError> {
+  let _ = client.head_bucket().bucket(bucket).send().await;
+  Ok(())
 }

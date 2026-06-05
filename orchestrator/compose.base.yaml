@@ -114,7 +114,7 @@ services:
     networks:
       - default
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/tasks"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health/ready"]
       interval: 5s
       timeout: 3s
       retries: 6
