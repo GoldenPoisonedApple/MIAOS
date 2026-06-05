@@ -8,6 +8,6 @@ pub struct LivenessResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReadinessResponse {
-  pub status: String,           // "ok" | "degraded"
-  pub checks: HashMap<String, String>,  // "database" -> "ok" | "error"
+  pub status: String,                  // "ok" | "degraded"
+  pub checks: HashMap<String, String>, // "database" -> "ok" | "error"
 }

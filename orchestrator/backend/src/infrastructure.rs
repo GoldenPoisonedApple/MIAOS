@@ -98,12 +98,15 @@ pub fn get_bucket_name() -> String {
 
 /// DBヘルスチェック
 pub async fn ping_database(db: &DatabaseConnection) -> Result<(), ServerError> {
-  let _ = db.ping().await?;
+  db.ping().await?;
   Ok(())
 }
 /// Redisヘルスチェック
 pub async fn ping_redis(pool: &Pool) -> Result<(), ServerError> {
-  let _ = pool.get().await.map_err(|e| ServerError::PoolError(e.to_string()))?;
+  let _ = pool
+    .get()
+    .await
+    .map_err(|e| ServerError::PoolError(e.to_string()))?;
   Ok(())
 }
 /// Storageヘルスチェック

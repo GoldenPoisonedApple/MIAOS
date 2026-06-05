@@ -4,8 +4,8 @@ use crate::repositories::task::TaskRepository;
 use crate::services::experiment::ExperimentService;
 use crate::services::file::StorageService;
 use axum::extract::FromRef;
-use std::sync::Arc;
 use sea_orm::DatabaseConnection;
+use std::sync::Arc;
 
 // DIコンテナの役割を果たす
 /// AppState: アプリケーションの状態を保持する

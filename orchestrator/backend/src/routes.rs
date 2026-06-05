@@ -11,8 +11,8 @@ use crate::handlers::experiment::{
   claim_experiment, create_experiment, delete_experiment, delete_task, get_all_experiments,
   get_all_tasks, reflect_experiment_results,
 };
-use crate::handlers::health::{liveness, readiness};
 use crate::handlers::file::get_file;
+use crate::handlers::health::{liveness, readiness};
 
 #[derive(OpenApi)]
 #[openapi(

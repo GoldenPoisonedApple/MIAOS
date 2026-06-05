@@ -93,10 +93,10 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use sea_orm::SqlxPostgresConnector;
   use crate::entities::experiment::ExperimentStatus;
   use crate::test_utils::create_experiment_request_factory;
   use crate::test_utils::remove_test_experiments;
+  use sea_orm::SqlxPostgresConnector;
 
   /// DBテストの前処理
   async fn setup(pool: sqlx::PgPool) -> ExperimentRepository {

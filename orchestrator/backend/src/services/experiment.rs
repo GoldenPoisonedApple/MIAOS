@@ -124,17 +124,15 @@ impl<E: ExperimentRepositoryTrait, T: TaskRepositoryTrait> ExperimentService<E, 
 #[cfg(test)]
 mod tests {
   use super::*;
-  use sea_orm::SqlxPostgresConnector;
   use crate::entities::experiment::ExperimentStatus;
-  use crate::infrastructure::{
-    establish_celery_app, establish_redis_connection,
-  };
+  use crate::infrastructure::{establish_celery_app, establish_redis_connection};
   use crate::repositories::experiment::ExperimentRepository;
   use crate::repositories::task::TaskRepository;
   use crate::test_utils::{
     create_experiment_request_factory, remove_test_experiments, remove_test_tasks,
     update_experiment_request_factory,
   };
+  use sea_orm::SqlxPostgresConnector;
 
   /// テストの前処理
   async fn setup(pool: sqlx::PgPool) -> ExperimentService<ExperimentRepository, TaskRepository> {
