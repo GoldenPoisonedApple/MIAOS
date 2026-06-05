@@ -294,6 +294,17 @@ args = [
     Object { callbacks/chains... } // Celery制御情報
 ]
 ```
+celery -A src.workers.celery_tasks inspect
+で
+active
+reserved
+scheduled
+stats
+registred
+conf
+とか見れるっぽいね
+
+
 - 例
 Tasks: [Task { id: 1107cc26-b460-4405-8b07-96ff7007f7d2, task: "mia_tasks.run_attack", args_positional: Array [], args_keyword: Object {"params": Object {"base_experiment_id": Null, "batch_size": Number(10), "experiment_id": Number(1), "hyperparameters": Object {}, "load_attack_model": Bool(false), "load_shadow_model": Bool(false), "load_target_model": Bool(false), "max_epochs": Number(10), "method": String("OfflineLira"), "name": String("test"), "notes": String("backend_test"), "num_shadow_models": Number(10), "seed": Number(10), "shadow_test_size": Number(10), "shadow_train_size": Number(10), "target_test_size": Number(10), "target_train_size": Number(10)}}, args_control: Object {"callbacks": Null, "chain": Null, "chord": Null, "errbacks": Null} }, Task { id: 676a5a77-8464-424f-bbad-19599fb20079, task: "mia_tasks.run_attack", args_positional: Array [], args_keyword: Object {"params": Object {"base_experiment_id": Null, "batch_size": Number(10), "experiment_id": Number(1), "hyperparameters": Object {}, "load_attack_model": Bool(false), "load_shadow_model": Bool(false), "load_target_model": Bool(false), "max_epochs": Number(10), "method": String("OfflineLira"), "name": String("test"), "notes": String("backend_test"), "num_shadow_models": Number(10), "seed": Number(10), "shadow_test_size": Number(10), "shadow_train_size": Number(10), "target_test_size": Number(10), "target_train_size": Number(10)}}, args_control: Object {"callbacks": Null, "chain": Null, "chord": Null, "errbacks": Null} }, Task { id: d2e8213d-6412-4b1f-9111-f3dfbaa805ef, task: "mia_tasks.run_attack", args_positional: Array [], args_keyword: Object {"params": Object {"base_experiment_id": Null, "batch_size": Number(10), "experiment_id": Number(1), "hyperparameters": Object {}, "load_attack_model": Bool(false), "load_shadow_model": Bool(false), "load_target_model": Bool(false), "max_epochs": Number(10), "method": String("OfflineLira"), "name": String("test"), "notes": String("backend_test"), "num_shadow_models": Number(10), "seed": Number(10), "shadow_test_size": Number(10), "shadow_train_size": Number(10), "target_test_size": Number(10), "target_train_size": Number(10)}}, args_control: Object {"callbacks": Null, "chain": Null, "chord": Null, "errbacks": Null} }]
 
@@ -407,31 +418,17 @@ Jsonからコード生成できるようにしたいよね
 
 強制終了でタスクがちゃんと戻るか検証
 
-build-workerが長い キャッシュホントに使えてる？何も変えてないのに5分かかってるよ
-
-compose多すぎやしないか？
-
 リリースとかTagとかのGitHubやりたいね
 
 
-celery -A src.workers.celery_tasks inspect
-で
-active
-reserved
-scheduled
-stats
-registred
-conf
-とか見れるっぽいね
-
 ### 優先度: 低
-http://localhost:3000/healthみたいにhealthchack用のAPIを作った方がいいね
-
-ruty-celeryのwarning消す datatimeのやつ
-
 MIAOS APIへの送信失敗: Time zone offset must be 1, 3, 5 or 6 characters
 datetimeとかなんとかだった気がする
 明示的FAILEDとかできるね今なら ACKでredisにもどせる
+
+build-workerが長い キャッシュホントに使えてる？何も変えてないのに5分かかってるよ
+
+compose多すぎやしないか？
 
 CORS設定とか
 

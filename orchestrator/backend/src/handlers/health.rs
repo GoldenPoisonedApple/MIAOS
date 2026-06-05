@@ -18,5 +18,10 @@ pub async fn readiness(
   State(health_state): State<HealthState>,
 ) -> (StatusCode, Json<ReadinessResponse>) {
   let response = check_readiness(&health_state).await;
-  (StatusCode::OK, Json(response))
+  let code = if response.status == "ok" {
+    StatusCode::OK
+  } else {
+    StatusCode::SERVICE_UNAVAILABLE
+  };
+  (code, Json(response))
 }

@@ -1,3 +1,10 @@
+# 立上げ
+
+.PHONY: dev
+dev:
+	${MAKE} -C orchestrator dev
+	${MAKE} -C worker dev
+
 # ------------------------------
 # 開発時用
 # ------------------------------
