@@ -1,8 +1,8 @@
-use mimalloc::MiMalloc;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
+use mimalloc::MiMalloc;
 
 use server::infrastructure::{
   establish_celery_app, establish_db_connection, establish_redis_connection,

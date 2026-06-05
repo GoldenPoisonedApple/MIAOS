@@ -93,17 +93,17 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use sea_orm::SqlxPostgresConnector;
   use crate::entities::experiment::ExperimentStatus;
-  use crate::infrastructure::establish_db_connection;
   use crate::test_utils::create_experiment_request_factory;
   use crate::test_utils::remove_test_experiments;
 
   /// DBテストの前処理
-  async fn setup() -> ExperimentRepository {
+  async fn setup(pool: sqlx::PgPool) -> ExperimentRepository {
     // DB接続
-    let pool = establish_db_connection().await;
+    let db = SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
     // リポジトリインスタンス作成
-    let repository = ExperimentRepository::new(pool.clone());
+    let repository = ExperimentRepository::new(db);
     // テストデータの削除
     remove_test_experiments(&repository).await;
 
@@ -112,9 +112,9 @@ mod tests {
 
   /// 実験の作成テスト
   #[sqlx::test]
-  async fn test_create() {
+  async fn test_create(pool: sqlx::PgPool) {
     // Arrange
-    let repository = setup().await;
+    let repository = setup(pool).await;
     let request = create_experiment_request_factory("test_experiment");
     let total = repository.find_all().await.unwrap().len();
     // Act
@@ -124,14 +124,13 @@ mod tests {
     assert_eq!(result.status, ExperimentStatus::Waiting); // デフォルトステータスがWAITINGである事
     let created_total = repository.find_all().await.unwrap().len();
     assert_eq!(created_total, total + 1); // 実験の数が1増えている事
-    remove_test_experiments(&repository).await;
   }
 
   /// 実験の結果更新テスト
   #[sqlx::test]
-  async fn test_update() {
+  async fn test_update(pool: sqlx::PgPool) {
     // Arrange
-    let repository = setup().await;
+    let repository = setup(pool).await;
     let request = create_experiment_request_factory("test_experiment"); // 実験を作成
     let mut model = repository.create(request).await.unwrap();
     model.name = "test_experiment_updated".to_string(); // 実験名を更新
@@ -139,28 +138,26 @@ mod tests {
     let result = repository.update(model).await.unwrap();
     // Assert
     assert_eq!(result.name, "test_experiment_updated"); // 実験名が更新されている事
-    remove_test_experiments(&repository).await;
   }
 
   /// 実験の取得テスト
   #[sqlx::test]
-  async fn test_find_by_id() {
+  async fn test_find_by_id(pool: sqlx::PgPool) {
     // Arrange
-    let repository = setup().await;
+    let repository = setup(pool).await;
     let request = create_experiment_request_factory("test_experiment");
     let result = repository.create(request).await.unwrap();
     // Act
     let result = repository.find_by_id(result.id).await.unwrap();
     // Assert
     assert_eq!(result.name, "test_experiment"); // 実験名が一致する事
-    remove_test_experiments(&repository).await;
   }
 
   /// 実験の一覧取得テスト
   #[sqlx::test]
-  async fn test_find_all() {
+  async fn test_find_all(pool: sqlx::PgPool) {
     // Arrange
-    let repository = setup().await;
+    let repository = setup(pool).await;
     let request1 = create_experiment_request_factory("test_experiment1");
     let request2 = create_experiment_request_factory("test_experiment2");
     repository.create(request1).await.unwrap();
@@ -178,14 +175,13 @@ mod tests {
     assert_eq!(verifications.len(), 2); // テストデータの数が2件である事
     assert_eq!(verifications[0].name, "test_experiment1"); // 1件目の実験名が一致する事
     assert_eq!(verifications[1].name, "test_experiment2"); // 2件目の実験名が一致する事
-    remove_test_experiments(&repository).await;
   }
 
   /// 実験の削除テスト
   #[sqlx::test]
-  async fn test_delete_from_id() {
+  async fn test_delete_from_id(pool: sqlx::PgPool) {
     // Arrange
-    let repository = setup().await;
+    let repository = setup(pool).await;
     let request = create_experiment_request_factory("test_experiment");
     let result = repository.create(request).await.unwrap();
     let total = repository.find_all().await.unwrap().len();
@@ -199,6 +195,5 @@ mod tests {
     assert!(!experiments
       .iter()
       .any(|experiment| experiment.id == result.id)); // 削除された実験が存在しない事
-    remove_test_experiments(&repository).await;
   }
 }

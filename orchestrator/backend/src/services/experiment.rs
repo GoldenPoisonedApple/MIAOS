@@ -124,9 +124,10 @@ impl<E: ExperimentRepositoryTrait, T: TaskRepositoryTrait> ExperimentService<E, 
 #[cfg(test)]
 mod tests {
   use super::*;
+  use sea_orm::SqlxPostgresConnector;
   use crate::entities::experiment::ExperimentStatus;
   use crate::infrastructure::{
-    establish_celery_app, establish_db_connection, establish_redis_connection,
+    establish_celery_app, establish_redis_connection,
   };
   use crate::repositories::experiment::ExperimentRepository;
   use crate::repositories::task::TaskRepository;
@@ -136,14 +137,14 @@ mod tests {
   };
 
   /// テストの前処理
-  async fn setup() -> ExperimentService<ExperimentRepository, TaskRepository> {
+  async fn setup(pool: sqlx::PgPool) -> ExperimentService<ExperimentRepository, TaskRepository> {
     // 実験リポジトリ
-    let conn = establish_db_connection().await;
-    let experiment_repository = ExperimentRepository::new(conn.clone());
+    let db = SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let experiment_repository = ExperimentRepository::new(db);
     // タスクリポジトリ
-    let pool = establish_redis_connection().await;
+    let redis_pool = establish_redis_connection().await;
     let celery_app = establish_celery_app().await;
-    let task_repository = TaskRepository::new(pool, celery_app);
+    let task_repository = TaskRepository::new(redis_pool, celery_app);
 
     // テストデータの削除
     remove_test_experiments(&experiment_repository).await;
@@ -175,10 +176,11 @@ mod tests {
 
   /// モックタスクリポジトリを使用したテストの前処理
   async fn setup_with_mock_task_repository(
+    pool: sqlx::PgPool,
   ) -> ExperimentService<ExperimentRepository, MockTaskRepository> {
     // 実験リポジトリ
-    let conn = establish_db_connection().await;
-    let experiment_repository = ExperimentRepository::new(conn.clone());
+    let db = SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let experiment_repository = ExperimentRepository::new(db);
     // タスクリポジトリ
     let task_repository = MockTaskRepository::new();
 
@@ -186,15 +188,14 @@ mod tests {
     remove_test_experiments(&experiment_repository).await;
 
     // サービスインスタンス作成
-
     ExperimentService::new(experiment_repository, task_repository)
   }
 
   /// 実験の作成テスト
-  #[tokio::test]
-  async fn test_create() {
+  #[sqlx::test]
+  async fn test_create(pool: sqlx::PgPool) {
     // Arrange
-    let service = setup().await;
+    let service = setup(pool).await;
     let request = create_experiment_request_factory("test_experiment");
     let experiment_total = service
       .experiment_repository
@@ -220,15 +221,14 @@ mod tests {
       tasks[task_total].args_keyword["_params"]["experiment_id"],
       result.id
     ); // タスクに同じ実験IDが設定されている事
-    remove_test_experiments(&service.experiment_repository).await;
     remove_test_tasks(&service.task_repository).await;
   }
 
   /// 実験の作成: 失敗時のロールバック
-  #[tokio::test]
-  async fn create_should_rollback_on_task_creation_failure() {
+  #[sqlx::test]
+  async fn create_should_rollback_on_task_creation_failure(pool: sqlx::PgPool) {
     // Arrange
-    let service = setup_with_mock_task_repository().await;
+    let service = setup_with_mock_task_repository(pool).await;
     let request = create_experiment_request_factory("test_experiment");
     // Act
     let result = service.create_experiment(request.clone()).await;
@@ -238,14 +238,13 @@ mod tests {
     assert!(!experiments
       .iter()
       .any(|experiment| experiment.name == request.name)); // リクエストの実験が存在しない事
-    remove_test_experiments(&service.experiment_repository).await;
   }
 
   /// 実験の結果反映テスト
-  #[tokio::test]
-  async fn test_reflect_experiment_results() {
+  #[sqlx::test]
+  async fn test_reflect_experiment_results(pool: sqlx::PgPool) {
     // Arrange
-    let service = setup().await;
+    let service = setup(pool).await;
     let experiment = service
       .experiment_repository
       .create(create_experiment_request_factory("test_experiment"))
@@ -259,14 +258,13 @@ mod tests {
     assert_eq!(result.status, ExperimentStatus::Succeeded); // ステータスがセットされていること
     assert!(result.completed_at.is_some()); // 完了時刻がセットされている事
     assert_eq!(result.worker_name, Some("test_worker".to_string())); // ワーカーがセットされていること
-    remove_test_experiments(&service.experiment_repository).await;
   }
 
   /// 実験の結果反映: FAILED
-  #[tokio::test]
-  async fn test_reflect_experiment_results_failed() {
+  #[sqlx::test]
+  async fn test_reflect_experiment_results_failed(pool: sqlx::PgPool) {
     // Arrange
-    let service = setup().await;
+    let service = setup(pool).await;
     let experiment = service
       .experiment_repository
       .create(create_experiment_request_factory("test_experiment"))
@@ -279,14 +277,13 @@ mod tests {
     // Assert
     assert_eq!(result.status, ExperimentStatus::Failed); // 失敗となっていること
     assert_eq!(result.error_message, Some("test_error".to_string())); // エラーメッセージがセットされていること
-    remove_test_experiments(&service.experiment_repository).await;
   }
 
   /// 処理取得の報告テスト
-  #[tokio::test]
-  async fn test_claim_experiment() {
+  #[sqlx::test]
+  async fn test_claim_experiment(pool: sqlx::PgPool) {
     // Arrange
-    let service = setup().await;
+    let service = setup(pool).await;
     let experiment = service
       .experiment_repository
       .create(create_experiment_request_factory("test_experiment"))
@@ -301,14 +298,13 @@ mod tests {
     // Assert
     assert_eq!(result.status, ExperimentStatus::Running); // ステータスが実行中となっていること
     assert_eq!(result.worker_name, Some("test_worker".to_string())); // ワーカーがセットされていること
-    remove_test_experiments(&service.experiment_repository).await;
   }
 
   /// 実験の削除テスト
-  #[tokio::test]
-  async fn test_delete_experiment_by_id() {
+  #[sqlx::test]
+  async fn test_delete_experiment_by_id(pool: sqlx::PgPool) {
     // Arrange
-    let service = setup().await;
+    let service = setup(pool).await;
     let created_experiment = service
       .experiment_repository
       .create(create_experiment_request_factory("test_experiment"))
@@ -329,7 +325,6 @@ mod tests {
     assert!(!tasks
       .iter()
       .any(|task| task.experiment_id == created_experiment.id)); // 指定IDの実験タスクが存在しない事
-    remove_test_experiments(&service.experiment_repository).await;
     remove_test_tasks(&service.task_repository).await;
   }
 }
