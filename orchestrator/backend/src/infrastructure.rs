@@ -111,6 +111,6 @@ pub async fn ping_redis(pool: &Pool) -> Result<(), ServerError> {
 }
 /// Storageヘルスチェック
 pub async fn ping_storage(client: &Client, bucket: &str) -> Result<(), ServerError> {
-  let _ = client.head_bucket().bucket(bucket).send().await;
+  let _ = client.head_bucket().bucket(bucket).send().await.map_err(|e| ServerError::S3Error(format!("S3 error: {e}")))?;
   Ok(())
 }
