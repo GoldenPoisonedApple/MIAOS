@@ -85,9 +85,17 @@ deploy-manual-logs:
 # コンテナ内実行
 # ------------------------------
 # OpenAPIからPythonクライアントを生成
+# --meta none: メタデータを含めない
 .PHONY: openapi
 openapi:
+	uv run openapi-python-client generate --path /schema/openapi.json --meta none --output-path src/server_client --overwrite
+
+# OpenAPI(Live)
+.PHONY: openapi-live
+openapi-live:
 	uv run openapi-python-client generate --url $(OPENAPI_URL) --meta none --output-path src/server_client --overwrite
+
+
 
 # Celeryを起動
 .PHONY: celery

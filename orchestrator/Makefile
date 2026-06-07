@@ -81,7 +81,7 @@ redisshell:
 # JSONファイル生成
 .PHONY: generate-openapi
 generate-openapi:
-	docker compose $(COMPOSE_DEV) exec backend cargo run --bin generate_openapi > ../schema/openapi.json
+	docker compose $(COMPOSE_DEV) exec backend make generate-openapi
 
 # フロントエンドでOpenAPIを使用
 .PHONY: reflect-openapi

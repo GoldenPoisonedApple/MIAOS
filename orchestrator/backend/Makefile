@@ -46,3 +46,12 @@ migrate-revert:
 # マイグレーション状態の確認
 migrate-info:
 	sqlx migrate info
+
+
+# ------------------------------
+# OpenAPI
+# ------------------------------
+# JSONファイル生成
+.PHONY: generate-openapi
+generate-openapi:
+	cargo run --bin generate_openapi > /schema/openapi.json
