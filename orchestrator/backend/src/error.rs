@@ -52,6 +52,10 @@ pub enum ServerError {
   #[error("Not found: {0}")]
   NotFound(String),
 
+  /// コンフリクト
+  #[error("Conflict: {0}")]
+  Conflict(String),
+
   /// 内部エラー
   #[error("Internal server error: {0}")]
   Internal(String),
@@ -66,6 +70,7 @@ impl IntoResponse for ServerError {
         StatusCode::INTERNAL_SERVER_ERROR,
         "Internal Database Error".to_string(),
       ),
+      ServerError::Conflict(msg) => (StatusCode::CONFLICT, msg),
       _ => (
         StatusCode::INTERNAL_SERVER_ERROR,
         "Internal Server Error".to_string(),

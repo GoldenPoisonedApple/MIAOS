@@ -66,7 +66,7 @@ impl<E: ExperimentRepositoryTrait, T: TaskRepositoryTrait> ExperimentService<E, 
       .find_by_id(request.experiment_id)
       .await?;
     // 結果反映
-    model.complete(request, OffsetDateTime::now_utc());
+    model.complete(request, OffsetDateTime::now_utc())?;
     // 更新
     self.experiment_repository.update(model).await
   }
@@ -81,7 +81,7 @@ impl<E: ExperimentRepositoryTrait, T: TaskRepositoryTrait> ExperimentService<E, 
     // 更新対象取得
     let mut model = self.experiment_repository.find_by_id(request.id).await?;
     // 処理取得の報告
-    model.claim(request);
+    model.claim(request)?;
     // 更新
     self.experiment_repository.update(model).await
   }
@@ -248,6 +248,11 @@ mod tests {
       .create(create_experiment_request_factory("test_experiment"))
       .await
       .unwrap(); // 実験を作成
+    let request = ClaimExperimentRequest {
+      id: experiment.id,
+      worker_name: "test_worker".to_string(),
+    };
+    service.claim_experiment(request).await.unwrap(); // 処理取得の報告
     let request = update_experiment_request_factory(experiment.id, ExperimentStatus::Succeeded);
     // Act
     let result = service.reflect_experiment_results(request).await.unwrap();
@@ -268,6 +273,11 @@ mod tests {
       .create(create_experiment_request_factory("test_experiment"))
       .await
       .unwrap(); // 実験を作成
+    let request = ClaimExperimentRequest {
+      id: experiment.id,
+      worker_name: "test_worker".to_string(),
+    };
+    service.claim_experiment(request).await.unwrap(); // 処理取得の報告
     let mut request = update_experiment_request_factory(experiment.id, ExperimentStatus::Failed);
     request.error_message = Some("test_error".to_string());
     // Act

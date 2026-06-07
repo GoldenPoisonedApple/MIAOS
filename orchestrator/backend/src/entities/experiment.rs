@@ -6,6 +6,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 
 use crate::dto::experiment::{ClaimExperimentRequest, UpdateResultsRequest};
+use crate::error::ServerError;
 
 #[derive(
   Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
@@ -20,6 +21,24 @@ pub enum ExperimentStatus {
   Succeeded,
   #[sea_orm(string_value = "FAILED")]
   Failed,
+}
+
+impl ExperimentStatus {
+  /// 処理取得が可能かどうか
+  /// * 戻り値: bool - 処理取得が可能かどうか
+  pub fn can_claim(&self) -> bool {
+    // Waitingのみ
+    matches!(self, ExperimentStatus::Waiting)
+  }
+
+  /// 結果反映が可能かどうか
+  /// * next: ExperimentStatus - 次のステータス
+  /// * 戻り値: bool - 結果反映が可能かどうか
+  pub fn can_complete_to(&self, next: &ExperimentStatus) -> bool {
+    // RunningからSucceededまたはFailedへの遷移のみ可能
+    matches!(self, ExperimentStatus::Running)
+      && matches!(next, ExperimentStatus::Succeeded | ExperimentStatus::Failed)
+  }
 }
 
 #[derive(
@@ -139,7 +158,18 @@ impl ActiveModelBehavior for ActiveModel {}
 // 複雑なロジックがある場合は、serviceとrepositoryの間のDTOを作成するのが良いかと
 impl Model {
   /// 結果を反映する
-  pub fn complete(&mut self, results: UpdateResultsRequest, completed_at: OffsetDateTime) {
+  pub fn complete(
+    &mut self,
+    results: UpdateResultsRequest,
+    completed_at: OffsetDateTime,
+  ) -> Result<(), ServerError> {
+    // 状態遷移ルールブロッキング
+    if !self.status.can_complete_to(&results.status) {
+      return Err(ServerError::Conflict(format!(
+        "結果反映が可能ではありません: {:?} -> {:?}",
+        self.status, results.status
+      )));
+    }
     // 状態遷移のルール
     self.status = results.status;
     self.error_message = results.error_message;
@@ -158,12 +188,23 @@ impl Model {
     self.total_time = results.total_time;
     // ファイル
     self.files = Some(results.files);
+
+    Ok(())
   }
 
   /// 処理取得の報告
-  pub fn claim(&mut self, claim: ClaimExperimentRequest) {
+  pub fn claim(&mut self, claim: ClaimExperimentRequest) -> Result<(), ServerError> {
+    // 状態遷移ルールブロッキング
+    if !self.status.can_claim() {
+      return Err(ServerError::Conflict(format!(
+        "既に処理が報告されています: {:?}",
+        self.status
+      )));
+    }
     self.status = ExperimentStatus::Running;
     self.worker_name = Some(claim.worker_name);
+
+    Ok(())
   }
 
   // SeaORMの仕様のせいでつくってる変換 Updateを通知してあげる
@@ -249,14 +290,30 @@ mod tests {
   fn test_complete() {
     // Arrange
     let mut experiment = create_model();
+    experiment.status = ExperimentStatus::Running;
     let request = update_experiment_request_factory(experiment.id, ExperimentStatus::Succeeded);
     let completed_at = OffsetDateTime::now_utc();
     // Act
-    experiment.complete(request, completed_at);
+    experiment.complete(request, completed_at).unwrap();
     // Assert
     assert_eq!(experiment.status, ExperimentStatus::Succeeded); // ステータスがセットされていること
     assert_eq!(experiment.completed_at, Some(completed_at)); // 完了時刻がセットされている事
     assert_eq!(experiment.worker_name, Some("test_worker".to_string())); // 結果が反映されていること
+  }
+
+  /// 結果反映失敗
+  #[test]
+  fn test_complete_with_waiting_status() {
+    // Arrange
+    let mut experiment = create_model();
+    experiment.status = ExperimentStatus::Waiting; // 待機のステータスにする
+    let request = update_experiment_request_factory(experiment.id, ExperimentStatus::Succeeded);
+    let completed_at = OffsetDateTime::now_utc();
+    // Act
+    let result = experiment.complete(request, completed_at);
+    // Assert
+    assert!(result.is_err());
+    assert!(matches!(result.unwrap_err(), ServerError::Conflict(_)));
   }
 
   /// 処理取得の報告テスト
@@ -269,9 +326,26 @@ mod tests {
       worker_name: "test_worker".to_string(),
     };
     // Act
-    experiment.claim(request);
+    experiment.claim(request).unwrap();
     // Assert
     assert_eq!(experiment.status, ExperimentStatus::Running); // ステータスが実行中となっていること
     assert_eq!(experiment.worker_name, Some("test_worker".to_string())); // ワーカーがセットされていること
+  }
+
+  /// 報告失敗
+  #[test]
+  fn test_claim_with_running_status() {
+    // Arrange
+    let mut experiment = create_model();
+    experiment.status = ExperimentStatus::Running; // 実行中のステータスにする
+    let request = ClaimExperimentRequest {
+      id: experiment.id,
+      worker_name: "test_worker".to_string(),
+    };
+    // Act
+    let result = experiment.claim(request);
+    // Assert
+    assert!(result.is_err());
+    assert!(matches!(result.unwrap_err(), ServerError::Conflict(_)));
   }
 }
