@@ -9,6 +9,6 @@ openapi-live:
 	npm run gen:api:live
 
 # CI
-.PHONY: ci
-ci:
+.PHONY: check
+check:
 	npm run lint

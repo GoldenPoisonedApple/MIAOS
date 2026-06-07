@@ -7,6 +7,7 @@ format:
 	cargo fmt --all
 
 # 静的解析
+# -D warnings: 警告もエラー扱い
 .PHONY : lint
 lint:
 	cargo clippy --all-targets --all-features -- -D warnings
@@ -19,13 +20,21 @@ lint-fix:
 # テスト
 .PHONY : test
 test:
-	cargo test -- --test-threads=1
+	cargo test
+
+# 統合テスト
+# --test-threads=1: 外部依存があるのでテストを並列実行しない
+.PHONY : test-integration
+test-integration:
+	cargo test --all-features -- --test-threads=1
 
 # CI
-.PHONY: ci
-ci:
+# --check: 正しくなくても書き換えない
+.PHONY: check
+check:
 	cargo fmt --all -- --check
-	cargo clippy --all-targets --all-features -- -D warnings
+	${MAKE} lint
+	${MAKE} test-integration
 
 # ------------------------------
 # Migration

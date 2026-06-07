@@ -30,3 +30,9 @@ openapi-update:
 	${MAKE} -C orchestrator generate-openapi
 	${MAKE} -C orchestrator reflect-openapi
 	${MAKE} -C worker reflect-openapi
+
+# Check
+.PHONY: check
+check:
+	${MAKE} -C orchestrator check
+	${MAKE} -C worker check-dev

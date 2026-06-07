@@ -89,6 +89,14 @@ reflect-openapi:
 	docker compose $(COMPOSE_DEV) exec frontend make openapi
 
 
+# --------------------------------
+# Check
+# --------------------------------
+.PHONY: check
+check:
+	docker compose $(COMPOSE_DEV) exec backend make check
+	docker compose $(COMPOSE_DEV) exec frontend make check
+
 # ------------------------------
 # 手動デプロイ
 # ------------------------------

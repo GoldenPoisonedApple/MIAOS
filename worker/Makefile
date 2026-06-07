@@ -1,6 +1,7 @@
 # .envファイルを読み込む
 # Makeの変数として扱う
-include .env
+# -include: ファイルが存在しない場合はエラーとしない
+-include .env
 export
 
 # 変数定義 := 即時評価, = 遅延評価(使うときに評価)
@@ -48,6 +49,11 @@ shell:
 .PHONY: reflect-openapi
 reflect-openapi:
 	docker compose $(COMPOSE_DEV) exec ito_research make openapi
+
+# check
+.PHONY: check-dev
+check-dev:
+	docker compose $(COMPOSE_DEV) exec ito_research make check
 
 # 停止(開発)
 .PHONY: down
@@ -114,8 +120,10 @@ lint:
 	uv run ruff check src
 
 # CI
-.PHONY: ci
-ci:
+# --check: 修正はしない
+# --frozen: uv.lockとpyproject.tomlに不整合があった場合はエラーとなる
+.PHONY: check
+check:
 	uv run --frozen ruff format --check src
 	uv run --frozen ruff check src
 
