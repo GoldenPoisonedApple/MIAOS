@@ -18,5 +18,11 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // React Compiler 未使用のため無効化
+			// warning出たのでoff
+      'react-hooks/incompatible-library': 'off',
+    },
+
   },
 ])
