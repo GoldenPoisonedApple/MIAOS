@@ -5,6 +5,12 @@ dev:
 	${MAKE} -C orchestrator dev
 	${MAKE} -C worker dev
 
+# 立上げ(本番)
+.PHONY: prod
+prod:
+	${MAKE} -C orchestrator prod
+	${MAKE} -C worker prod
+
 # ------------------------------
 # 開発時用
 # ------------------------------
