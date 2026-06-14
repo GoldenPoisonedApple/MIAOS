@@ -66,11 +66,8 @@ impl IntoResponse for ServerError {
   fn into_response(self) -> Response {
     let (status, message) = match self {
       ServerError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
-      ServerError::DatabaseError(_) | ServerError::RedisError(_) | ServerError::PoolError(_) => (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "Internal Database Error".to_string(),
-      ),
       ServerError::Conflict(msg) => (StatusCode::CONFLICT, msg),
+      ServerError::InvalidPath(msg) => (StatusCode::BAD_REQUEST, msg),
       _ => (
         StatusCode::INTERNAL_SERVER_ERROR,
         "Internal Server Error".to_string(),

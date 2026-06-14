@@ -124,6 +124,7 @@ impl<E: ExperimentRepositoryTrait, T: TaskRepositoryTrait> ExperimentService<E, 
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::config::app::AppConfig;
   use crate::entities::experiment::ExperimentStatus;
   use crate::infrastructure::{establish_celery_app, establish_redis_connection};
   use crate::repositories::experiment::ExperimentRepository;
@@ -140,8 +141,9 @@ mod tests {
     let db = SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
     let experiment_repository = ExperimentRepository::new(db);
     // タスクリポジトリ
-    let redis_pool = establish_redis_connection().await;
-    let celery_app = establish_celery_app().await;
+    let config = AppConfig::test_defaults().unwrap();
+    let redis_pool = establish_redis_connection(&config).await.unwrap();
+    let celery_app = establish_celery_app(&config).await.unwrap();
     let task_repository = TaskRepository::new(redis_pool, celery_app);
 
     // テストデータの削除

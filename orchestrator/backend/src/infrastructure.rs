@@ -1,3 +1,4 @@
+use crate::config::app::AppConfig;
 use crate::dto::task::CreateTaskRequest;
 use crate::error::ServerError;
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
@@ -11,35 +12,39 @@ const MAX_CONNECTIONS: u32 = 5;
 
 /// DB接続を確立する
 /// * 戻り値: DatabaseConnection - DB接続
-pub async fn establish_db_connection() -> DatabaseConnection {
+pub async fn establish_db_connection(
+  config: &AppConfig,
+) -> Result<DatabaseConnection, ServerError> {
   // URL取得
-  let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+  let database_url = config.database_url.clone();
   // 接続設定
   let mut connect_options = ConnectOptions::new(database_url);
   connect_options
     .max_connections(MAX_CONNECTIONS)
     .min_connections(1)
-    .acquire_timeout(Duration::from_secs(10))
-    .connect_timeout(Duration::from_secs(10))
-    .idle_timeout(Duration::from_secs(10))
-    .max_lifetime(Duration::from_secs(10))
+    .acquire_timeout(Duration::from_secs(10)) // 接続取得時のタイムアウト
+    .connect_timeout(Duration::from_secs(10)) // 接続時のタイムアウト
+    .idle_timeout(Duration::from_secs(30 * 60)) // 接続保持時のタイムアウト
+    .max_lifetime(Duration::from_secs(60 * 60)) // 接続保持時の最大生存期間
     .sqlx_logging(true); // 実行されたSQLのログ出力
                          // 接続確立
-  let pool = Database::connect(connect_options).await.unwrap();
+  let pool = Database::connect(connect_options).await?;
   tracing::info!("Connected to database via SeaORM");
-  pool
+  Ok(pool)
 }
 
 /// Redis接続を確立する
 /// * 戻り値: Pool - Redis接続
-pub async fn establish_redis_connection() -> Pool {
+pub async fn establish_redis_connection(config: &AppConfig) -> Result<Pool, ServerError> {
   // URL取得
-  let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
+  let redis_url = config.redis_url.clone();
   // 接続設定
   let cfg = Config::from_url(&redis_url);
-  let pool = cfg.create_pool(Some(Runtime::Tokio1)).unwrap();
+  let pool = cfg
+    .create_pool(Some(Runtime::Tokio1))
+    .map_err(|e| ServerError::PoolError(e.to_string()))?;
   tracing::info!("Connected to Redis via Deadpool");
-  pool
+  Ok(pool)
 }
 
 /// 追加するタスク
@@ -48,9 +53,9 @@ pub async fn run_attack(_params: CreateTaskRequest) {}
 
 /// Celeryアプリを初期化する
 /// * 戻り値: Arc<celery::Celery> - Celeryアプリ
-pub async fn establish_celery_app() -> Arc<celery::Celery> {
+pub async fn establish_celery_app(config: &AppConfig) -> Result<Arc<celery::Celery>, ServerError> {
   // URL取得
-  let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
+  let redis_url = config.redis_url.clone();
   // アプリの初期化
   let celery_app = celery::app!(
     broker = RedisBroker { redis_url },
@@ -58,18 +63,18 @@ pub async fn establish_celery_app() -> Arc<celery::Celery> {
     task_routes = []
   )
   .await
-  .unwrap();
+  .map_err(ServerError::CeleryError)?;
   tracing::info!("Celery App created successfully");
-  celery_app
+  Ok(celery_app)
 }
 
 /// MINIO接続を確立する
 /// * 戻り値: Client - MINIO接続
-pub async fn establish_storage_client() -> Client {
-  let access_key = std::env::var("MINIO_ACCESS_KEY").expect("MINIO_ACCESS_KEY must be set");
-  let secret_key = std::env::var("MINIO_SECRET_KEY").expect("MINIO_SECRET_KEY must be set");
-  let endpoint = std::env::var("MINIO_ENDPOINT").expect("MINIO_ENDPOINT must be set");
-  let region = std::env::var("MINIO_REGION").unwrap_or_else(|_| "us-east-1".to_string()); // MINIOではregionが必須ではないので
+pub async fn establish_storage_client(config: &AppConfig) -> Client {
+  let access_key = config.minio_access_key.clone();
+  let secret_key = config.minio_secret_key.clone();
+  let endpoint = config.minio_endpoint.clone();
+  let region = config.minio_region.clone(); // MINIOではregionが必須ではないので
 
   let credentials = Credentials::new(
     access_key, secret_key,
@@ -87,13 +92,8 @@ pub async fn establish_storage_client() -> Client {
     .force_path_style(true)
     .build();
 
+  // こいつがResultを返さずにPanicするのでResultできん
   Client::from_conf(sdk_config)
-}
-
-/// Bucketの名前取得
-/// * 戻り値: String - Bucketの名前
-pub fn get_bucket_name() -> String {
-  std::env::var("MINIO_BUCKET_NAME").expect("MINIO_BUCKET_NAME must be set")
 }
 
 /// DBヘルスチェック

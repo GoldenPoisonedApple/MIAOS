@@ -58,27 +58,30 @@ impl StorageRepositoryTrait for StorageRepository {
 // test 属性もオンになっていないと test_utilが cfg(test)月なので読み込めない
 mod tests {
   use super::*;
-  use crate::infrastructure::{establish_storage_client, get_bucket_name};
+  use crate::config::app::AppConfig;
+  use crate::infrastructure::establish_storage_client;
   use aws_sdk_s3::primitives::ByteStream;
 
   /// オブジェクトの取得テスト
   #[tokio::test]
   async fn test_get_object() {
     // Arrange
-    let client = establish_storage_client().await;
+    let config = AppConfig::test_defaults().unwrap();
+    let client = establish_storage_client(&config).await;
+    let bucket_name = config.minio_bucket_name.clone();
     // 読み取るためのサンプルファイルをstorageに作成
     let file_path = "test/sample.log";
     let file_content = "hello world";
     let body = ByteStream::from(file_content.as_bytes().to_vec());
     client
       .put_object()
-      .bucket(get_bucket_name())
+      .bucket(bucket_name.clone())
       .key(file_path)
       .body(body)
       .send()
       .await
       .unwrap();
-    let repository = StorageRepository::new(client.clone(), get_bucket_name());
+    let repository = StorageRepository::new(client.clone(), bucket_name.clone());
     // Act
     let object = repository.get_object(file_path).await.unwrap();
     // Assert
@@ -88,7 +91,7 @@ mod tests {
                                        // ファイルを削除
     client
       .delete_object()
-      .bucket(get_bucket_name())
+      .bucket(bucket_name)
       .key(file_path)
       .send()
       .await

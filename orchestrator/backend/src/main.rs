@@ -4,9 +4,10 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 
+use server::config::app::AppConfig;
 use server::infrastructure::{
   establish_celery_app, establish_db_connection, establish_redis_connection,
-  establish_storage_client, get_bucket_name,
+  establish_storage_client,
 };
 use server::repositories::experiment::ExperimentRepository;
 use server::repositories::storage::StorageRepository;
@@ -22,6 +23,12 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+  // アプリ設定読み込み
+  let config = AppConfig::from_env().map_err(|e| -> Box<dyn std::error::Error> {
+    tracing::error!("Failed to load application configuration: {}", e);
+    Box::new(e)
+  })?;
+
   // ロガー
   let log_level = std::env::var("LOG_LEVEL").unwrap_or("info".to_string());
   tracing_subscriber::fmt()
@@ -30,13 +37,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   tracing::info!("Starting server...");
 
   // DB
-  let db_pool = establish_db_connection().await;
+  let db_pool = establish_db_connection(&config).await?;
   // Redis
-  let redis_pool = establish_redis_connection().await;
-  let celery_app = establish_celery_app().await;
+  let redis_pool = establish_redis_connection(&config).await?;
+  let celery_app = establish_celery_app(&config).await?;
   // MINIO
-  let client = establish_storage_client().await;
-  let bucket_name = get_bucket_name();
+  let client = establish_storage_client(&config).await;
+  let bucket_name = config.minio_bucket_name.clone();
 
   // migrate適用
   tracing::info!("Running database migrations...");
@@ -67,10 +74,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   let app = app_routes(app_state, health_state).layer(TraceLayer::new_for_http()); // リクエストのトレースを有効化
 
   // サーバ起動
-  const SERVER_PORT: u16 = 3000;
-  let addr = SocketAddr::from(([0, 0, 0, 0], SERVER_PORT));
-  let listener = TcpListener::bind(addr).await.unwrap();
-  axum::serve(listener, app).await.unwrap();
+  let addr = SocketAddr::from(([0, 0, 0, 0], config.server_port));
+  let listener = TcpListener::bind(addr).await?;
+  axum::serve(listener, app).await?;
 
   Ok(())
 }
