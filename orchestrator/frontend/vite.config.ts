@@ -14,7 +14,11 @@ export default defineConfig({
 		allowedHosts: ['localhost', '127.0.0.1'],
 		// APIプロキシ設定 (Nginxの代わり)
 		proxy: {
-			'/api': {
+			'/api/': {
+				target: 'http://backend:3000',
+				changeOrigin: true,
+			},
+			'/docs/': {
 				target: 'http://backend:3000',
 				changeOrigin: true,
 			},

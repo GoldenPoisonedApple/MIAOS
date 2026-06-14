@@ -170,7 +170,7 @@ Celery タスク定義は `infrastructure::run_attack`（`#[celery::task(name = 
 | 説明 | URL |
 | ---- | --- |
 | Swagger UI | `GET /docs` |
-| OpenAPI JSON | `GET /api-docs/openapi.json` |
+| OpenAPI JSON | `GET /api/openapi.json` |
 
 OpenAPI 定義は `routes::ApiDoc`（utoipa）から生成されます。
 
