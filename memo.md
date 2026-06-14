@@ -128,7 +128,7 @@ curl -X GET http://localhost:3000/api/tasks
 人用
 http://localhost:3000/docs/
 機械用
-http://localhost:3000/api-docs/openapi.json
+http://localhost:3000/api/openapi.json
 
 
 - CI用にOpenAPI仕様を書き出し
@@ -178,7 +178,7 @@ package.jsonのscripts追記
 ```json
 "scripts": {
 	# 追記
-	"gen:api": "openapi-typescript http://backend:3000/api-docs/openapi.json -o src/api/schema.d.ts",
+	"gen:api": "openapi-typescript http://backend:3000/api/openapi.json -o src/api/schema.d.ts",
 	"gen:api:local": "openapi-typescript ./openapi.json -o src/api/schema.d.ts"
 	...
 }
@@ -414,8 +414,6 @@ digest運用とタグ運用
 
 タスクの中に条件ぶち込まなくてもClaimの返り値で条件取得できるから、タスクにはidだけ入れておけばいいのでは？
 
-Jsonからコード生成できるようにしたいよね
-
 強制終了でタスクがちゃんと戻るか検証
 
 リリースとかTagとかのGitHubやりたいね
@@ -425,8 +423,6 @@ Jsonからコード生成できるようにしたいよね
 MIAOS APIへの送信失敗: Time zone offset must be 1, 3, 5 or 6 characters
 datetimeとかなんとかだった気がする
 明示的FAILEDとかできるね今なら ACKでredisにもどせる
-
-build-workerが長い キャッシュホントに使えてる？何も変えてないのに5分かかってるよ
 
 compose多すぎやしないか？
 

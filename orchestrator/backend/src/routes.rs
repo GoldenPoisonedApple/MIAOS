@@ -46,7 +46,7 @@ use crate::handlers::health::{liveness, readiness};
 pub struct ApiDoc; // utoipaで生成されたOpenAPIドキュメントを保持する構造体
 
 const SWAGGER_UI_PATH: &str = "/docs";
-const OPENAPI_JSON_PATH: &str = "/api-docs/openapi.json";
+const OPENAPI_JSON_PATH: &str = "/api/openapi.json";
 
 /// ルーティング
 pub fn app_routes(app_state: AppState, health_state: HealthState) -> Router {
