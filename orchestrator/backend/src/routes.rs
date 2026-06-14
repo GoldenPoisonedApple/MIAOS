@@ -62,10 +62,10 @@ pub fn app_routes(app_state: AppState, health_state: HealthState) -> Router {
     .route("/api/tasks", get(get_all_tasks))
     .route("/api/tasks/{id}", delete(delete_task))
     .route(
-      // *keyは任意のパスを受け取れる test/sample.logなど / を含めることができる
+      // {*key}は任意のパスを受け取れる test/sample.logなど / を含めることができる
       // 今回はkeyをURLエンコードしているため * である必要はない
       //一部プロキシは%2Fですら特別扱いするためちゃんとやるならクエリとかが良い
-      "/api/files/{*key}",
+      "/api/files/{key}",
       get(get_file),
     )
     .with_state(app_state);
