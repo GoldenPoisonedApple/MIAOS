@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   })?;
 
   // ロガー
-  let log_level = std::env::var("LOG_LEVEL").unwrap_or("info".to_string());
+  let log_level = config.log_level.clone();
   tracing_subscriber::fmt()
     .with_env_filter(tracing_subscriber::EnvFilter::new(log_level))
     .init();
