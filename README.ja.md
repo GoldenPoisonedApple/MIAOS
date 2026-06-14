@@ -1,5 +1,11 @@
 # MIAOS
 
+[![Rust](https://img.shields.io/badge/rust-1.93%2B-orange.svg)](https://www.rust-lang.org/)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
+[![React](https://img.shields.io/badge/react-19-61dafb.svg)](https://react.dev/)
+[![Docker](https://img.shields.io/badge/docker--compose-blue.svg)](https://www.docker.com/)
+[![License](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
+
 **M**embership **I**nference **A**ttack **O**rchestration **S**ystem
 
 機械学習モデルに対する **Membership Inference Attack (MIA)** の実験を、Web UI から作成・管理し、非同期ワーカーに実行を委譲するオーケストレーションシステムです。
@@ -99,8 +105,8 @@ make -C worker prod         # Celery ワーカー（GPU）
 | サービス | URL |
 | -------- | --- |
 | Frontend | http://localhost:80 |
-| Backend API | http://localhost:80/api/ |
 | Swagger UI | http://localhost:80/docs/ |
+| Backend API | http://localhost:80/api/ |
 | OpenAPI JSON | http://localhost:80/api/openapi.json |
 | MinIO Console | http://localhost:9001 |
 | MinIO | http://localhost:9000 |
