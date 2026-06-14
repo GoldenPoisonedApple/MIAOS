@@ -95,7 +95,6 @@ mod tests {
   use super::*;
   use crate::entities::experiment::ExperimentStatus;
   use crate::test_utils::create_experiment_request_factory;
-  use crate::test_utils::remove_test_experiments;
   use sea_orm::SqlxPostgresConnector;
 
   /// DBテストの前処理
@@ -103,11 +102,7 @@ mod tests {
     // DB接続
     let db = SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
     // リポジトリインスタンス作成
-    let repository = ExperimentRepository::new(db);
-    // テストデータの削除
-    remove_test_experiments(&repository).await;
-
-    repository
+    ExperimentRepository::new(db)
   }
 
   /// 実験の作成テスト

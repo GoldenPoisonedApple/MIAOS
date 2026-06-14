@@ -3,7 +3,6 @@ use std::sync::Once;
 
 use crate::dto::experiment::{CreateExperimentRequest, UpdateResultsRequest};
 use crate::entities::experiment::ExperimentStatus;
-use crate::repositories::experiment::{ExperimentRepository, ExperimentRepositoryTrait};
 use crate::repositories::task::{TaskRepository, TaskRepositoryTrait};
 
 // 他でもlogger使えば解消するが、今のところintegration-testのみで使うので#[cfg(feature = "integration-test")]を記述
@@ -20,19 +19,6 @@ pub fn init_test_logger() {
       .with_test_writer() // テストの標準出力と連携させる
       .try_init();
   });
-}
-
-/// テスト用の実験データをすべて削除する
-pub async fn remove_test_experiments(experiment_repository: &ExperimentRepository) {
-  let experiments = experiment_repository.find_all().await.unwrap();
-  for experiment in experiments {
-    if experiment.notes == Some("backend_test".to_string()) {
-      experiment_repository
-        .delete_from_id(experiment.id)
-        .await
-        .unwrap();
-    }
-  }
 }
 
 /// テスト用のタスクデータをすべて削除する

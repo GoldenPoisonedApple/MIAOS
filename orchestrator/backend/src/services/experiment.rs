@@ -130,8 +130,7 @@ mod tests {
   use crate::repositories::experiment::ExperimentRepository;
   use crate::repositories::task::TaskRepository;
   use crate::test_utils::{
-    create_experiment_request_factory, remove_test_experiments, remove_test_tasks,
-    update_experiment_request_factory,
+    create_experiment_request_factory, remove_test_tasks, update_experiment_request_factory,
   };
   use sea_orm::SqlxPostgresConnector;
 
@@ -147,7 +146,6 @@ mod tests {
     let task_repository = TaskRepository::new(redis_pool, celery_app);
 
     // テストデータの削除
-    remove_test_experiments(&experiment_repository).await;
     remove_test_tasks(&task_repository).await;
 
     // サービスインスタンス作成
@@ -183,9 +181,6 @@ mod tests {
     let experiment_repository = ExperimentRepository::new(db);
     // タスクリポジトリ
     let task_repository = MockTaskRepository::new();
-
-    // テストデータの削除
-    remove_test_experiments(&experiment_repository).await;
 
     // サービスインスタンス作成
     ExperimentService::new(experiment_repository, task_repository)
