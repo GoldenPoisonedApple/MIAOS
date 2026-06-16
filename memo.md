@@ -421,7 +421,31 @@ digest運用とタグ運用
   "version": "0.1.0"
 }
 ```
+feat, fix, chore, refactor, perf, docs, style, test
+BREAKING CHANGE
 
+```mermaid
+sequenceDiagram
+    participant Dev as 開発者
+    participant Main as main ブランチ
+    participant RP as release-please.yml
+    participant CD as cd.yml
+    participant Rel as release.yml
+    participant GHCR as GHCR
+
+    Dev->>Main: conventional commit を push
+    Main->>RP: push トリガー
+    RP->>Main: Release PR 作成/更新
+
+    Dev->>Main: Release PR を merge
+    Main->>RP: push トリガー
+    RP->>Main: tag vX.Y.Z + GitHub Release 作成
+    Main->>CD: push トリガー（並行）
+    CD->>GHCR: イメージ push（:SHORT_SHA, :latest）
+    Main->>Rel: tag push トリガー
+    Rel->>GHCR: :SHORT_SHA → :vX.Y.Z に retag
+
+```
 
 ## TODO
 ### 優先度: 高

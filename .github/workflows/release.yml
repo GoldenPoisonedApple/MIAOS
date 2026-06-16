@@ -1,6 +1,6 @@
 name: Release GHCR Images
 
-# release-please が tag + GitHub Release を作成した後、GHCR イメージに semver タグを付与する
+# release-please が tag + GitHub Release を作成した時、GHCR イメージに semver タグを付与する
 on:
   push:
     tags: ['v*.*.*']
@@ -43,7 +43,7 @@ jobs:
 
       - name: Tag images with release version
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${GITHUB_REF_NAME#v}" # vを削除してバージョンを取得
           SHA="${{ github.sha }}"
           SHORT_SHA="${SHA:0:7}"
           REGISTRY="ghcr.io/${{ github.repository }}"
