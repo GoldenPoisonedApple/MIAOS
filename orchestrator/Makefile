@@ -58,17 +58,17 @@ prod-logs:
 # DBコンテナに入る
 .PHONY: dbshell
 dbshell:
-	docker compose $(COMPOSE_DEV) exec db /bin/sh
+	docker compose $(COMPOSE_DEV) exec db /bin/bash
 
 # Backendコンテナに入る
 .PHONY: backshell
 backshell:
-	docker compose $(COMPOSE_DEV) exec backend /bin/sh
+	docker compose $(COMPOSE_DEV) exec backend /bin/bash
 
 # Frontendコンテナに入る
 .PHONY: frontshell
 frontshell:
-	docker compose $(COMPOSE_DEV) exec frontend /bin/sh
+	docker compose $(COMPOSE_DEV) exec frontend /bin/bash
 
 # redisコンテナに入る
 .PHONY: redisshell

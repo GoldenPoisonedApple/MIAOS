@@ -6,5 +6,7 @@ services:
     volumes:
       - ./backend:/app
       - ../schema:/schema          # OpenAPIスキーマをマウント
+      - ./.ci-cache/cargo-target:/app/target # ターゲット
+      - ./.ci-cache/cargo-registry:/usr/local/cargo/registry # 依存キャッシュ
 
   frontend: !reset null # 使用しないサービスを削除

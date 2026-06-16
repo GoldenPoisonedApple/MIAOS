@@ -1,0 +1,54 @@
+name: Release GHCR Images
+
+# release-please が tag + GitHub Release を作成した時、GHCR イメージに semver タグを付与する
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  retag-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Release PR merge と CD が並行するため、SHA タグ付きイメージの出現を待つ
+      - name: Wait for CD images
+        run: |
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          REGISTRY="ghcr.io/${{ github.repository }}"
+          for img in orchestrator-backend orchestrator-frontend worker; do
+            for i in $(seq 1 30); do
+              if docker buildx imagetools inspect "${REGISTRY}/${img}:${SHORT_SHA}" >/dev/null 2>&1; then
+                echo "Found ${img}:${SHORT_SHA}"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "Timeout waiting for ${img}:${SHORT_SHA}"
+                exit 1
+              fi
+              echo "Waiting for ${img}:${SHORT_SHA}... (${i}/30)"
+              sleep 30
+            done
+          done
+
+      - name: Tag images with release version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}" # vを削除してバージョンを取得
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          REGISTRY="ghcr.io/${{ github.repository }}"
+          for img in orchestrator-backend orchestrator-frontend worker; do
+            docker buildx imagetools create \
+              --tag "${REGISTRY}/${img}:v${VERSION}" \
+              "${REGISTRY}/${img}:${SHORT_SHA}"
+          done

@@ -43,11 +43,19 @@ jobs:
               - 'schema/openapi.json'
             cd:
               - '.github/workflows/cd.yml'
+            release:
+              - 'CHANGELOG.md'
+              - '.release-please-manifest.json'
       - id: flags
         run: |
           # デフォルト値
           orchestrator=false
           worker=false
+          # release-please の Release PR merge 時は全コンポーネントをビルド
+          if [[ "${{ steps.filter.outputs.release }}" == "true" ]]; then
+            orchestrator=true
+            worker=true
+          fi
           # orchestrator判定
           if [[ "${{ steps.filter.outputs.orchestrator-backend }}" == "true" \
              || "${{ steps.filter.outputs.orchestrator-frontend }}" == "true" \

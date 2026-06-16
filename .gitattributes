@@ -1,0 +1,5 @@
+# .gitattributes: ファイルの属性を設定
+
+# 自分用メモファイルは除外
+memo.md export-ignore
+
