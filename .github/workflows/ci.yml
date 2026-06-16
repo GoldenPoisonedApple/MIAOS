@@ -74,8 +74,8 @@ jobs:
       # 依存サービスの起動
       - name: Setup Depend services
         run: |
-          docker compose --env-file .env.ci -f compose.base.yaml up -d --wait db redis minio
-          docker compose --env-file .env.ci -f compose.base.yaml run --rm create_buckets        
+          docker compose --env-file .env.ci -f compose.base.yaml -f compose.ci.yaml up -d --wait db redis minio
+          docker compose --env-file .env.ci -f compose.base.yaml -f compose.ci.yaml run --rm create_buckets        
 
       # バックエンドのビルド
       - name: Build backend (dev)
