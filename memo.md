@@ -403,6 +403,24 @@ digest運用とタグ運用
 - Environmentsでssh情報とかのsecrets情報登録
 - Actions -> General: Workflow permissions = Read and write permissions
 
+#### release-please-config.json
+リリースバージョンの管理
+- extra-files: リリース時に計算された新しいバージョン番号を自動で書き換えるファイル
+.release-please-manifest.json のバージョンと同期
+```json
+"extra-files": [
+  "orchestrator/backend/Cargo.toml",
+  "worker/pyproject.toml"
+]
+```
+- "release-type": "simple"
+.release-please-manifest.jsonが必要
+".": リポジトリルートのパッケージバージョンを指定
+```json
+{
+  "version": "0.1.0"
+}
+```
 
 
 ## TODO
