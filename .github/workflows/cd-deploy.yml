@@ -1,13 +1,14 @@
-name: CD
+name: CD Deploy
 
-# 並行実行の制御
 concurrency:
-  group: cd-${{ github.ref }}
-  cancel-in-progress: false  # CDはキャンセルしない 段階リリースのような順序補償が必要な場合がある 中断による不整合を防ぐ
+  group: cd-deploy-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
 
 on:
-  # pushされた場合(mergeされたときにもトリガーされる)
-  push:
+	# CD Build というWorkflowがmainブランチで完了したら起動
+  workflow_run:
+    workflows: [CD Build]
+    types: [completed]
     branches: [main]
 
 permissions:
@@ -17,16 +18,19 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # ─────────────────────────────────────────
-  # 変更検知（CI と同様の paths-filter）
+	# ─────────────────────────────────────────
+  # 変更検知（CD Build と同様の paths-filter）
   # ─────────────────────────────────────────
   changes:
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       orchestrator: ${{ steps.flags.outputs.orchestrator }}
       worker: ${{ steps.flags.outputs.worker }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -40,33 +44,29 @@ jobs:
             worker:
               - 'worker/**'
             cd:
-              - '.github/workflows/cd.yml'
+              - '.github/workflows/cd-build.yml'
+              - '.github/workflows/cd-deploy.yml'
             release:
               - 'CHANGELOG.md'
               - '.release-please-manifest.json'
       - id: flags
         run: |
-          # デフォルト値
           orchestrator=false
           worker=false
-          # release-please の Release PR merge 時は全コンポーネントをビルド
           if [[ "${{ steps.filter.outputs.release }}" == "true" ]]; then
             orchestrator=true
             worker=true
           fi
-          # orchestrator判定
           if [[ "${{ steps.filter.outputs.orchestrator-backend }}" == "true" \
              || "${{ steps.filter.outputs.orchestrator-frontend }}" == "true" \
              || "${{ steps.filter.outputs.orchestrator-compose }}" == "true" \
              || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
             orchestrator=true
           fi
-          # worker判定
           if [[ "${{ steps.filter.outputs.worker }}" == "true" \
              || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
             worker=true
           fi
-          # 変数を追加して出力
           echo "orchestrator=$orchestrator" >> "$GITHUB_OUTPUT"
           echo "worker=$worker" >> "$GITHUB_OUTPUT"
 
@@ -90,157 +90,24 @@ jobs:
         # GITHUB_OUTPUT環境変数(出力ファイル)にキーと値のペアを追記し、後続ジョブに渡す
         run: echo "hosts=$(echo '${{ vars.WORKER_HOSTS }}' | jq -c '.')" >> "$GITHUB_OUTPUT"
 
-
   # ─────────────────────────────────────────
-  # イメージビルド & Push
-  # ─────────────────────────────────────────
-  build-orchestrator-backend:
-    needs: changes
-    if: needs.changes.outputs.orchestrator == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write  # ghcr.io push に必要
-      actions: write  # GHA build cache
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
-    steps:
-      # ソースコードを実行環境にチェックアウト
-      - uses: actions/checkout@v4
-      # docker buildx(高性能ビルド環境)初期化
-      - uses: docker/setup-buildx-action@v3
-      # ghcr.ioにログイン
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # イメージのメタデータ自動生成
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          # イメージの名前を指定
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/orchestrator-backend
-          # sha: コミット単位で一意なハッシュを付与
-          # latest: latestタグをつける 1つのタグは常に1つのイメージしかさせないため常に最新版を指す
-          tags: |
-            type=sha,prefix=,format=short
-            type=raw,value=latest
-
-      # イメージのビルドとpush
-      - id: build
-        uses: docker/build-push-action@v6
-        with:
-          # ビルド対象
-          context: orchestrator/backend
-          target: prod
-          push: true
-          # メタデータで生成したタグを使用
-          tags: ${{ steps.meta.outputs.tags }}
-          # メタ情報 Git commit, repo URL など
-          labels: ${{ steps.meta.outputs.labels }}
-          # ビルドキャッシュを利用
-          # gha: GitHub Actions専用のキャッシュストレージを使用,
-          # max: ビルド途中の全てのレイヤーをキャッシュ対象に
-          cache-from: type=gha,scope=build-orchestrator-backend
-          cache-to: type=gha,mode=max,scope=build-orchestrator-backend
-
-  build-orchestrator-frontend:
-    needs: changes
-    if: needs.changes.outputs.orchestrator == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write  # ghcr.io push に必要
-      actions: write # GHA build cache
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/orchestrator-frontend
-          tags: |
-            type=sha,prefix=,format=short
-            type=raw,value=latest
-      - id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: orchestrator/frontend
-          target: prod
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=build-orchestrator-frontend
-          cache-to: type=gha,mode=max,scope=build-orchestrator-frontend
-
-  build-worker:
-    needs: changes
-    if: needs.changes.outputs.worker == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write  # ghcr.io push に必要
-      actions: write # GHA build cache
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/worker
-          tags: |
-            type=sha,prefix=,format=short
-            type=raw,value=latest
-      - id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: worker
-          target: prod
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=build-worker
-          cache-to: type=gha,mode=max,scope=build-worker
-
-  # ─────────────────────────────────────────
-  # Orchestrator デプロイ（1台）
+  # デプロイ
   # ─────────────────────────────────────────
   deploy-orchestrator:
-    needs:
-      - changes
-      - build-orchestrator-backend
-      - build-orchestrator-frontend
+    needs: changes
     if: needs.changes.outputs.orchestrator == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
       - name: Deploy orchestrator
         uses: appleboy/ssh-action@v1
-        # ランナー側の環境変数を指定
+				# ランナー側の環境変数を指定
         env:
-          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           REGISTRY: ${{ env.REGISTRY }}
           IMAGE_PREFIX: ${{ github.repository }}
-          BACKEND_DIGEST: ${{ needs.build-orchestrator-backend.outputs.digest }}
-          FRONTEND_DIGEST: ${{ needs.build-orchestrator-frontend.outputs.digest }}
         with:
           host: ${{ secrets.ORCHESTRATOR_HOST }}
           username: ${{ secrets.ORCHESTRATOR_USER }}
@@ -250,7 +117,7 @@ jobs:
           proxy_key: ${{ secrets.DEPLOY_SSH_KEY }}
           proxy_port: ${{ secrets.BASTION_PORT }}
           # ワークフローのenvはリモートに渡されないので明示的に指定
-          envs: GITHUB_SHA,GITHUB_TOKEN,GITHUB_ACTOR,REGISTRY,IMAGE_PREFIX,BACKEND_DIGEST,FRONTEND_DIGEST
+          envs: GITHUB_SHA,GITHUB_TOKEN,GITHUB_ACTOR,REGISTRY,IMAGE_PREFIX
           script: |
             set -euo pipefail
             # ホームディレクトリ以下に配置
@@ -294,12 +161,12 @@ jobs:
   # Worker デプロイ（複数台）
   # ─────────────────────────────────────────
   deploy-workers:
-    needs: [changes, build-worker, setup-worker-matrix]
+    needs: [changes, setup-worker-matrix]
     if: needs.changes.outputs.worker == 'true'
     runs-on: ubuntu-latest
     environment: production
     # strategy はワークフローのプランニング段階で評価される
-    #environment: production が指定されたジョブの環境変数は、ジョブ実行時にのみ解決されるため、strategy.matrix の時点では vars.WORKER_HOSTS が空になる
+    # environment: production が指定されたジョブの環境変数は、ジョブ実行時にのみ解決されるため、strategy.matrix の時点では vars.WORKER_HOSTS が空になる
     strategy:
       matrix:
         # WORKER_HOSTS: GitHub Variable に JSON 配列で登録: Secretでも結局Actionsの所に表示されるので
@@ -311,12 +178,11 @@ jobs:
       - name: Graceful rolling deploy to ${{ matrix.host }}
         uses: appleboy/ssh-action@v1
         env:
-          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           REGISTRY: ${{ env.REGISTRY }}
           IMAGE_PREFIX: ${{ github.repository }}
-          WORKER_DIGEST: ${{ needs.build-worker.outputs.digest }}
         with:
           host: ${{ matrix.host }}
           username: ${{ secrets.WORKER_USER }}
@@ -326,7 +192,7 @@ jobs:
           proxy_key: ${{ secrets.DEPLOY_SSH_KEY }}
           proxy_port: ${{ secrets.BASTION_PORT }}
           # ワークフローのenvはリモートに渡されないので明示的に指定
-          envs: GITHUB_SHA,GITHUB_TOKEN,GITHUB_ACTOR,REGISTRY,IMAGE_PREFIX,WORKER_DIGEST
+          envs: GITHUB_SHA,GITHUB_TOKEN,GITHUB_ACTOR,REGISTRY,IMAGE_PREFIX
           # command_timeout: タスク完了待ちの上限（最長タスク時間 + バッファ）
           command_timeout: 60m
           script: |
@@ -341,21 +207,27 @@ jobs:
 
             cd worker
 
+            # 環境変数を設定
             # Docker image は大文字禁止: 小文字に変換
             export IMAGE_PREFIX="${IMAGE_PREFIX,,}"
 
+            # ghcr.ioにログイン
+            # --password-stdin: 標準入力からパスワードを読み込む セキュリティ上の利点: historyにパスワードが残らない
             echo "$GITHUB_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
-            
-            # 1. 新イメージを取得（実行中コンテナに影響なし）
+
+            # 新イメージを取得
             docker compose -f compose.base.yaml -f compose.deploy.yaml pull ito_research
 
-            # 2. 現在のコンテナを graceful stop
+            # 現在のコンテナを graceful stop
             #    SIGTERM → Celery warm shutdown（実行中タスク完了後に終了）
             #    stop_grace_period をcompose.deploy.yamlで設定しておくこと
             docker compose -f compose.base.yaml -f compose.deploy.yaml stop ito_research
 
-            # 3. 新イメージで起動
+            # 新イメージで起動
             docker compose -f compose.base.yaml -f compose.deploy.yaml up -d --no-deps --wait --wait-timeout 120 ito_research
 
-            # 4. 不要になったイメージの削除
+            # 不要になったイメージの削除
+            # -a: 全てのイメージを削除
+            # -f: 強制的に削除
+            # --filter "dangling=true": 未使用のイメージを削除
             docker image prune -f --filter "dangling=true"
