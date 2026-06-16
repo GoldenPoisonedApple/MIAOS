@@ -185,9 +185,10 @@ impl TaskRepositoryTrait for TaskRepository {
   }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "integration-test"))]
 mod tests {
   use super::*;
+  use crate::config::app::AppConfig;
   use crate::entities::experiment::MiaMethod;
   use crate::infrastructure::{establish_celery_app, establish_redis_connection};
   use crate::test_utils::{init_test_logger, remove_test_tasks};
@@ -195,9 +196,10 @@ mod tests {
   /// テストの前処理
   async fn setup() -> TaskRepository {
     // Redis接続
-    let pool = establish_redis_connection().await;
+    let config = AppConfig::test_defaults().unwrap();
+    let pool = establish_redis_connection(&config).await.unwrap();
     // Celeryアプリの初期化
-    let celery_app = establish_celery_app().await;
+    let celery_app = establish_celery_app(&config).await.unwrap();
     // リポジトリ作成
     let task_repository = TaskRepository::new(pool, celery_app);
 

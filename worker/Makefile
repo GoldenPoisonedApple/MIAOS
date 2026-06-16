@@ -1,6 +1,7 @@
 # .envファイルを読み込む
 # Makeの変数として扱う
-include .env
+# -include: ファイルが存在しない場合はエラーとしない
+-include .env
 export
 
 # 変数定義 := 即時評価, = 遅延評価(使うときに評価)
@@ -49,6 +50,11 @@ shell:
 reflect-openapi:
 	docker compose $(COMPOSE_DEV) exec ito_research make openapi
 
+# check
+.PHONY: check-dev
+check-dev:
+	docker compose $(COMPOSE_DEV) exec ito_research make check
+
 # 停止(開発)
 .PHONY: down
 down:
@@ -85,27 +91,44 @@ deploy-manual-logs:
 # コンテナ内実行
 # ------------------------------
 # OpenAPIからPythonクライアントを生成
+# --meta none: メタデータを含めない
 .PHONY: openapi
 openapi:
-	openapi-python-client generate --url $(OPENAPI_URL) --meta none --output-path src/server_client --overwrite
+	uv run openapi-python-client generate --path /schema/openapi.json --meta none --output-path src/server_client --overwrite
+
+# OpenAPI(Live)
+.PHONY: openapi-live
+openapi-live:
+	uv run openapi-python-client generate --url $(OPENAPI_URL) --meta none --output-path src/server_client --overwrite
+
+
 
 # Celeryを起動
 .PHONY: celery
 celery:
-	celery -A src.workers.celery_tasks worker --loglevel=info -P solo
+	uv run celery -A src.workers.celery_tasks worker --loglevel=info -P solo
 
 
 # フォーマット
 .PHONY: format
 format:
-	ruff format src
+	uv run ruff format src
 
 # 静的解析
 .PHONY: lint
 lint:
-	ruff check src
+	uv run ruff check src
 
-# チェック
+# CI
+# --check: 修正はしない
+# --frozen: uv.lockとpyproject.tomlに不整合があった場合はエラーとなる
 .PHONY: check
 check:
-	ruff check src
+	uv run --frozen ruff format --check src
+	uv run --frozen ruff check src
+
+# 依存関係の更新(ロックファイルを最新に更新し環境に反映)
+# uv lock --upgrade + uv sync --extra dev
+.PHONY: sync
+sync:
+	uv sync --upgrade --extra dev

@@ -20,9 +20,7 @@ pub enum ServerError {
 
   /// S3エラー
   #[error("S3 error: {0}")]
-  S3Error(
-    #[from] Box<aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::get_object::GetObjectError>>,
-  ),
+  S3Error(String),
 
   /// Poolエラー
   #[error("Pool error: {0}")]
@@ -54,6 +52,10 @@ pub enum ServerError {
   #[error("Not found: {0}")]
   NotFound(String),
 
+  /// コンフリクト
+  #[error("Conflict: {0}")]
+  Conflict(String),
+
   /// 内部エラー
   #[error("Internal server error: {0}")]
   Internal(String),
@@ -64,10 +66,8 @@ impl IntoResponse for ServerError {
   fn into_response(self) -> Response {
     let (status, message) = match self {
       ServerError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
-      ServerError::DatabaseError(_) | ServerError::RedisError(_) | ServerError::PoolError(_) => (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "Internal Database Error".to_string(),
-      ),
+      ServerError::Conflict(msg) => (StatusCode::CONFLICT, msg),
+      ServerError::InvalidPath(msg) => (StatusCode::BAD_REQUEST, msg),
       _ => (
         StatusCode::INTERNAL_SERVER_ERROR,
         "Internal Server Error".to_string(),

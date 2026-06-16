@@ -5,14 +5,14 @@ use axum::{
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::state::AppState;
+use crate::state::{AppState, HealthState};
 
 use crate::handlers::experiment::{
   claim_experiment, create_experiment, delete_experiment, delete_task, get_all_experiments,
   get_all_tasks, reflect_experiment_results,
 };
-
 use crate::handlers::file::get_file;
+use crate::handlers::health::{liveness, readiness};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -46,10 +46,10 @@ use crate::handlers::file::get_file;
 pub struct ApiDoc; // utoipaで生成されたOpenAPIドキュメントを保持する構造体
 
 const SWAGGER_UI_PATH: &str = "/docs";
-const OPENAPI_JSON_PATH: &str = "/api-docs/openapi.json";
+const OPENAPI_JSON_PATH: &str = "/api/openapi.json";
 
 /// ルーティング
-pub fn app_routes(state: AppState) -> Router {
+pub fn app_routes(app_state: AppState, health_state: HealthState) -> Router {
   let api_router = Router::new()
     .route(
       "/api/experiments",
@@ -62,15 +62,21 @@ pub fn app_routes(state: AppState) -> Router {
     .route("/api/tasks", get(get_all_tasks))
     .route("/api/tasks/{id}", delete(delete_task))
     .route(
-      // *keyは任意のパスを受け取れる test/sample.logなど / を含めることができる
+      // {*key}は任意のパスを受け取れる test/sample.logなど / を含めることができる
       // 今回はkeyをURLエンコードしているため * である必要はない
       //一部プロキシは%2Fですら特別扱いするためちゃんとやるならクエリとかが良い
-      "/api/files/{*key}",
+      "/api/files/{key}",
       get(get_file),
     )
-    .with_state(state);
+    .with_state(app_state);
+
+  let health_router = Router::new()
+    .route("/health/live", get(liveness))
+    .route("/health/ready", get(readiness))
+    .with_state(health_state);
 
   Router::new()
+    .merge(health_router)
     .merge(SwaggerUi::new(SWAGGER_UI_PATH).url(OPENAPI_JSON_PATH, ApiDoc::openapi())) // ドキュメント生成用
     .merge(api_router) // 実際のAPIルーティング mergeによりドキュメント生成用と実際のAPIルーティングを結合
 }

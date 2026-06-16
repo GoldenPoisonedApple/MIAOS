@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "gen:api": "openapi-typescript http://backend:3000/api-docs/openapi.json -o src/api/schema.d.ts"
+		"gen:api": "openapi-typescript /schema/openapi.json -o src/api/schema.d.ts",
+    "gen:api:live": "openapi-typescript http://backend:3000/api/openapi.json -o src/api/schema.d.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

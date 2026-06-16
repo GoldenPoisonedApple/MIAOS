@@ -20,23 +20,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # [修正点]
 # NGCコンテナには最適化済みのPyTorchが含まれているため、pytorchのインストールは不要
+# uvも含まれていた
 
-# その他の依存パッケージのインストール
-# 本当はpipもバージョン固定した方がいいんだとは思う requirements.txtとか
-RUN pip install --no-cache-dir --upgrade pip \
-	&& pip install --no-cache-dir \
-	numpy \
-	scikit-learn \
-	matplotlib \
-	tqdm \
-	pandas \
-	celery \
-	redis \
-	minio \
-	boto3 \
-	requests \
-	python-dotenv
 
+# 依存関係インストール
+COPY pyproject.toml uv.lock ./
+# --frozen: 依存関係を固定: ロックファイルを変更しない 依存関係の更新を行わない
+# NGC梱包のPyTorch等にアクセスできなくなるので
+# venvを作りつつもグローバル(システム)に既にインストールされているパッケージにもアクセスできるようにする
+RUN uv venv --system-site-packages .venv && uv sync --frozen
+
+# キャッシュディレクトリを指定
 ENV TORCH_HOME=/workspace/.cache/torch
 
 
@@ -54,11 +48,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	&& rm -rf /var/lib/apt/lists/*
 
 # 依存関係のインストール
-RUN pip install --no-cache-dir --upgrade pip \
-	&& pip install --no-cache-dir \
-	jupyterlab \
-	openapi-python-client \
-	ruff
+# --extra dev: dev依存追加
+RUN uv sync --frozen --extra dev
 
 CMD ["bash"]
 
@@ -89,6 +80,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 COPY --chown=appuser:appuser src/ /workspace/src/
 
 # ENTRYPOINT: コンテナ起動時に必ず実行されるコマンドの指定 ラッパーのような役割を果たす
-# 内部的には docker-entrypoint.sh celery -A src.workers.celery_tasks worker --loglevel=info -P solo が実行される
+# 内部的には docker-entrypoint.sh uv run --frozen celery -A src.workers.celery_tasks worker --loglevel=info -P solo が実行される
+# uv run --frozen: --frozenによって pyproject.toml uv.lock .venv に不整合があった場合はエラーとなる
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["celery", "-A", "src.workers.celery_tasks", "worker", "--loglevel=info", "-P", "solo"]
+CMD ["uv", "run", "--frozen", "celery", "-A", "src.workers.celery_tasks", "worker", "--loglevel=info", "-P", "solo"]

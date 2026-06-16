@@ -38,6 +38,7 @@ jobs:
           filters: |
             backend:
               - 'orchestrator/backend/**'
+              - 'orchestrator/compose.*.yaml'
               - '.github/workflows/ci.yml'
             frontend:
               - 'orchestrator/frontend/**'
@@ -55,133 +56,78 @@ jobs:
     needs: paths # pathsの判定結果を利用 pathsジョブの正常終了を待つ
     # backendジョブを実行するかどうかの判定
     if: needs.paths.outputs.backend == 'true'
+    permissions:
+      contents: read
+      actions: write # docker/build-push-action の GHA キャッシュ書き込み用
     # 作業ディレクトリ設定
     defaults:
       run:
-        working-directory: orchestrator/backend
-
-    # 環境変数設定
-    env:
-      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/miaos_test
-      REDIS_URL: redis://127.0.0.1:6379
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_ENDPOINT: http://127.0.0.1:9000
-      MINIO_BUCKET_NAME: miaos-ci
-      MINIO_REGION: us-east-1
-
-    # 依存システムの定義 コンテナの起動(stepsが開始される前に起動され、完了と共に破棄)
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: miaos_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d miaos_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-      minio:
-        image: minio/minio:latest
-        command: server /data
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        ports:
-          - 9000:9000
-        # >- : 改行はスペースに変換される CLI引数なので
-        options: >-
-          --health-cmd "curl -fsS http://127.0.0.1:9000/minio/health/live || exit 1"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+        working-directory: orchestrator
 
     # ジョブのメイン処理
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system packages
-        # | : 改行をそのまま保持 スクリプトとして複数行実行するので
+      # docker buildx(高性能ビルド環境)初期化
+      - uses: docker/setup-buildx-action@v3
+
+      # 依存サービスの起動
+      - name: Setup Depend services
         run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev postgresql-client
+          docker compose --env-file .env.ci -f compose.base.yaml -f compose.ci.yaml up -d --wait db redis minio
+          docker compose --env-file .env.ci -f compose.base.yaml -f compose.ci.yaml run --rm create_buckets        
 
-      # 高速なリンカーを使用
-      - name: Install mold (Fast Linker)
-        uses: rui314/setup-mold@v1
-
-      # cargoを使えるようにしている(cargoを含むRustツールチェーン一式を用意)
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # バックエンドのビルド
+      - name: Build backend (dev)
+        uses: docker/build-push-action@v6
         with:
-          toolchain: "1.93"
-          components: rustfmt, clippy # 追加ツールの指定
-
-      # キャッシュ機能を使ってビルド時間を短縮
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: orchestrator/backend
-
-      # taiki-e/install-action を使用してバイナリを直接取得し、コンパイル時間を排除
-      - name: Install sqlx-cli
-        uses: taiki-e/install-action@v2
-        with:
-          tool: sqlx-cli
+          context: orchestrator/backend
+          target: dev
+          push: false
+          load: true
+          tags: orchestrator-backend:dev
+          cache-from: |
+            type=gha,scope=build-orchestrator-backend
+          cache-to: type=gha,mode=max,scope=build-orchestrator-backend
 
       # DBマイグレーションを実行
       - name: Run database migrations
-        run: sqlx migrate run
-
-      # MinIOにテストデータを投入
-      # repository/storageのテストで必要なため
-      - name: Seed test object to MinIO
-        env:
-          AWS_ACCESS_KEY_ID: minioadmin
-          AWS_SECRET_ACCESS_KEY: minioadmin
-        run: |
-          aws s3 mb "s3://${MINIO_BUCKET_NAME}" --endpoint-url "${MINIO_ENDPOINT}" || true
-          echo -n 'hello world' > /tmp/sample.log
-          aws s3 cp /tmp/sample.log "s3://${MINIO_BUCKET_NAME}/test/sample.log" --endpoint-url "${MINIO_ENDPOINT}"
-
+        run: docker compose --env-file .env.ci -f compose.base.yaml -f compose.ci.yaml run --rm backend sqlx migrate run
       # フォーマットが正しいかどうか
-      - name: cargo fmt
-        run: cargo fmt --all -- --check # --check: 正しくなくても書き換えない
-
       # コードの静的解析
-      - name: cargo clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings # -D warnings: 警告もエラー扱い
-
-      # テストを実行
-      - name: cargo test
-        run: cargo test --all-features -- --test-threads=1 # --test-threads=1: DB等があるのでテストを並列実行しない
+      # テストの実行
+      - name: Run format, clippy, test-integration
+        run: docker compose --env-file .env.ci -f compose.base.yaml -f compose.ci.yaml run --rm backend make check
+      # OpenAPI JSONの生成
+      - name: Run generate OpenAPI JSON
+        run: docker compose --env-file .env.ci -f compose.base.yaml -f compose.ci.yaml run --rm backend make generate-openapi
 
       # OpenAPIの整合性確認
       - name: Check OpenAPI JSON sync
         run: |
-          cargo run --bin generate_openapi > $GITHUB_WORKSPACE/schema/openapi.json
-          git diff --exit-code || (echo "Error: openapi.json is out of sync. Please run schema generator locally and commit." && exit 1)
+          git diff --exit-code $GITHUB_WORKSPACE/schema/openapi.json \
+          || (echo "Error: openapi.json is out of sync. Please run schema generator locally and commit." \
+          && exit 1)
+
+
+      # 本番環境ビルド検証
+      - name: Build backend for production
+        uses: docker/build-push-action@v6
+        with:
+          context: orchestrator/backend
+          target: prod
+          push: false
+          cache-from: type=gha,scope=build-orchestrator-backend
+          cache-to: type=gha,mode=max,scope=build-orchestrator-backend
 
   frontend:
     name: Frontend (Node)
     runs-on: ubuntu-latest
     needs: paths
     if: needs.paths.outputs.frontend == 'true'
+    permissions:
+      contents: read
+      actions: write # docker/build-push-action の GHA キャッシュ書き込み用
     defaults:
       run:
         working-directory: orchestrator/frontend
@@ -191,7 +137,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "20"
           cache: npm
           cache-dependency-path: orchestrator/frontend/package-lock.json
 
@@ -203,14 +149,29 @@ jobs:
           npx openapi-typescript $GITHUB_WORKSPACE/schema/openapi.json -o src/api/schema.d.ts 
           git diff --exit-code || (echo "Error: Frontend generated types are out of sync." && exit 1)
 
-      - run: npm run lint
-      - run: npm run build
+      # lint
+      - run: make check
+
+      # docker buildx(高性能ビルド環境)初期化
+      - uses: docker/setup-buildx-action@v3
+      # 本番環境ビルド検証
+      - name: Build frontend for production
+        uses: docker/build-push-action@v6
+        with:
+          context: orchestrator/frontend
+          target: prod
+          push: false
+          cache-from: type=gha,scope=build-orchestrator-frontend
+          cache-to: type=gha,mode=max,scope=build-orchestrator-frontend
 
   worker:
     name: Worker
     runs-on: ubuntu-latest
     needs: paths
     if: needs.paths.outputs.worker == 'true'
+    permissions:
+      contents: read
+      actions: write # docker/build-push-action の GHA キャッシュ書き込み用
     defaults:
       run:
         working-directory: worker
@@ -218,25 +179,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      # uv インストール
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-          cache: pip
+          enable-cache: true
+      
+      # 依存関係インストール
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev
 
-      - name: Install Ruff
-        run: pip install ruff
-
-      - name: Ruff format check
-        # 生成ファイルは除外
-        run: ruff format --check src # --check: 修正はしない
-
-      - name: Ruff check
-        # 生成ファイルは除外
-        run: ruff check src
+      # format check
+      # lint check
+      - name: Check format, lint
+        run: make check
 
       # OpenAPIの整合性確認
       - name: Check OpenAPI difference
         run: |
-          pip install openapi-python-client
-          openapi-python-client generate --meta none --output-path src/server_client --overwrite --path $GITHUB_WORKSPACE/schema/openapi.json
+          uv run --frozen openapi-python-client generate --meta none --output-path src/server_client --overwrite --path $GITHUB_WORKSPACE/schema/openapi.json
           git diff --exit-code || (echo "Error: Worker generated types are out of sync." && exit 1)
+
+      # docker buildx(高性能ビルド環境)初期化
+      - uses: docker/setup-buildx-action@v3
+      # 本番環境ビルド検証
+      - name: Build worker for production
+        uses: docker/build-push-action@v6
+        with:
+          context: worker
+          target: prod
+          push: false
+          cache-from: type=gha,scope=build-worker
+          cache-to: type=gha,mode=max,scope=build-worker

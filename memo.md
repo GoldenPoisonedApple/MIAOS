@@ -128,7 +128,7 @@ curl -X GET http://localhost:3000/api/tasks
 人用
 http://localhost:3000/docs/
 機械用
-http://localhost:3000/api-docs/openapi.json
+http://localhost:3000/api/openapi.json
 
 
 - CI用にOpenAPI仕様を書き出し
@@ -178,7 +178,7 @@ package.jsonのscripts追記
 ```json
 "scripts": {
 	# 追記
-	"gen:api": "openapi-typescript http://backend:3000/api-docs/openapi.json -o src/api/schema.d.ts",
+	"gen:api": "openapi-typescript http://backend:3000/api/openapi.json -o src/api/schema.d.ts",
 	"gen:api:local": "openapi-typescript ./openapi.json -o src/api/schema.d.ts"
 	...
 }
@@ -294,6 +294,17 @@ args = [
     Object { callbacks/chains... } // Celery制御情報
 ]
 ```
+celery -A src.workers.celery_tasks inspect
+で
+active
+reserved
+scheduled
+stats
+registred
+conf
+とか見れるっぽいね
+
+
 - 例
 Tasks: [Task { id: 1107cc26-b460-4405-8b07-96ff7007f7d2, task: "mia_tasks.run_attack", args_positional: Array [], args_keyword: Object {"params": Object {"base_experiment_id": Null, "batch_size": Number(10), "experiment_id": Number(1), "hyperparameters": Object {}, "load_attack_model": Bool(false), "load_shadow_model": Bool(false), "load_target_model": Bool(false), "max_epochs": Number(10), "method": String("OfflineLira"), "name": String("test"), "notes": String("backend_test"), "num_shadow_models": Number(10), "seed": Number(10), "shadow_test_size": Number(10), "shadow_train_size": Number(10), "target_test_size": Number(10), "target_train_size": Number(10)}}, args_control: Object {"callbacks": Null, "chain": Null, "chord": Null, "errbacks": Null} }, Task { id: 676a5a77-8464-424f-bbad-19599fb20079, task: "mia_tasks.run_attack", args_positional: Array [], args_keyword: Object {"params": Object {"base_experiment_id": Null, "batch_size": Number(10), "experiment_id": Number(1), "hyperparameters": Object {}, "load_attack_model": Bool(false), "load_shadow_model": Bool(false), "load_target_model": Bool(false), "max_epochs": Number(10), "method": String("OfflineLira"), "name": String("test"), "notes": String("backend_test"), "num_shadow_models": Number(10), "seed": Number(10), "shadow_test_size": Number(10), "shadow_train_size": Number(10), "target_test_size": Number(10), "target_train_size": Number(10)}}, args_control: Object {"callbacks": Null, "chain": Null, "chord": Null, "errbacks": Null} }, Task { id: d2e8213d-6412-4b1f-9111-f3dfbaa805ef, task: "mia_tasks.run_attack", args_positional: Array [], args_keyword: Object {"params": Object {"base_experiment_id": Null, "batch_size": Number(10), "experiment_id": Number(1), "hyperparameters": Object {}, "load_attack_model": Bool(false), "load_shadow_model": Bool(false), "load_target_model": Bool(false), "max_epochs": Number(10), "method": String("OfflineLira"), "name": String("test"), "notes": String("backend_test"), "num_shadow_models": Number(10), "seed": Number(10), "shadow_test_size": Number(10), "shadow_train_size": Number(10), "target_test_size": Number(10), "target_train_size": Number(10)}}, args_control: Object {"callbacks": Null, "chain": Null, "chord": Null, "errbacks": Null} }]
 
@@ -312,6 +323,20 @@ Tasks: [Task { id: 1107cc26-b460-4405-8b07-96ff7007f7d2, task: "mia_tasks.run_at
 
 ## worker
 CIのためruffを導入
+
+uv導入
+依存関係を記述可能
+
+```bash
+pip install uv
+# pyproject.tomlに依存関係記述
+# lockファイル生成
+uv lock
+# 依存関係インストール
+uv sync --frozen
+# uvの環境で実行
+uv run 
+```
 
 
 # モノレポ化しました
@@ -340,6 +365,9 @@ OpenAPIでの整合性確保
 	APIの変更がgit管理で可視化される, CIの完全並列化, APIの仕様だけ先に変更することで他をブロックせずに開発可能
 
 cargo auditを実行したいところだが、依存クレートの依存クレートが怒られていて非常に面倒くさいためやっていない
+
+本番ビルドのテストまではするが、PushはCDで行う: CIの責務は壊れていないかどうかの確認であるため
+ビルドのキャッシュは共有している: クリーンな方がいいのだろうけど重いので
 
 # CD
 GHCR(GitHub Container Registry)っていう成果物のコンテナ置き場にアップロード
@@ -379,43 +407,31 @@ digest運用とタグ運用
 
 ## TODO
 ### 優先度: 高
-CI作る:
-sqlは専用テストしてredisはモックにすれば並列テスト可能
-いや違う、redisだけは外部依存だからモックでテストするようにしないといけない taskのreposityでデフォルトテストはしない方向で
-
 フィルタ、順番情報をバックエンドに記録
 
-
-イメージビルドはCIでもいいかも
 
 ### 優先度: 中
 
 タスクの中に条件ぶち込まなくてもClaimの返り値で条件取得できるから、タスクにはidだけ入れておけばいいのでは？
 
-Jsonからコード生成できるようにしたいよね
-
-branchのルールやりたい GitHub
-
 強制終了でタスクがちゃんと戻るか検証
 
-build-workerが長い キャッシュホントに使えてる？何も変えてないのに5分かかってるよ
+リリースとかTagとかのGitHubやりたいね
+
 
 ### 優先度: 低
-http://localhost:3000/healthみたいにhealthchack用のAPIを作った方がいいね
-
-ruty-celeryのwarning消す datatimeのやつ
-
 MIAOS APIへの送信失敗: Time zone offset must be 1, 3, 5 or 6 characters
 datetimeとかなんとかだった気がする
+明示的FAILEDとかできるね今なら ACKでredisにもどせる
+
+compose多すぎやしないか？
 
 CORS設定とか
 
 
-こういうの見れたらいいよね
-[Pending]  12件
-[Running]   3件
-[Success] 120件
-[Failed]    2件
+Dependabot というものがあるらしい
+依存ライブラリのアップデートを自動で提案してくれるGitHubのボット
+
 
 
 Pythonの型だとidが振ってこんぞ(正確には振ってくるけど型にした時に落ちる)

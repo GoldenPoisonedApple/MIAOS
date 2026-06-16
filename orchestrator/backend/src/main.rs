@@ -1,11 +1,13 @@
+use mimalloc::MiMalloc;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 
+use server::config::app::AppConfig;
 use server::infrastructure::{
   establish_celery_app, establish_db_connection, establish_redis_connection,
-  establish_storage_client, get_bucket_name,
+  establish_storage_client,
 };
 use server::repositories::experiment::ExperimentRepository;
 use server::repositories::storage::StorageRepository;
@@ -13,55 +15,68 @@ use server::repositories::task::TaskRepository;
 use server::routes::app_routes;
 use server::services::experiment::ExperimentService;
 use server::services::file::StorageService;
-use server::state::AppState;
+use server::state::{AppState, HealthState};
+
+// メモリ管理最適化
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+  // アプリ設定読み込み
+  let config = AppConfig::from_env().map_err(|e| -> Box<dyn std::error::Error> {
+    tracing::error!("Failed to load application configuration: {}", e);
+    Box::new(e)
+  })?;
+
   // ロガー
-  let log_level = std::env::var("LOG_LEVEL").unwrap_or("info".to_string());
+  let log_level = config.log_level.clone();
   tracing_subscriber::fmt()
     .with_env_filter(tracing_subscriber::EnvFilter::new(log_level))
     .init();
   tracing::info!("Starting server...");
 
   // DB
-  let db_pool = establish_db_connection().await;
+  let db_pool = establish_db_connection(&config).await?;
+  // Redis
+  let redis_pool = establish_redis_connection(&config).await?;
+  let celery_app = establish_celery_app(&config).await?;
+  // MINIO
+  let client = establish_storage_client(&config).await;
+  let bucket_name = config.minio_bucket_name.clone();
+
   // migrate適用
   tracing::info!("Running database migrations...");
   sqlx::migrate!("./migrations")
     .run(db_pool.get_postgres_connection_pool()) // プールの参照取得
     .await?;
-
   tracing::info!("Migrations completed.");
-  let experiment_repository = ExperimentRepository::new(db_pool);
-  // Redis
-  let redis_pool = establish_redis_connection().await;
-  let celery_app = establish_celery_app().await;
-  let task_repository = TaskRepository::new(redis_pool, celery_app);
-  // サービス組み立て
-  let experiment_service = Arc::new(ExperimentService::new(
-    experiment_repository,
-    task_repository,
-  ));
-  // MINIO接続
-  let client = establish_storage_client().await;
-  let storage_repository = StorageRepository::new(client, get_bucket_name());
-  let storage_service = Arc::new(StorageService::new(storage_repository));
 
   // 状態
-  let state = AppState {
-    experiment_service,
-    storage_service,
+  let health_state = HealthState {
+    db_pool: db_pool.clone(),
+    redis_pool: redis_pool.clone(),
+    client: client.clone(),
+    bucket_name: bucket_name.clone(),
+  };
+  let app_state = AppState {
+    experiment_service: Arc::new(ExperimentService::new(
+      ExperimentRepository::new(db_pool),
+      TaskRepository::new(redis_pool, celery_app),
+    )),
+    storage_service: Arc::new(StorageService::new(StorageRepository::new(
+      client,
+      bucket_name,
+    ))),
   };
 
   // ルーティング
-  let app = app_routes(state).layer(TraceLayer::new_for_http()); // リクエストのトレースを有効化
+  let app = app_routes(app_state, health_state).layer(TraceLayer::new_for_http()); // リクエストのトレースを有効化
 
   // サーバ起動
-  const SERVER_PORT: u16 = 3000;
-  let addr = SocketAddr::from(([0, 0, 0, 0], SERVER_PORT));
-  let listener = TcpListener::bind(addr).await.unwrap();
-  axum::serve(listener, app).await.unwrap();
+  let addr = SocketAddr::from(([0, 0, 0, 0], config.server_port));
+  let listener = TcpListener::bind(addr).await?;
+  axum::serve(listener, app).await?;
 
   Ok(())
 }

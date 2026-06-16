@@ -4,6 +4,7 @@ use crate::repositories::task::TaskRepository;
 use crate::services::experiment::ExperimentService;
 use crate::services::file::StorageService;
 use axum::extract::FromRef;
+use sea_orm::DatabaseConnection;
 use std::sync::Arc;
 
 // DIコンテナの役割を果たす
@@ -31,4 +32,13 @@ impl FromRef<AppState> for Arc<StorageService<StorageRepository>> {
   fn from_ref(app: &AppState) -> Self {
     app.storage_service.clone()
   }
+}
+
+/// ヘルスチェックの状態を保持する
+#[derive(Clone)]
+pub struct HealthState {
+  pub db_pool: DatabaseConnection,
+  pub redis_pool: deadpool_redis::Pool,
+  pub client: aws_sdk_s3::Client,
+  pub bucket_name: String,
 }

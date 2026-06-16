@@ -40,6 +40,8 @@ uuid = "1.23.1"
 aws-sdk-s3 = "1.132.0"
 # URL
 urlencoding = "2.1.3"
+# メモリ管理最適化
+mimalloc = "0.1.52"
 
 # cargo build --releaseには含まれない
 # --dev
@@ -60,3 +62,7 @@ debug = 1 # ローカル開発時のコンパイルを少し速くする (デフ
 [profile.test]
 debug = 0 # CIテスト時はデバッグ情報(スタックトレースの詳細度)を削って高速化
 opt-level = 0 # 最適化はしない（コンパイル速度優先）
+
+
+[features]
+integration-test = []
