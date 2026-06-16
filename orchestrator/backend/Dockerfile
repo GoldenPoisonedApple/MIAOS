@@ -56,7 +56,8 @@ RUN cargo install --locked cargo-audit
 RUN cargo install --locked cargo-deny
 
 # SQLx CLI: データベースマイグレーション用
-RUN cargo install --locked sqlx-cli --no-default-features --features postgres
+# 0.9が出てMSRVが上がってしまったので指定
+RUN cargo install --locked sqlx-cli@0.8 --no-default-features --features postgres
 # cargo-watch: ホットリロード用
 RUN cargo install --locked cargo-watch
 
