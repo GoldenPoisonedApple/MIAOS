@@ -71,6 +71,13 @@ jobs:
       # docker buildx(高性能ビルド環境)初期化
       - uses: docker/setup-buildx-action@v3
 
+      # runnerユーザがroot所有の.lockファイルを読めない問題を解消
+      - name: Set container user
+        run: |
+          echo "UID=$(id -u)" >> "$GITHUB_ENV"
+          echo "GID=$(id -g)" >> "$GITHUB_ENV"
+    
+
       # Layer 2: PR 間キャッシュ復元 保存先の指定 actions/cache
       - name: Restore cargo cache
         id: cargo-cache
@@ -114,6 +121,9 @@ jobs:
           docker cp "$cid:/app/target/." .ci-cache/cargo-target/
           docker cp "$cid:/usr/local/cargo/registry/." .ci-cache/cargo-registry/
           docker rm "$cid"
+          # キャッシュをユーザーに紐づける
+          sudo chown -R "$(id -u):$(id -g)" .ci-cache
+
 
       # DBマイグレーションを実行
       - name: Run database migrations

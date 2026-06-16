@@ -3,6 +3,7 @@ services:
     image: orchestrator-backend:dev
     pull_policy: never
     working_dir: /app
+    user: "${UID:-1000}:${GID:-1000}" # キャッシュをユーザーに紐づける
     volumes:
       - ./backend:/app
       - ../schema:/schema          # OpenAPIスキーマをマウント
