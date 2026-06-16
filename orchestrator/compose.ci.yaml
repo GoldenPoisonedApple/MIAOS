@@ -1,0 +1,9 @@
+services:
+  backend:
+    image: orchestrator-backend:dev
+    pull_policy: never
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - ../schema:/schema          # OpenAPIスキーマをマウント
+
