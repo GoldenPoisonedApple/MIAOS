@@ -12,7 +12,6 @@ on:
 
 permissions:
   contents: read
-  packages: write  # ghcr.io push に必要
 
 env:
   REGISTRY: ghcr.io
@@ -37,9 +36,11 @@ jobs:
             orchestrator-frontend:
               - 'orchestrator/frontend/**'
             orchestrator-compose:
-              - 'orchestrator/compose*.yaml'
+              - 'orchestrator/compose.*.yaml'
+              - 'schema/openapi.json'
             worker:
               - 'worker/**'
+              - 'schema/openapi.json'
             cd:
               - '.github/workflows/cd.yml'
       - id: flags
@@ -91,6 +92,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.orchestrator == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # ghcr.io push に必要
+      actions: write  # GHA build cache
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
@@ -139,6 +144,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.orchestrator == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # ghcr.io push に必要
+      actions: write # GHA build cache
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
@@ -171,6 +180,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.worker == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # ghcr.io push に必要
+      actions: write # GHA build cache
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
@@ -215,6 +228,7 @@ jobs:
         uses: appleboy/ssh-action@v1
         # ランナー側の環境変数を指定
         env:
+          GITHUB_SHA: ${{ github.sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           REGISTRY: ${{ env.REGISTRY }}
@@ -230,13 +244,16 @@ jobs:
           proxy_key: ${{ secrets.DEPLOY_SSH_KEY }}
           proxy_port: ${{ secrets.BASTION_PORT }}
           # ワークフローのenvはリモートに渡されないので明示的に指定
-          envs: GITHUB_TOKEN,GITHUB_ACTOR,REGISTRY,IMAGE_PREFIX,BACKEND_DIGEST,FRONTEND_DIGEST
+          envs: GITHUB_SHA,GITHUB_TOKEN,GITHUB_ACTOR,REGISTRY,IMAGE_PREFIX,BACKEND_DIGEST,FRONTEND_DIGEST
           script: |
             set -euo pipefail
             # ホームディレクトリ以下に配置
             mkdir -p $HOME/MIAOS/
             cd $HOME/MIAOS/
-            git pull origin main
+
+            # リモートリポジトリの指定コミットに更新
+            git fetch origin
+            git checkout "${GITHUB_SHA}"
 
             cd orchestrator
 
@@ -288,6 +305,7 @@ jobs:
       - name: Graceful rolling deploy to ${{ matrix.host }}
         uses: appleboy/ssh-action@v1
         env:
+          GITHUB_SHA: ${{ github.sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           REGISTRY: ${{ env.REGISTRY }}
@@ -302,7 +320,7 @@ jobs:
           proxy_key: ${{ secrets.DEPLOY_SSH_KEY }}
           proxy_port: ${{ secrets.BASTION_PORT }}
           # ワークフローのenvはリモートに渡されないので明示的に指定
-          envs: GITHUB_TOKEN,GITHUB_ACTOR,REGISTRY,IMAGE_PREFIX,WORKER_DIGEST
+          envs: GITHUB_SHA,GITHUB_TOKEN,GITHUB_ACTOR,REGISTRY,IMAGE_PREFIX,WORKER_DIGEST
           # command_timeout: タスク完了待ちの上限（最長タスク時間 + バッファ）
           command_timeout: 60m
           script: |
@@ -310,7 +328,10 @@ jobs:
             # ホームディレクトリ以下に配置
             mkdir -p $HOME/MIAOS/
             cd $HOME/MIAOS/
-            git pull origin main
+
+            # リモートリポジトリの指定コミットに更新
+            git fetch origin
+            git checkout "${GITHUB_SHA}"
 
             cd worker
 
