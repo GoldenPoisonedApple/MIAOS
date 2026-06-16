@@ -403,6 +403,16 @@ digest運用とタグ運用
 - Environmentsでssh情報とかのsecrets情報登録
 - Actions -> General: Workflow permissions = Read and write permissions
 
+## Release Please
+- 必須設定
+GitHub リポジトリ GoldenPoisonedApple/MIAOS で:
+
+Settings → Actions → General
+Workflow permissions で Read and write permissions を選択
+その直下の Allow GitHub Actions to create and approve pull requests にチェック
+Save
+
+
 #### release-please-config.json
 リリースバージョンの管理
 - extra-files: リリース時に計算された新しいバージョン番号を自動で書き換えるファイル
@@ -460,6 +470,7 @@ sequenceDiagram
 
 リリースとかTagとかのGitHubやりたいね
 
+release: GHCRイメージにtag付与されてなくないか
 
 ### 優先度: 低
 MIAOS APIへの送信失敗: Time zone offset must be 1, 3, 5 or 6 characters

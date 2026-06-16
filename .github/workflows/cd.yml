@@ -37,10 +37,8 @@ jobs:
               - 'orchestrator/frontend/**'
             orchestrator-compose:
               - 'orchestrator/compose.*.yaml'
-              - 'schema/openapi.json'
             worker:
               - 'worker/**'
-              - 'schema/openapi.json'
             cd:
               - '.github/workflows/cd.yml'
             release:
