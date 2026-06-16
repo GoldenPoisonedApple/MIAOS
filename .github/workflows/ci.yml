@@ -71,13 +71,26 @@ jobs:
       # docker buildx(高性能ビルド環境)初期化
       - uses: docker/setup-buildx-action@v3
 
+      # Layer 2: PR 間キャッシュ復元 保存先の指定 actions/cache
+      - name: Restore cargo cache
+        id: cargo-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            orchestrator/.ci-cache/cargo-target
+            orchestrator/.ci-cache/cargo-registry
+          key: backend-cargo-${{ runner.os }}-${{ hashFiles('orchestrator/backend/Cargo.lock') }}
+          restore-keys: |
+            backend-cargo-${{ runner.os }}-
+
+
       # 依存サービスの起動
       - name: Setup Depend services
         run: |
           docker compose --env-file .env.ci -f compose.base.yaml -f compose.ci.yaml up -d --wait db redis minio
           docker compose --env-file .env.ci -f compose.base.yaml -f compose.ci.yaml run --rm create_buckets        
 
-      # バックエンドのビルド
+      # Layer 1: イメージビルド（cargo-chef + GHA cache）
       - name: Build backend (dev)
         uses: docker/build-push-action@v6
         with:
@@ -86,9 +99,21 @@ jobs:
           push: false
           load: true
           tags: orchestrator-backend:dev
-          cache-from: |
-            type=gha,scope=build-orchestrator-backend
+          cache-from: type=gha,scope=build-orchestrator-backend
           cache-to: type=gha,mode=max,scope=build-orchestrator-backend
+
+      # Layer 3: cache miss 時、イメージからキャッシュを作成
+      # ここで作成されたキャッシュはジョブ終了時にactions/cacheで保存される
+      - name: Seed cargo cache from image
+        # Layer 2 でキャッシュがヒットしなかった場合のみ実行
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        # イメージから成果物をコピーしてキャッシュとする
+        run: |
+          mkdir -p .ci-cache/cargo-target .ci-cache/cargo-registry
+          cid=$(docker create orchestrator-backend:dev)
+          docker cp "$cid:/app/target/." .ci-cache/cargo-target/
+          docker cp "$cid:/usr/local/cargo/registry/." .ci-cache/cargo-registry/
+          docker rm "$cid"
 
       # DBマイグレーションを実行
       - name: Run database migrations

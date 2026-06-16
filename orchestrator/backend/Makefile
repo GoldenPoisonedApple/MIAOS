@@ -28,13 +28,6 @@ test:
 test-integration:
 	cargo test --all-features -- --test-threads=1
 
-# CI
-# --check: 正しくなくても書き換えない
-.PHONY: check
-check:
-	cargo fmt --all -- --check
-	${MAKE} lint
-	${MAKE} test-integration
 
 # ------------------------------
 # Migration
@@ -64,3 +57,13 @@ migrate-info:
 .PHONY: generate-openapi
 generate-openapi:
 	cargo run --bin generate_openapi > /schema/openapi.json
+
+# --------------------------------
+# CI
+# --------------------------------
+.PHONY: check
+check:
+	${MAKE} migrate
+	cargo fmt --all -- --check
+	${MAKE} lint
+	${MAKE} test-integration
