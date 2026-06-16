@@ -5,7 +5,7 @@ concurrency:
   cancel-in-progress: false
 
 on:
-	# CD Build というWorkflowがmainブランチで完了したら起動
+  # CD Build というWorkflowがmainブランチで完了したら起動
   workflow_run:
     workflows: [CD Build]
     types: [completed]
@@ -18,7 +18,7 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-	# ─────────────────────────────────────────
+  # ─────────────────────────────────────────
   # 変更検知（CD Build と同様の paths-filter）
   # ─────────────────────────────────────────
   changes:
@@ -58,13 +58,13 @@ jobs:
             worker=true
           fi
           if [[ "${{ steps.filter.outputs.orchestrator-backend }}" == "true" \
-             || "${{ steps.filter.outputs.orchestrator-frontend }}" == "true" \
-             || "${{ steps.filter.outputs.orchestrator-compose }}" == "true" \
-             || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
+            || "${{ steps.filter.outputs.orchestrator-frontend }}" == "true" \
+            || "${{ steps.filter.outputs.orchestrator-compose }}" == "true" \
+            || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
             orchestrator=true
           fi
           if [[ "${{ steps.filter.outputs.worker }}" == "true" \
-             || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
+            || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
             worker=true
           fi
           echo "orchestrator=$orchestrator" >> "$GITHUB_OUTPUT"
@@ -101,7 +101,7 @@ jobs:
     steps:
       - name: Deploy orchestrator
         uses: appleboy/ssh-action@v1
-				# ランナー側の環境変数を指定
+        # ランナー側の環境変数を指定
         env:
           GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

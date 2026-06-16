@@ -6,7 +6,7 @@ concurrency:
   cancel-in-progress: false # CDはキャンセルしない 段階リリースのような順序補償が必要な場合がある 中断による不整合を防ぐ
 
 on:
-	# pushされた場合(mergeされたときにもトリガーされる)
+  # pushされた場合(mergeされたときにもトリガーされる)
   push:
     branches: [main]
 
@@ -56,14 +56,14 @@ jobs:
           fi
           # orchestrator判定
           if [[ "${{ steps.filter.outputs.orchestrator-backend }}" == "true" \
-             || "${{ steps.filter.outputs.orchestrator-frontend }}" == "true" \
-             || "${{ steps.filter.outputs.orchestrator-compose }}" == "true" \
-             || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
+            || "${{ steps.filter.outputs.orchestrator-frontend }}" == "true" \
+            || "${{ steps.filter.outputs.orchestrator-compose }}" == "true" \
+            || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
             orchestrator=true
           fi
           # worker判定
           if [[ "${{ steps.filter.outputs.worker }}" == "true" \
-             || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
+            || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
             worker=true
           fi
           # 変数を追加して出力
@@ -84,7 +84,7 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
-			# ソースコードを実行環境にチェックアウト
+      # ソースコードを実行環境にチェックアウト
       - uses: actions/checkout@v4
       # docker buildx(高性能ビルド環境)初期化
       - uses: docker/setup-buildx-action@v3
@@ -95,7 +95,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-			# イメージのメタデータ自動生成
+      # イメージのメタデータ自動生成
       - id: meta
         uses: docker/metadata-action@v5
         with: 
