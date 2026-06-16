@@ -1,3 +1,4 @@
+# release-please: リリースバージョンの管理 GitHub Release の作成
 name: Release Please
 
 on:
