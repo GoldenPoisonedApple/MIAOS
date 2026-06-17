@@ -18,6 +18,8 @@ jobs:
   # Release Please
   # PAT による tag push で CD Build が起動する
   # GHCR への semver retag は CD Build 完了後に cd-retag.yml が実行する
+  # 前回リリース移行で未リリース変更がある場合はRelease PR作成
+  # ない場合、かつマージがRelease PRの場合は tag vX.Y.Zを作成・GitHub Releaseを作成
   # ─────────────────────────────────────────
   release-please:
     runs-on: ubuntu-latest

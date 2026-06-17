@@ -44,7 +44,9 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           SHORT_SHA="${HEAD_SHA:0:7}"
-          REGISTRY="${{ env.REGISTRY }}/${{ github.repository }}"
+          REPOSITORY="${{ github.repository }}"
+          REPOSITORY="${REPOSITORY,,}" # Docker/OCIの参照形式は小文字必須
+          REGISTRY="${{ env.REGISTRY }}/${REPOSITORY}"
           for img in orchestrator-backend orchestrator-frontend worker; do
             docker buildx imagetools create \
               --tag "${REGISTRY}/${img}:${TAG_NAME}" \
