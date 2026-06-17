@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.2](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.1.1...v0.1.2) (2026-06-17)
+
+
+### Features
+
+* cdの分離、releaseの一本化 ([fb3319e](https://github.com/GoldenPoisonedApple/MIAOS/commit/fb3319e380f2ff98d2e1552acd15dd75475d1ec5))
+* PATを使用してworkflowを起動するように変更 ([33142ba](https://github.com/GoldenPoisonedApple/MIAOS/commit/33142baa57ac95e8eb3532b32b8035a5af8d45da))
+* releaseの時のみcdが走るように変更 ([0a4ce24](https://github.com/GoldenPoisonedApple/MIAOS/commit/0a4ce24b49e15bc9cbd5382a50a4400032a6fcdb))
+
+
+### Bug Fixes
+
+* cacheの保存をpermissionの問題で弾かれている問題を解消 ([3ff0c27](https://github.com/GoldenPoisonedApple/MIAOS/commit/3ff0c27e9ce609dcbe22adc20fdff9305035fab2))
+* deployのタグ指定をShort SHAに変更 ([c1a54c5](https://github.com/GoldenPoisonedApple/MIAOS/commit/c1a54c525379ea4b0d8b73ec08ff2f234650540c))
+* schema/openapi.jsonの変更によるビルド廃止 ([a76a477](https://github.com/GoldenPoisonedApple/MIAOS/commit/a76a477a65362601e24275f9b653e1e4071b3834))
+* スペース2に修正 ([4d0e998](https://github.com/GoldenPoisonedApple/MIAOS/commit/4d0e998254553df2aaf077fba48737e8ece07f02))
+
 ## [0.1.1](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.1.0...v0.1.1) (2026-06-16)
 
 
