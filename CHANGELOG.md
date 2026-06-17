@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.2.0...v0.2.1) (2026-06-17)
+
+
+### Features
+
+* cd-buildのキャッシュ改善 ([7edb3a0](https://github.com/GoldenPoisonedApple/MIAOS/commit/7edb3a06614a1aa9c8bbd19c41c0e66e8d4f7fac))
+
 ## [0.2.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.1.3...v0.2.0) (2026-06-17)
 
 
