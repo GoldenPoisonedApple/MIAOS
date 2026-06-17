@@ -68,7 +68,10 @@ jobs:
           # ビルドキャッシュを利用
           # gha: GitHub Actions専用のキャッシュストレージを使用,
           # max: ビルド途中の全てのレイヤーをキャッシュ対象に
-          cache-from: type=gha,scope=build-orchestrator-backend
+          # registry: 前回cdでのイメージをキャッシュ対象に コールドスタートに強い
+          cache-from: |
+            type=gha,scope=build-orchestrator-backend
+            type=registry,ref=ghcr.io/goldenpoisonedapple/miaos/orchestrator-backend:latest
           cache-to: type=gha,mode=max,scope=build-orchestrator-backend
 
   build-orchestrator-frontend:
@@ -100,7 +103,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=build-orchestrator-frontend
+          cache-from: |
+            type=gha,scope=build-orchestrator-frontend
+            type=registry,ref=ghcr.io/goldenpoisonedapple/miaos/orchestrator-frontend:latest
           cache-to: type=gha,mode=max,scope=build-orchestrator-frontend
 
   build-worker:
@@ -132,5 +137,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=build-worker
+          cache-from: |
+            type=gha,scope=build-worker
+            type=registry,ref=ghcr.io/goldenpoisonedapple/miaos/worker:latest
           cache-to: type=gha,mode=max,scope=build-worker
