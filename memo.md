@@ -438,25 +438,71 @@ BREAKING CHANGE
 ```mermaid
 sequenceDiagram
     participant Dev as 開発者
-    participant Main as main ブランチ
+    participant Main as main
+    participant CI as ci.yml
     participant RP as release-please.yml
-    participant CD as cd.yml
-    participant Rel as release.yml
+    participant Build as cd-build.yml
+    participant Retag as cd-retag.yml
+    participant Deploy as cd-deploy.yml
     participant GHCR as GHCR
+    participant Prod as 本番サーバー
 
-    Dev->>Main: conventional commit を push
-    Main->>RP: push トリガー
-    RP->>Main: Release PR 作成/更新
+    Dev->>Main: PR（feature → main）
+    Main->>CI: pull_request
+    CI->>CI: paths filter → 各コンポーネント検証
 
-    Dev->>Main: Release PR を merge
-    Main->>RP: push トリガー
-    RP->>Main: tag vX.Y.Z + GitHub Release 作成
-    Main->>CD: push トリガー（並行）
-    CD->>GHCR: イメージ push（:SHORT_SHA, :latest）
-    Main->>Rel: tag push トリガー
-    Rel->>GHCR: :SHORT_SHA → :vX.Y.Z に retag
+    Dev->>Main: Release PR merge
+    Main->>RP: push
+    RP->>Main: tag vX.Y.Z + GitHub Release（PAT）
 
+    Main->>Build: tag push（v*.*.*）
+    Build->>GHCR: push :SHORT_SHA, :latest
+
+    par workflow_run（並行）
+        Build->>Retag: completed
+        Retag->>GHCR: retag :vX.Y.Z
+    and
+        Build->>Deploy: completed
+        Deploy->>Prod: git checkout + deploy-*.sh
+        Prod->>GHCR: pull :SHORT_SHA
+    end
 ```
+
+```mermaid
+flowchart TB
+    subgraph dev["開発フェーズ"]
+        PR["PR → main"]
+        PR --> CI["ci.yml<br/>paths filter"]
+        CI --> B["Backend (Rust)"]
+        CI --> F["Frontend (Node)"]
+        CI --> W["Worker (Python)"]
+    end
+
+    subgraph release["リリースフェーズ"]
+        Merge["Release PR merge"]
+        Merge --> RP["release-please.yml"]
+        RP --> Tag["tag vX.Y.Z 作成 (PAT)"]
+        RP --> GHRel["GitHub Release 作成"]
+    end
+
+    subgraph cd["CD フェーズ（tag push トリガー）"]
+        Tag --> Build["cd-build.yml"]
+        Build --> GHCR1["GHCR push<br/>:SHORT_SHA, :latest"]
+    end
+
+    subgraph post_build["CD Build 完了後（workflow_run × 2、並行）"]
+        Build --> Retag["cd-retag.yml"]
+        Build --> Deploy["cd-deploy.yml"]
+        Retag --> GHCR2["GHCR retag<br/>:SHORT_SHA → :vX.Y.Z"]
+        Deploy --> Orch["SSH: orchestrator"]
+        Deploy --> Workers["SSH: workers (matrix)"]
+    end
+
+    GHCR1 --> Retag
+    GHCR1 --> Orch
+    GHCR1 --> Workers
+```
+
 
 #### PAT
 PAT: Personal Access Token

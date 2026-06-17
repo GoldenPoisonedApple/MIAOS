@@ -68,44 +68,11 @@ jobs:
           envs: GITHUB_SHA,GITHUB_TOKEN,GITHUB_ACTOR,REGISTRY,IMAGE_PREFIX
           script: |
             set -euo pipefail
-            # ホームディレクトリ以下に配置
-            mkdir -p $HOME/MIAOS/
-            cd $HOME/MIAOS/
-
-            # リモートリポジトリの指定コミットに更新
+            mkdir -p "$HOME/MIAOS/"
+            cd "$HOME/MIAOS/"
             git fetch origin
             git checkout "${GITHUB_SHA}"
-
-            cd orchestrator
-
-            # 環境変数を設定
-            # Docker image は大文字禁止: 小文字に変換
-            export IMAGE_PREFIX="${IMAGE_PREFIX,,}"
-            # CD Build が付与するタグと一致させる
-            export IMAGE_TAG="${GITHUB_SHA:0:7}"
-
-            # ghcr.ioにログイン
-            # --password-stdin: 標準入力からパスワードを読み込む セキュリティ上の利点: historyにパスワードが残らない
-            echo "$GITHUB_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
-
-            # 新イメージを取得
-            # upだけでも良いがpull失敗なのかbuild失敗なのかを切り分けられる
-            docker compose -f compose.base.yaml -f compose.deploy.yaml pull backend frontend
-
-            # サービスを再起動（既存コンテナを置き換え）
-            # --no-deps: 依存サービス(postgres等)は再起動しない
-            # --remove-orphans: 不要なコンテナを削除
-            docker compose -f compose.base.yaml -f compose.deploy.yaml \
-              up -d --no-deps --remove-orphans backend frontend
-
-            # ヘルスチェック
-            docker compose -f compose.base.yaml -f compose.deploy.yaml up -d --wait --wait-timeout 120 backend
-
-            # 不要になったイメージの削除
-            # -a: 全てのイメージを削除
-            # -f: 強制的に削除
-            # --filter "dangling=true": 未使用のイメージを削除
-            docker image prune -f --filter "dangling=true"
+            bash .github/scripts/deploy-orchestrator.sh
 
   # ─────────────────────────────────────────
   # Worker デプロイ（複数台）
@@ -147,38 +114,8 @@ jobs:
           command_timeout: 60m
           script: |
             set -euo pipefail
-            # ホームディレクトリ以下に配置
-            mkdir -p $HOME/MIAOS/
-            cd $HOME/MIAOS/
-
-            # リモートリポジトリの指定コミットに更新
+            mkdir -p "$HOME/MIAOS/"
+            cd "$HOME/MIAOS/"
             git fetch origin
             git checkout "${GITHUB_SHA}"
-
-            cd worker
-
-            # 環境変数を設定
-            # Docker image は大文字禁止: 小文字に変換
-            export IMAGE_PREFIX="${IMAGE_PREFIX,,}"
-            export IMAGE_TAG="${GITHUB_SHA:0:7}"
-
-            # ghcr.ioにログイン
-            # --password-stdin: 標準入力からパスワードを読み込む セキュリティ上の利点: historyにパスワードが残らない
-            echo "$GITHUB_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
-
-            # 新イメージを取得
-            docker compose -f compose.base.yaml -f compose.deploy.yaml pull ito_research
-
-            # 現在のコンテナを graceful stop
-            #    SIGTERM → Celery warm shutdown（実行中タスク完了後に終了）
-            #    stop_grace_period をcompose.deploy.yamlで設定しておくこと
-            docker compose -f compose.base.yaml -f compose.deploy.yaml stop ito_research
-
-            # 新イメージで起動
-            docker compose -f compose.base.yaml -f compose.deploy.yaml up -d --no-deps --wait --wait-timeout 120 ito_research
-
-            # 不要になったイメージの削除
-            # -a: 全てのイメージを削除
-            # -f: 強制的に削除
-            # --filter "dangling=true": 未使用のイメージを削除
-            docker image prune -f --filter "dangling=true"
+            bash .github/scripts/deploy-worker.sh
