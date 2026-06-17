@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.1.3...v0.2.0) (2026-06-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* 表示カラムの設定永続化with localStorage
+
+### Features
+
+* 表示カラムの設定永続化with localStorage ([fc7a129](https://github.com/GoldenPoisonedApple/MIAOS/commit/fc7a1295cfda5a98a13e8b7db152e20b575b147a))
+
 ## [0.1.3](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.1.2...v0.1.3) (2026-06-17)
 
 
