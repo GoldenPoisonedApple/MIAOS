@@ -9,7 +9,7 @@ WORKDIR /app
 # - mold, clang: 高速なリンカー(任意だが推奨)
 # bookworm のセキュリティ更新を取り込み（スキャナの libssl / perl 等の CVE を減らす）
 # --no-install-recommends: 不要なパッケージをインストールしない Dockerfileでは標準 サイズを減らしアタック面を軽減
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
 	pkg-config \
 	libssl-dev \
 	mold \
@@ -41,7 +41,7 @@ FROM base AS dev
 WORKDIR /app
 
 # 開発に必要なツールのインストール
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
 	curl \
 	git \
 	make \
@@ -100,7 +100,7 @@ FROM debian:bookworm-slim AS prod
 WORKDIR /app
 
 # 実行時に必要な SSL ライブラリ等のみインストール
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
 	ca-certificates \
 	curl \
 	libssl3 \
