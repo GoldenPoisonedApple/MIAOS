@@ -40,10 +40,12 @@ graph TD
 ├── hooks/           # ビジネスロジック・状態管理層 (カスタムフック)
 │   ├── useExperiments.ts    # 実験データの取得(Query)と操作(Mutation)
 │   ├── useTasks.ts          # タスクデータの取得(Query)と操作(Mutation)
-│   └── useDynamicColumns.ts # JSON型の動的キー抽出・カラム生成（列ソート用 sortingFn を含む）
+│   ├── useDynamicColumns.ts # JSON型の動的キー抽出・カラム生成（列ソート用 sortingFn を含む）
+│   └── useTablePreferences.ts # テーブル UI 設定の状態管理と localStorage 永続化
 │
 ├── utils/           # 画面横断の小さな純関数
-│   └── fileApiPath.ts       # MinIO オブジェクトキー → /api/files/... 相対パス
+│   ├── fileApiPath.ts       # MinIO オブジェクトキー → /api/files/... 相対パス
+│   └── tablePreferences.ts  # テーブル設定の読み書き・マージ・バリデーション
 │
 ├── components/      # 汎用コンポーネント層
 │   ├── layout/      # 画面の共通レイアウト (Header, Navigation 等)
@@ -81,6 +83,8 @@ graph TD
 - **列ソート**: `getSortedRowModel` とヘッダー上の昇順・降順操作により、単一キーでソート状態を管理します。実験一覧は初期状態で **ID 昇順**。動的列には比較可能な文字列表現へ正規化する `sortingFn` を付与しています。
 - **行 ID と行選択**: 列ソート後もチェックボックスの選択がデータ行と一致するよう、`DataTable` は任意の `getRowId`（実験は数値 `id` の文字列化、タスクは UUID）を TanStack Table に渡し、`rowSelection` のキーを行インデックスから切り離しています。
 - **カラムの制御**: カラムの表示/非表示の切り替え、および `@dnd-kit` を用いたヘッダーのドラッグ＆ドロップによる**列の並び順**変更が実装されています（行の並び替えとは別レイヤー）。
+- **テーブル設定の永続化**: 表示カラム・列順・ソートは `useTablePreferences` により `localStorage` に保存されます（キー: `app:table-preferences:v1:{storageKey}`）。実験一覧は `experiments`、タスク一覧は `tasks`。`storageKey` 未指定時は従来どおりエフェメラル。`rowSelection` やモーダル開閉は永続化しません。
+- **動的カラムとのマージ**: 保存済み設定を復元する際、存在しないカラム ID は除去し、新規に出現した動的カラムには `defaultHiddenColumns`（初期非表示）を適用します。既存カラムのユーザー設定は維持されます。
 
 ### 3.3 コンポーネントのカプセル化
 スタイリングには **CSS Modules** (`*.module.css`) を採用しています。クラス名のスコープが各コンポーネント内に閉じられるため、他のコンポーネントへの意図しないスタイルの影響を防ぎ、保守性を高めています。

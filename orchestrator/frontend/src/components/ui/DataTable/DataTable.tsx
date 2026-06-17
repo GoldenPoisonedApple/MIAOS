@@ -10,7 +10,7 @@ import {
   type Header,
   type SortingState,
 } from "@tanstack/react-table";
-import { useState } from "react";
+import { useMemo } from "react";
 import {
   DndContext,
   closestCenter,
@@ -31,6 +31,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
 import styles from "./DataTable.module.css";
 import { ColumnVisibilityMenu } from "../ColumnVisibilityMenu/ColumnVisibilityMenu";
+import { useTablePreferences } from "../../../hooks/useTablePreferences";
+import { getColumnId } from "../../../utils/tablePreferences";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -42,6 +44,8 @@ interface DataTableProps<TData, TValue> {
   initialSorting?: SortingState;
   /** 行 ID をデータの識別子に固定（ソート後も選択・削除が正しく動く） */
   getRowId?: (row: TData) => string;
+  /** 指定時は表示カラム・列順・ソートを localStorage に永続化 */
+  storageKey?: string;
 }
 
 // Draggable Header Cell Component
@@ -124,10 +128,30 @@ export function DataTable<TData, TValue>({
   initialColumnVisibility = {},
   initialSorting = [],
   getRowId,
+  storageKey,
 }: DataTableProps<TData, TValue>) {
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
-  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
-  const [sorting, setSorting] = useState<SortingState>(() => initialSorting);
+  const columnIds = useMemo(
+    () => columns.map((col) => getColumnId(col)).filter((id): id is string => id !== undefined),
+    [columns]
+  );
+
+  const preferenceDefaults = useMemo(
+    () => ({
+      columnVisibility: initialColumnVisibility,
+      columnOrder: [] as ColumnOrderState,
+      sorting: initialSorting,
+    }),
+    [initialColumnVisibility, initialSorting]
+  );
+
+  const {
+    columnVisibility,
+    columnOrder,
+    sorting,
+    onColumnVisibilityChange,
+    onColumnOrderChange,
+    onSortingChange,
+  } = useTablePreferences(storageKey, preferenceDefaults, columnIds);
 
   const table = useReactTable({
     data,
@@ -140,9 +164,9 @@ export function DataTable<TData, TValue>({
     },
     enableRowSelection: true,
     onRowSelectionChange,
-    onColumnVisibilityChange: setColumnVisibility,
-    onColumnOrderChange: setColumnOrder,
-    onSortingChange: setSorting,
+    onColumnVisibilityChange,
+    onColumnOrderChange,
+    onSortingChange,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getRowId: getRowId ? (original) => getRowId(original) : undefined,
@@ -170,7 +194,7 @@ export function DataTable<TData, TValue>({
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (active && over && active.id !== over.id) {
-      setColumnOrder(() => {
+      onColumnOrderChange(() => {
         const oldIndex = currentColumnIds.indexOf(active.id as string);
         const newIndex = currentColumnIds.indexOf(over.id as string);
         return arrayMove(currentColumnIds, oldIndex, newIndex); // Reorder the array

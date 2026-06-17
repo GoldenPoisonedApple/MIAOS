@@ -21,6 +21,11 @@ export const TaskList = () => {
     { key: "args_positional", prefix: "Arg" },
   ]);
 
+  const initialColumnVisibility = useMemo(
+    () => ({ ...defaultHiddenColumns }),
+    [defaultHiddenColumns]
+  );
+
   const columns = useMemo<ColumnDef<Task>[]>(
     () => [
       {
@@ -81,13 +86,12 @@ export const TaskList = () => {
       </div>
 
       <DataTable
+        storageKey="tasks"
         data={tasks}
         columns={columns}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
-        initialColumnVisibility={{
-          ...defaultHiddenColumns,
-        }}
+        initialColumnVisibility={initialColumnVisibility}
         getRowId={(row) => row.id}
       />
 
