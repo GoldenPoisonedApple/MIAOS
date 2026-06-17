@@ -6,7 +6,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # 開発に必要なツールのインストール
-RUN apk add --no-cache curl bash make
+# util-linux: devcontainer で flock -w で使用するため(alpineには flockの-wオプションがない)
+RUN apk add --no-cache curl bash make util-linux
 
 RUN npm ci
 

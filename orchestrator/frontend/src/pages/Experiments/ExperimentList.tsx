@@ -14,6 +14,8 @@ import styles from "./ExperimentList.module.css";
 
 type Experiment = components["schemas"]["Model"];
 
+const EXPERIMENT_DEFAULT_SORTING = [{ id: "id", desc: false }] as const;
+
 export const ExperimentList = () => {
   const { experiments, loading, error, deleteExperiments, createExperiment, isCreating, isDeleting } = useExperiments();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -64,6 +66,11 @@ export const ExperimentList = () => {
   );
 
   const { dynamicColumns, defaultHiddenColumns } = useDynamicColumns<Experiment>(experiments, dictionaryConfigs);
+
+  const initialColumnVisibility = useMemo(
+    () => ({ ...defaultHiddenColumns }),
+    [defaultHiddenColumns]
+  );
 
   const columns = useMemo<ColumnDef<Experiment>[]>(
     () => [
@@ -176,14 +183,13 @@ export const ExperimentList = () => {
       </div>
 
       <DataTable
+        storageKey="experiments"
         data={experiments}
         columns={columns}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
-        initialColumnVisibility={{
-          ...defaultHiddenColumns,
-        }}
-        initialSorting={[{ id: "id", desc: false }]}
+        initialColumnVisibility={initialColumnVisibility}
+        initialSorting={[...EXPERIMENT_DEFAULT_SORTING]}
         getRowId={(row) => String(row.id)}
       />
 
