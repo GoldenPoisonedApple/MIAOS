@@ -1,4 +1,8 @@
-# release-please: リリースバージョンの管理 GitHub Release の作成
+# release-please: リリースバージョンの管理 GitHub Release / tag の作成
+#
+# RELEASE_PLEASE_TOKEN (PAT) が必要:
+#   - Fine-grained PAT: Contents/Pull requests/Actions の Read and write
+# GITHUB_TOKEN で tag を付けると他ワークフローが起動しないため PAT を使う
 name: Release Please
 
 on:
@@ -9,68 +13,17 @@ permissions:
   contents: write
   pull-requests: write
 
-env:
-  REGISTRY: ghcr.io
-
 jobs:
   # ─────────────────────────────────────────
   # Release Please
+  # PAT による tag push で CD Build が起動する
+  # GHCR への semver retag は CD Build 完了後に cd-retag.yml が実行する
   # ─────────────────────────────────────────
   release-please:
     runs-on: ubuntu-latest
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v4
-        id: release
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-
-  # GITHUB_TOKEN による tag push は他ワークフローを起動しないため、同一 workflow 内で retag する
-  retag-ghcr-images:
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
-    steps:
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Wait for CD Build images
-        run: |
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-          REGISTRY="${{ env.REGISTRY }}/${{ github.repository }}"
-          for img in orchestrator-backend orchestrator-frontend worker; do
-            for i in $(seq 1 30); do
-              if docker buildx imagetools inspect "${REGISTRY}/${img}:${SHORT_SHA}" >/dev/null 2>&1; then
-                echo "Found ${img}:${SHORT_SHA}"
-                break
-              fi
-              if [ "$i" -eq 30 ]; then
-                echo "Timeout waiting for ${img}:${SHORT_SHA}"
-                exit 1
-              fi
-              echo "Waiting for ${img}:${SHORT_SHA}... (${i}/30)"
-              sleep 30
-            done
-          done
-
-      # リリースバージョンにタグ付与
-      - name: Tag images with release version
-        run: |
-          TAG_NAME="${{ needs.release-please.outputs.tag_name }}"
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-          REGISTRY="${{ env.REGISTRY }}/${{ github.repository }}"
-          for img in orchestrator-backend orchestrator-frontend worker; do
-            docker buildx imagetools create \
-              --tag "${REGISTRY}/${img}:${TAG_NAME}" \
-              "${REGISTRY}/${img}:${SHORT_SHA}"
-          done

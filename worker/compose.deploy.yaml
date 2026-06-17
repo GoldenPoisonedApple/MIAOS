@@ -1,7 +1,7 @@
 services:
   ito_research:
     restart: unless-stopped
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_PREFIX}/worker@${WORKER_DIGEST}
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_PREFIX}/worker:${IMAGE_TAG}
     pull_policy: always
 
     # タスク保護 実行中のタスクが完了してから終了: 16時間まで待つ
