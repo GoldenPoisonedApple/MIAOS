@@ -39,9 +39,11 @@ jobs:
             backend:
               - 'orchestrator/backend/**'
               - 'orchestrator/compose.*.yaml'
+              - 'schema/openapi.json'
               - '.github/workflows/ci.yml'
             frontend:
               - 'orchestrator/frontend/**'
+              - 'orchestrator/compose.*.yaml'
               - 'schema/openapi.json'
               - '.github/workflows/ci.yml'
             worker:
