@@ -1,6 +1,8 @@
 name: CD Build
 
-# 並行実行の制御
+# Release PR merge 時のみイメージをビルドする（通常の main push では実行しない）
+# release-please が CHANGELOG / manifest を更新するコミットをトリガーとする
+
 concurrency:
   group: cd-build-${{ github.ref }}
   cancel-in-progress: false # CDはキャンセルしない 段階リリースのような順序補償が必要な場合がある 中断による不整合を防ぐ
@@ -9,6 +11,9 @@ on:
   # pushされた場合(mergeされたときにもトリガーされる)
   push:
     branches: [main]
+    paths:
+      - 'CHANGELOG.md'
+      - '.release-please-manifest.json'
 
 permissions:
   contents: read
@@ -18,64 +23,9 @@ env:
 
 jobs:
   # ─────────────────────────────────────────
-  # 変更検知（CI と同様の paths-filter）
-  # ─────────────────────────────────────────
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      orchestrator: ${{ steps.flags.outputs.orchestrator }}
-      worker: ${{ steps.flags.outputs.worker }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            orchestrator-backend:
-              - 'orchestrator/backend/**'
-            orchestrator-frontend:
-              - 'orchestrator/frontend/**'
-            orchestrator-compose:
-              - 'orchestrator/compose.*.yaml'
-            worker:
-              - 'worker/**'
-            cd:
-              - '.github/workflows/cd-build.yml'
-            release:
-              - 'CHANGELOG.md'
-              - '.release-please-manifest.json'
-      - id: flags
-        run: |
-          # デフォルト値
-          orchestrator=false
-          worker=false
-          # release-please の Release PR merge 時は全コンポーネントをビルド
-          if [[ "${{ steps.filter.outputs.release }}" == "true" ]]; then
-            orchestrator=true
-            worker=true
-          fi
-          # orchestrator判定
-          if [[ "${{ steps.filter.outputs.orchestrator-backend }}" == "true" \
-            || "${{ steps.filter.outputs.orchestrator-frontend }}" == "true" \
-            || "${{ steps.filter.outputs.orchestrator-compose }}" == "true" \
-            || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
-            orchestrator=true
-          fi
-          # worker判定
-          if [[ "${{ steps.filter.outputs.worker }}" == "true" \
-            || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
-            worker=true
-          fi
-          # 変数を追加して出力
-          echo "orchestrator=$orchestrator" >> "$GITHUB_OUTPUT"
-          echo "worker=$worker" >> "$GITHUB_OUTPUT"
-
-  # ─────────────────────────────────────────
   # イメージビルド & Push
   # ─────────────────────────────────────────
   build-orchestrator-backend:
-    needs: changes
-    if: needs.changes.outputs.orchestrator == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -127,8 +77,6 @@ jobs:
           cache-to: type=gha,mode=max,scope=build-orchestrator-backend
 
   build-orchestrator-frontend:
-    needs: changes
-    if: needs.changes.outputs.orchestrator == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -163,8 +111,6 @@ jobs:
           cache-to: type=gha,mode=max,scope=build-orchestrator-frontend
 
   build-worker:
-    needs: changes
-    if: needs.changes.outputs.worker == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -1,5 +1,8 @@
 name: CD Deploy
 
+# CD Build 完了後に本番へデプロイする
+# CD Build は Release merge 時のみ走るため、本番更新も Release 時のみ
+
 concurrency:
   group: cd-deploy-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: false
@@ -19,63 +22,10 @@ env:
 
 jobs:
   # ─────────────────────────────────────────
-  # 変更検知（CD Build と同様の paths-filter）
-  # ─────────────────────────────────────────
-  changes:
-    if: github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
-    outputs:
-      orchestrator: ${{ steps.flags.outputs.orchestrator }}
-      worker: ${{ steps.flags.outputs.worker }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            orchestrator-backend:
-              - 'orchestrator/backend/**'
-            orchestrator-frontend:
-              - 'orchestrator/frontend/**'
-            orchestrator-compose:
-              - 'orchestrator/compose.*.yaml'
-            worker:
-              - 'worker/**'
-            cd:
-              - '.github/workflows/cd-build.yml'
-              - '.github/workflows/cd-deploy.yml'
-            release:
-              - 'CHANGELOG.md'
-              - '.release-please-manifest.json'
-      - id: flags
-        run: |
-          orchestrator=false
-          worker=false
-          if [[ "${{ steps.filter.outputs.release }}" == "true" ]]; then
-            orchestrator=true
-            worker=true
-          fi
-          if [[ "${{ steps.filter.outputs.orchestrator-backend }}" == "true" \
-            || "${{ steps.filter.outputs.orchestrator-frontend }}" == "true" \
-            || "${{ steps.filter.outputs.orchestrator-compose }}" == "true" \
-            || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
-            orchestrator=true
-          fi
-          if [[ "${{ steps.filter.outputs.worker }}" == "true" \
-            || "${{ steps.filter.outputs.cd }}" == "true" ]]; then
-            worker=true
-          fi
-          echo "orchestrator=$orchestrator" >> "$GITHUB_OUTPUT"
-          echo "worker=$worker" >> "$GITHUB_OUTPUT"
-
-  # ─────────────────────────────────────────
-  # Worker マトリックス
+  # 複数台のワーカーをデプロイするためのmatrixを作成
   # ─────────────────────────────────────────
   setup-worker-matrix:
-    needs: changes
-    if: needs.changes.outputs.worker == 'true'
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: production
     outputs:
@@ -94,8 +44,7 @@ jobs:
   # デプロイ
   # ─────────────────────────────────────────
   deploy-orchestrator:
-    needs: changes
-    if: needs.changes.outputs.orchestrator == 'true'
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -163,8 +112,8 @@ jobs:
   # Worker デプロイ（複数台）
   # ─────────────────────────────────────────
   deploy-workers:
-    needs: [changes, setup-worker-matrix]
-    if: needs.changes.outputs.worker == 'true'
+    needs: setup-worker-matrix
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: production
     # strategy はワークフローのプランニング段階で評価される
