@@ -39,6 +39,19 @@
 
 各動的列には `sortingFn` が付与され、値は文字列化（オブジェクトは `JSON.stringify`）したうえで `localeCompare`（`numeric: true`）により比較されます。
 
+### 1.4 `useTablePreferences`
+`DataTable` の UI 設定（表示カラム・列順・ソート）を管理し、任意で `localStorage` に永続化するフック。
+
+- **引数:**
+  - `storageKey`: 永続化キーの識別子（例: `"experiments"`, `"tasks"`）。未指定時はメモリ内のみ
+  - `defaults`: ストレージ未ヒット時および新規カラム追加時のフォールバック
+    - `columnVisibility`, `columnOrder`, `sorting`
+  - `columnIds`: 現在のカラム ID 一覧（動的カラムの増減検知用）
+- **戻り値:**
+  - `columnVisibility`, `columnOrder`, `sorting`: マージ済みの表示用状態
+  - `onColumnVisibilityChange`, `onColumnOrderChange`, `onSortingChange`: TanStack Table 用の更新ハンドラ
+- **永続化:** `tablePreferences.ts` の純粋関数が `localStorage` に JSON 保存。パース失敗時は `defaults` にフォールバック
+
 ---
 
 ## 2. UIコンポーネント (src/components/ui/)
@@ -51,14 +64,16 @@
   - カラムの表示・非表示の切り替え (`ColumnVisibilityMenu` を内包)
   - カラムヘッダーのドラッグ＆ドロップによる並び替え (`@dnd-kit` 統合)
   - 列ソート: `getSortedRowModel` によりソート済み行を表示。チェック列以外のヘッダーに **昇順（▲）・降順（▼）** ボタンがあり、クリックした列のみが `SortingState` に反映される（タスクマネージャ風の単一キーソート）。
+  - 設定の永続化: `storageKey` 指定時、表示カラム・列順・ソートを `localStorage` に自動保存・復元（`useTablePreferences` 経由）
 - **Props:**
   - `columns`: テーブルのカラム定義 (`ColumnDef[]`)
   - `data`: 表示するデータ配列
   - `rowSelection`: 現在の行選択ステート
   - `onRowSelectionChange`: 行選択ステートの更新関数
-  - `initialColumnVisibility`: 初回マウント時のカラム表示状態
-  - `initialSorting` (任意): 初回マウント時の `SortingState`（例: 実験一覧は `id` 昇順）
+  - `initialColumnVisibility`: ストレージ未ヒット時・新規動的カラムのフォールバック表示状態
+  - `initialSorting` (任意): ストレージ未ヒット時のフォールバック `SortingState`（例: 実験一覧は `id` 昇順）
   - `getRowId` (任意): 行の安定 ID（データ上の主キー文字列）。ソート後も `rowSelection` のキーが行インデックスに依存しないようにするために指定する（実験は `String(id)`、タスクは UUID の `id`）
+  - `storageKey` (任意): 永続化用識別子。例: `"experiments"`, `"tasks"`。未指定時はリロードで設定がリセットされる
 
 ### 2.2 `KeyValueEditor`
 辞書型データを動的に Key-Value 形式で編集するためのコンポーネント。
@@ -85,6 +100,7 @@
 - **構成:**
   - `useExperiments` でデータを取得。
   - `useDynamicColumns` を用いて、`hyperparameters`, `other_metrics`, `files` を動的カラムとして展開。
+  - `DataTable` に `storageKey="experiments"` を渡し、表示カラム・列順・ソートをブラウザに永続化。
   - `DataTable` に `initialSorting={[{ id: "id", desc: false }]}`（**ID 昇順**）と `getRowId={(row) => String(row.id)}` を渡す。行選択のキーは実験 ID 文字列であり、列ソート後も一括削除が正しい ID に紐づく。
   - `files` 列: セル値はファイル名のみを想定。MinIO オブジェクトキーは `` `${row.id}/${ファイル名}` `` で組み立てる。ファイル名をクリックすると `FilePreviewModal` が開く。横の **⧉** リンクは `fileApiPath` で組み立てた同一オリジン URL を **別タブ** で開く（`GET /api/files/{key}`、`key` はパス用に `encodeURIComponent`）。
   - `FilePreviewModal` 内でもフェッチは `openapi-fetch` の `parseAs: "blob"`。プレビュー下部に「別タブで開く」（API 直リンク）と blob ベースの「ダウンロード」を配置。
@@ -105,6 +121,7 @@
 - **構成:**
   - `useTasks` でデータを取得。
   - `useDynamicColumns` を用いて、`args_control`, `args_keyword`, `args_positional` を動的カラムとして展開。
+  - `DataTable` に `storageKey="tasks"` を渡し、表示カラム・列順・ソートをブラウザに永続化。
   - `DataTable` に `getRowId={(row) => row.id}`（タスクの UUID）を渡し、列ソート後も行選択・一括削除が正しいタスク ID に紐づく。選択列は `enableSorting: false`。
   - 実験一覧と同様のヘッダーソート（▲▼）と選択・一括削除 UI を提供。
 
@@ -127,3 +144,22 @@ MinIO ファイル取得 API への相対パスを返す。
 - **戻り値:** `` `/api/files/${encodeURIComponent(objectKey)}` ``（`objectKey` に `/` を含めても 1 パスセグメントとしてエンコードされる）
 
 実験一覧の `files` 列（別タブ ⧉）および `FilePreviewModal` の「別タブで開く」から利用する。
+
+### 4.2 `tablePreferences` (`src/utils/tablePreferences.ts`)
+テーブル UI 設定の `localStorage` 読み書きとマージを担う純粋関数群。
+
+- **ストレージキー:** `app:table-preferences:v1:{storageKey}`
+- **スキーマ (`TablePreferencesV1`):**
+  - `version`: `1`（将来のマイグレーション用）
+  - `columnVisibility`: カラム表示/非表示
+  - `columnOrder`: DnD による列順
+  - `sorting`: ソート状態
+- **主要関数:**
+  - `loadTablePreferences(storageKey)`: 保存値を読み込み。パース・バリデーション失敗時は `null`
+  - `saveTablePreferences(storageKey, prefs)`: JSON 保存（quota 超過等は握りつぶす）
+  - `mergeTablePreferences(saved, defaults, columnIds)`: 保存値と現在のカラム一覧をマージ
+  - `getColumnId(col)`: `ColumnDef` からカラム ID を抽出（`id` または `accessorKey`）
+- **マージ方針:**
+  - `columnVisibility`: 保存済み ID は保存値を優先。新規 ID は `defaults.columnVisibility` を適用
+  - `columnOrder`: 保存順から存在しない ID を除去し、未登録の新規 ID を末尾に追加
+  - `sorting`: ソート対象カラムが存在しなければ `defaults.sorting` にフォールバック
