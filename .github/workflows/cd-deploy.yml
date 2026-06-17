@@ -133,6 +133,8 @@ jobs:
             # 環境変数を設定
             # Docker image は大文字禁止: 小文字に変換
             export IMAGE_PREFIX="${IMAGE_PREFIX,,}"
+            # CD Build が付与するタグと一致させる
+            export IMAGE_TAG="${GITHUB_SHA:0:7}"
 
             # ghcr.ioにログイン
             # --password-stdin: 標準入力からパスワードを読み込む セキュリティ上の利点: historyにパスワードが残らない
@@ -210,6 +212,7 @@ jobs:
             # 環境変数を設定
             # Docker image は大文字禁止: 小文字に変換
             export IMAGE_PREFIX="${IMAGE_PREFIX,,}"
+            export IMAGE_TAG="${GITHUB_SHA:0:7}"
 
             # ghcr.ioにログイン
             # --password-stdin: 標準入力からパスワードを読み込む セキュリティ上の利点: historyにパスワードが残らない
