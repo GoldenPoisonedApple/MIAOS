@@ -1,4 +1,8 @@
-# release-please: リリースバージョンの管理 GitHub Release の作成
+# release-please: リリースバージョンの管理 GitHub Release / tag の作成
+#
+# RELEASE_PLEASE_TOKEN (PAT) が必要:
+#   - Fine-grained PAT: Contents/Pull requests/Actions の Read and write
+# GITHUB_TOKEN で tag を付けると他ワークフローが起動しないため PAT を使う
 name: Release Please
 
 on:
@@ -25,11 +29,11 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  # GITHUB_TOKEN による tag push は他ワークフローを起動しないため、同一 workflow 内で retag する
+  # PAT による tag push で CD Build が起動する。完了後に semver タグを GHCR イメージへ付与
   retag-ghcr-images:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'

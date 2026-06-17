@@ -457,6 +457,17 @@ sequenceDiagram
 
 ```
 
+#### PAT
+PAT: Personal Access Token
+- 個人のアカウントでGitHub Actionsを実行するためのトークン
+
+全体Settings -> Developer settings -> Personal access tokens -> Fine-grained PAT で作成
+権限
+- Contents: Read and write permissions
+- Pull requests: Write permissions
+- Actions: Read and write permissions
+で特定リポジトリのみに限定して発行
+
 ## TODO
 ### 優先度: 高
 フィルタ、順番情報をバックエンドに記録

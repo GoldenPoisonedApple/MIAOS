@@ -1,18 +1,17 @@
 name: CD Deploy
 
 # CD Build 完了後に本番へデプロイする
-# CD Build は Release merge 時のみ走るため、本番更新も Release 時のみ
+# CD Build は semver tag push 時のみ走るため、本番更新も Release 時のみ
 
 concurrency:
   group: cd-deploy-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 
 on:
-  # CD Build というWorkflowがmainブランチで完了したら起動
+  # CD Build というWorkflowが完了したら起動
   workflow_run:
     workflows: [CD Build]
     types: [completed]
-    branches: [main]
 
 permissions:
   contents: read

@@ -1,19 +1,16 @@
 name: CD Build
 
-# Release PR merge 時のみイメージをビルドする（通常の main push では実行しない）
-# release-please が CHANGELOG / manifest を更新するコミットをトリガーとする
+# semver tag push 時のみイメージをビルドする（本番リリースの正）
+# release-please が PAT で tag を作成すると起動する（GITHUB_TOKEN の tag push では起動しない）
 
 concurrency:
   group: cd-build-${{ github.ref }}
-  cancel-in-progress: false # CDはキャンセルしない 段階リリースのような順序補償が必要な場合がある 中断による不整合を防ぐ
+  cancel-in-progress: false
 
 on:
-  # pushされた場合(mergeされたときにもトリガーされる)
+	# semver tag push 時に起動
   push:
-    branches: [main]
-    paths:
-      - 'CHANGELOG.md'
-      - '.release-please-manifest.json'
+    tags: ['v*.*.*']
 
 permissions:
   contents: read
