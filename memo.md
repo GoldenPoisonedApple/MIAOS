@@ -515,6 +515,9 @@ PAT: Personal Access Token
 - Actions: Read and write permissions
 で特定リポジトリのみに限定して発行
 
+Repository secrets: リポジトリ固有のシークレット: GH_PATなど環境に依存しないもの
+Environment secrets: 環境固有のシークレット: ORCHESTRATOR_HOSTなど環境に依存するもの
+
 ## TODO
 ### 優先度: 高
 フィルタ、順番情報をバックエンドに記録

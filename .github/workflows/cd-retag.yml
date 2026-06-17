@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 
 on:
-	# CD Build というWorkflowが完了したら起動
+  # CD Build というWorkflowが完了したら起動
   workflow_run:
     workflows: [CD Build]
     types: [completed]
