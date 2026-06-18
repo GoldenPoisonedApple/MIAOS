@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.2.2...v0.3.0) (2026-06-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* 共通ホームディレクトリ用の直列ジョブを追加
+
+### Features
+
+* 共通ホームディレクトリ用の直列ジョブを追加 ([7f3d8df](https://github.com/GoldenPoisonedApple/MIAOS/commit/7f3d8dfc34bacc5b37898d569bb11fc82c0d4c3b))
+
 ## [0.2.2](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.2.1...v0.2.2) (2026-06-18)
 
 
