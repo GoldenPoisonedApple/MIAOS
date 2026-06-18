@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.2.1...v0.2.2) (2026-06-18)
+
+
+### Features
+
+* デプロイを走らせる ([182ec55](https://github.com/GoldenPoisonedApple/MIAOS/commit/182ec552afa7116604049ae118afb29e5d4ace33))
+
 ## [0.2.1](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.2.0...v0.2.1) (2026-06-17)
 
 
