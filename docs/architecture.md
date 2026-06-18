@@ -266,9 +266,19 @@ CD Build 完了をトリガーに本番環境へデプロイする。`production
 | ジョブ | 処理 |
 | --- | --- |
 | deploy-orchestrator | Bastion 経由 SSH → リポジトリ checkout → `deploy-orchestrator.sh` |
-| deploy-workers | `vars.WORKER_HOSTS` (JSON 配列) で matrix 並列デプロイ → `deploy-worker.sh` |
+| deploy-workers-shared-home | `vars.WORKER_HOSTS.shared_home` を `max-parallel: 1` で直列デプロイ（NAS 共有ホームの git 競合回避） |
+| deploy-workers-independent | `vars.WORKER_HOSTS.independent` を並列デプロイ |
 
-Worker は `fail-fast: false` により、1 台の失敗が他台のデプロイを中断しない。
+`vars.WORKER_HOSTS` は JSON オブジェクトで登録する。
+
+```json
+{
+  "shared_home": ["10.0.0.1", "10.0.0.2"],
+  "independent": ["10.0.0.3"]
+}
+```
+
+Worker は `fail-fast: false` により、1 台の失敗が他台のデプロイを中断しない。`shared_home` と `independent` の2ジョブは互いに並列実行される。
 
 ### デプロイスクリプト
 

@@ -29,15 +29,33 @@ jobs:
     environment: production
     outputs:
       # steps.set-matrixの出力結果をジョブ全体の出力として定義
-      hosts: ${{ steps.set-matrix.outputs.hosts }}
+      shared_hosts: ${{ steps.set-matrix.outputs.shared_hosts }}
+      independent_hosts: ${{ steps.set-matrix.outputs.independent_hosts }}
     steps:
+      # WORKER_HOSTS 例:
+      # {
+      #   "shared_home": ["10.0.0.1", "10.0.0.2"],
+      #   "independent": ["10.0.0.3"]
+      # }
       # validate
-      # JSON配列 かつ 要素数が0より大きいかどうかをチェック
+      # JSONオブジェクト かつ shared_homeとindependentが配列 かつ 要素数が0より大きいかどうかをチェック
+      # かつ shared_homeとindependentの要素が重複していないかどうかをチェック
       - run: |
-          echo '${{ vars.WORKER_HOSTS }}' | jq -e 'type == "array" and length > 0'
+          echo '${{ vars.WORKER_HOSTS }}' | jq -e '
+            type == "object"
+            and (.shared_home | type == "array")
+            and (.independent | type == "array")
+            and ((.shared_home | length) + (.independent | length) > 0)
+            and (
+              [.shared_home[], .independent[]]
+              | length == (unique | length)
+            )
+          '
       - id: set-matrix
         # GITHUB_OUTPUT環境変数(出力ファイル)にキーと値のペアを追記し、後続ジョブに渡す
-        run: echo "hosts=$(echo '${{ vars.WORKER_HOSTS }}' | jq -c '.')" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "shared_hosts=$(echo '${{ vars.WORKER_HOSTS }}' | jq -c '.shared_home | sort')" >> "$GITHUB_OUTPUT"
+          echo "independent_hosts=$(echo '${{ vars.WORKER_HOSTS }}' | jq -c '.independent | sort')" >> "$GITHUB_OUTPUT"
 
   # ─────────────────────────────────────────
   # デプロイ
@@ -75,11 +93,57 @@ jobs:
             bash .github/scripts/deploy-orchestrator.sh
 
   # ─────────────────────────────────────────
-  # Worker デプロイ（複数台）
+  # Worker デプロイ（NAS 共有ホーム: git 競合回避のため直列）
   # ─────────────────────────────────────────
-  deploy-workers:
+  deploy-workers-shared-home:
     needs: setup-worker-matrix
-    if: github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && needs.setup-worker-matrix.outputs.shared_hosts != '[]'
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      matrix:
+        host: ${{ fromJSON(needs.setup-worker-matrix.outputs.shared_hosts) }}
+      max-parallel:   1 # 1台ずつ順番にデプロイ(git checkoutが競合するため) NAS共有ホームでの苦肉の策
+      fail-fast: false
+    steps:
+      - name: Graceful rolling deploy to ${{ matrix.host }} (shared home)
+        uses: appleboy/ssh-action@v1
+        env:
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_PREFIX: ${{ github.repository }}
+        with:
+          host: ${{ matrix.host }}
+          username: ${{ secrets.WORKER_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          proxy_host: ${{ secrets.BASTION_HOST }}
+          proxy_username: ${{ secrets.BASTION_USER }}
+          proxy_key: ${{ secrets.DEPLOY_SSH_KEY }}
+          proxy_port: ${{ secrets.BASTION_PORT }}
+          envs: GITHUB_SHA,GITHUB_TOKEN,GITHUB_ACTOR,REGISTRY,IMAGE_PREFIX
+          command_timeout: 60m
+          script: |
+            set -euo pipefail
+            mkdir -p "$HOME/MIAOS/"
+            cd "$HOME/MIAOS/"
+
+            git fetch origin
+            git checkout "${GITHUB_SHA}"
+            
+            bash .github/scripts/deploy-worker.sh
+
+  # ─────────────────────────────────────────
+  # Worker デプロイ（独立ホーム: 並列可）
+  # ─────────────────────────────────────────
+  deploy-workers-independent:
+    needs: setup-worker-matrix
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && needs.setup-worker-matrix.outputs.independent_hosts != '[]'
     runs-on: ubuntu-latest
     environment: production
     # strategy はワークフローのプランニング段階で評価される
@@ -88,11 +152,10 @@ jobs:
       matrix:
         # WORKER_HOSTS: GitHub Variable に JSON 配列で登録: Secretでも結局Actionsの所に表示されるので
         # 例: ["10.0.0.1", "10.0.0.2", "10.0.0.3"]
-        host: ${{ fromJSON(needs.setup-worker-matrix.outputs.hosts) }}
-      # max-parallel: 1        # 1台ずつ順番にデプロイ 確実に1台は動作させたい時に使用
-      fail-fast: false       # 1台失敗しても他の台はロールバックしない(全てデプロイを試みる)
+        host: ${{ fromJSON(needs.setup-worker-matrix.outputs.independent_hosts) }}
+      fail-fast: false  # 1台失敗しても他の台はロールバックしない(全てデプロイを試みる)
     steps:
-      - name: Graceful rolling deploy to ${{ matrix.host }}
+      - name: Graceful rolling deploy to ${{ matrix.host }} (independent)
         uses: appleboy/ssh-action@v1
         env:
           GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -116,6 +179,8 @@ jobs:
             set -euo pipefail
             mkdir -p "$HOME/MIAOS/"
             cd "$HOME/MIAOS/"
+
             git fetch origin
             git checkout "${GITHUB_SHA}"
+            
             bash .github/scripts/deploy-worker.sh
