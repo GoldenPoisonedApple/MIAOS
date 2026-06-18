@@ -239,13 +239,15 @@ jobs:
           git diff --exit-code || (echo "Error: Worker generated types are out of sync." && exit 1)
 
       # docker buildx(高性能ビルド環境)初期化
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
-      # 本番環境ビルド検証
+      # 本番環境ビルド検証（CD と同じマルチアーキ）
       - name: Build worker for production
         uses: docker/build-push-action@v6
         with:
           context: worker
           target: prod
+          platforms: linux/amd64,linux/arm64
           push: false
           cache-from: type=gha,scope=build-worker
           cache-to: type=gha,mode=max,scope=build-worker
