@@ -104,6 +104,7 @@ openapi-live:
 
 
 # Celeryを起動
+# -A: アプリケーションのモジュール名
 .PHONY: celery
 celery:
 	uv run celery -A src.workers.celery_tasks worker --loglevel=info -P solo
