@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useExperiments } from "../../hooks/useExperiments";
 import { useDynamicColumns, type DictionaryCellRenderContext } from "../../hooks/useDynamicColumns";
 import { CreateExperimentModal } from "./components/CreateExperimentModal";
+import { FilterManager } from "./components/FilterManager";
 import { FilePreviewModal } from "./components/FilePreviewModal";
 import { ConfirmModal } from "../../components/ui/ConfirmModal/ConfirmModal";
 import { Button } from "../../components/ui/Button/Button";
@@ -24,12 +25,12 @@ export const ExperimentList = () => {
   const [previewKey, setPreviewKey] = useState<string | null>(null);
 
   const filesRenderCell = useCallback((ctx: DictionaryCellRenderContext<Experiment>) => {
-    const { value, row } = ctx;
+    const { value, dictKey } = ctx;
     if (value === null || value === undefined) return "-";
     if (typeof value === "object") return JSON.stringify(value);
-    const s = String(value);
-    if (!s) return "-";
-    const objectKey = `${row.id}/${s}`;
+    const objectKey = String(value);
+    if (!objectKey) return "-";
+    const displayName = dictKey || objectKey.split("/").pop() || objectKey;
     return (
       <span className={styles.fileCell}>
         <button
@@ -40,7 +41,7 @@ export const ExperimentList = () => {
             setPreviewKey(objectKey);
           }}
         >
-          {s}
+          {displayName}
         </button>
         <a
           className={styles.openTabGlyph}
@@ -181,6 +182,8 @@ export const ExperimentList = () => {
           </Button>
         </div>
       </div>
+
+      <FilterManager />
 
       <DataTable
         storageKey="experiments"

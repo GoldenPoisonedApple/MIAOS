@@ -67,7 +67,7 @@ def main(id: int, params) -> UpdateResultsRequest:
             time.sleep(2)
 
             # 実行結果アップロード
-            remote_prefix = f"{id}/"
+            remote_prefix = f"results/{id}/"
             minio_utils.upload_results_dir(temp_dir, remote_prefix=remote_prefix)
 
             # ------- MIAOS APIへの送信処理 -------
@@ -77,7 +77,8 @@ def main(id: int, params) -> UpdateResultsRequest:
                 for file in files:
                     # temp_dirを起点とした相対パスを計算
                     rel_path = os.path.relpath(os.path.join(root, file), temp_dir)
-                    files_dict[rel_path] = rel_path
+                    minio_key = os.path.join(remote_prefix, rel_path).replace("\\", "/")
+                    files_dict[rel_path] = minio_key
         # ペイロード作成
         payload = UpdateResultsRequest(
             experiment_id=id,

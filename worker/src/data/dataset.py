@@ -4,7 +4,8 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 import src.core.config as cfg
 from src.server_client.models import CreateExperimentRequest
-from src.data.watermark import WatermarkConfig, WatermarkMask, ShapeWatermark
+import src.utils.minio_utils as minio_utils
+from src.data.watermark import WatermarkConfig, FilterImage, ImageWatermark
 import numpy as np
 from sklearn.model_selection import train_test_split
 import json
@@ -102,7 +103,7 @@ class dataset:
 
         # 透かし設定の初期化
         self.watermark_config: WatermarkConfig | None = None
-        self.watermark_transform: ShapeWatermark | None = None
+        self.watermark_transform: ImageWatermark | None = None
         self.watermarked_indices: dict[str, set[int]] = {}
 
         # モデルの読み込み
@@ -178,13 +179,13 @@ class dataset:
         }
         base_seed = self.settings.seed + self.watermark_config.seed_offset
 
-        for split_offset, split_name in enumerate(
-            sorted(self.watermark_config.apply_to)
+        for split_offset, (split_name, fraction) in enumerate(
+            self.watermark_config.active_splits()
         ):
             pool = split_pools[split_name]
             self.watermarked_indices[split_name] = self._select_watermarked_indices(
                 pool,
-                self.watermark_config.fraction,
+                fraction,
                 base_seed + split_offset,
             )
 
@@ -195,17 +196,9 @@ class dataset:
         if self.watermark_config is None:
             return
 
-        resolved_mask_path = self.watermark_config.resolve_mask_path(
-            self.assigned_model_path
-        )
-        mask = WatermarkMask.load(
-            resolved_mask_path, position=self.watermark_config.position
-        )
-        self.watermark_transform = ShapeWatermark(
-            mask=mask,
-            color=self.watermark_config.color,
-            opacity=self.watermark_config.opacity,
-        )
+        filter_path = minio_utils.download_filter(self.watermark_config.filter_id)
+        filter_image = FilterImage.load(filter_path)
+        self.watermark_transform = ImageWatermark(filter_image=filter_image)
 
     def _select_watermarked_indices(
         self, pool_indices: np.ndarray, fraction: float, random_state: int
@@ -226,17 +219,13 @@ class dataset:
         if self.watermark_config is None:
             return
 
-        resolved_mask_path = self.watermark_config.resolve_mask_path(
-            self.assigned_model_path
-        )
         counts = {
             split: len(indices) for split, indices in self.watermarked_indices.items()
         }
         logger.info(
-            "Watermark enabled: mask_path=%s, apply_to=%s, fraction=%.2f, counts=%s",
-            resolved_mask_path,
-            sorted(self.watermark_config.apply_to),
-            self.watermark_config.fraction,
+            "Watermark enabled: filter_id=%s, apply=%s, counts=%s",
+            self.watermark_config.filter_id,
+            self.watermark_config.apply,
             counts,
         )
 
@@ -249,7 +238,7 @@ class dataset:
         watermarked_global_indices = self.watermarked_indices.get(split_name, set())
         if (
             self.watermark_config is not None
-            and split_name not in self.watermark_config.apply_to
+            and self.watermark_config.fraction_for(split_name) <= 0.0
         ):
             watermarked_global_indices = set()
 
