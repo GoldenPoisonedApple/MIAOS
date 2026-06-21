@@ -1,9 +1,19 @@
 import { useState } from "react";
 import type { CreateExperimentRequest } from "../../../hooks/useExperiments";
+import { useFilters } from "../../../hooks/useFilters";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Button } from "../../../components/ui/Button/Button";
 import { KeyValueEditor } from "../../../components/ui/KeyValueEditor/KeyValueEditor";
 import styles from "./CreateExperimentModal.module.css";
+
+const WATERMARK_SPLITS = [
+  { key: "target_train", label: "Target Train" },
+  { key: "target_test", label: "Target Test" },
+  { key: "shadow_train", label: "Shadow Train" },
+  { key: "shadow_test", label: "Shadow Test" },
+] as const;
+
+type ApplySplit = (typeof WATERMARK_SPLITS)[number]["key"];
 
 interface Props {
   isOpen: boolean;
@@ -13,6 +23,8 @@ interface Props {
 }
 
 export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }: Props) => {
+  const { filters, loading: filtersLoading } = useFilters();
+
   const getDefaultDateName = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}_${String(d.getHours()).padStart(2, "0")}-${String(d.getMinutes()).padStart(2, "0")}-${String(d.getSeconds()).padStart(2, "0")}`;
@@ -37,6 +49,16 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
     hyperparameters: {} as Record<string, never>,
   });
 
+  const [filterId, setFilterId] = useState("");
+  const [seedOffset, setSeedOffset] = useState(0);
+  const [applyFractions, setApplyFractions] = useState<Record<ApplySplit, string>>({
+    target_train: "1",
+    target_test: "",
+    shadow_train: "",
+    shadow_test: "",
+  });
+  const [showTestSplits, setShowTestSplits] = useState(false);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
 
@@ -51,9 +73,39 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
     });
   };
 
+  const buildHyperparameters = (): Record<string, unknown> => {
+    const base = { ...(formData.hyperparameters as Record<string, unknown>) };
+    if (!filterId) {
+      return base;
+    }
+
+    const apply: Record<string, number> = {};
+    for (const { key } of WATERMARK_SPLITS) {
+      const raw = applyFractions[key].trim();
+      if (!raw) continue;
+      const fraction = Number(raw);
+      if (fraction > 0) {
+        apply[key] = fraction;
+      }
+    }
+
+    return {
+      ...base,
+      watermark: {
+        enabled: true,
+        filter_id: filterId,
+        apply,
+        seed_offset: seedOffset,
+      },
+    };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSubmit(formData);
+    await onSubmit({
+      ...formData,
+      hyperparameters: buildHyperparameters() as Record<string, never>,
+    });
     onClose();
   };
 
@@ -117,7 +169,7 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
           </div>
         </div>
 
-				<div className={styles.formGroup}>
+        <div className={styles.formGroup}>
           <label>ベース実験ID (任意)</label>
           <input
             type="number"
@@ -142,13 +194,105 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
           </label>
         </div>
 
-				<div className={styles.formGroup}>
-					<label>Hyperparameters</label>
-					<KeyValueEditor
+        <fieldset className={styles.watermarkFieldset}>
+          <legend>透かし（フィルタ）</legend>
+          <div className={styles.formGroup}>
+            <label>フィルタ</label>
+            <select value={filterId} onChange={(e) => setFilterId(e.target.value)} disabled={filtersLoading}>
+              <option value="">なし</option>
+              {filters.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.id}
+                </option>
+              ))}
+            </select>
+          </div>
+          {filterId && (
+            <>
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>Target Train 付与割合 (0–1)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={applyFractions.target_train}
+                    onChange={(e) =>
+                      setApplyFractions((prev) => ({ ...prev, target_train: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Shadow Train 付与割合 (0–1)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={applyFractions.shadow_train}
+                    onChange={(e) =>
+                      setApplyFractions((prev) => ({ ...prev, shadow_train: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                className={styles.toggleTestSplits}
+                onClick={() => setShowTestSplits((v) => !v)}
+              >
+                {showTestSplits ? "テスト分割を隠す" : "テスト分割を表示"}
+              </button>
+              {showTestSplits && (
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label>Target Test 付与割合 (0–1)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={applyFractions.target_test}
+                      onChange={(e) =>
+                        setApplyFractions((prev) => ({ ...prev, target_test: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Shadow Test 付与割合 (0–1)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={applyFractions.shadow_test}
+                      onChange={(e) =>
+                        setApplyFractions((prev) => ({ ...prev, shadow_test: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+              <div className={styles.formGroup}>
+                <label>seed_offset</label>
+                <input
+                  type="number"
+                  value={seedOffset}
+                  onChange={(e) => setSeedOffset(Number(e.target.value))}
+                />
+              </div>
+            </>
+          )}
+        </fieldset>
+
+        <div className={styles.formGroup}>
+          <label>Hyperparameters（その他）</label>
+          <KeyValueEditor
             value={formData.hyperparameters}
             onChange={(val) => setFormData((prev) => ({ ...prev, hyperparameters: val as Record<string, never> }))}
           />
-				</div>
+        </div>
 
         <div className={styles.formGroup}>
           <label>備考 (Notes)</label>

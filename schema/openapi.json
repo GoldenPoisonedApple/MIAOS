@@ -221,6 +221,58 @@
         }
       }
     },
+    "/api/filters": {
+      "get": {
+        "tags": [
+          "Filters"
+        ],
+        "summary": "登録済みフィルタ一覧",
+        "operationId": "list_filters",
+        "responses": {
+          "200": {
+            "description": "フィルタ一覧",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilterListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Filters"
+        ],
+        "summary": "フィルタ画像をアップロードする",
+        "operationId": "upload_filter",
+        "responses": {
+          "200": {
+            "description": "アップロード成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilterSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "バリデーションエラー"
+          },
+          "409": {
+            "description": "フィルタ ID が既に存在"
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      }
+    },
     "/api/tasks": {
       "get": {
         "tags": [
@@ -420,6 +472,34 @@
           "Succeeded",
           "Failed"
         ]
+      },
+      "FilterListResponse": {
+        "type": "object",
+        "description": "フィルタ一覧レスポンス",
+        "required": [
+          "filters"
+        ],
+        "properties": {
+          "filters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilterSummary"
+            }
+          }
+        }
+      },
+      "FilterSummary": {
+        "type": "object",
+        "description": "登録済みフィルタの概要",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "フィルタ ID（MinIO キー `filters/{id}.png` の {id} 部分）"
+          }
+        }
       },
       "MiaMethod": {
         "type": "string",
@@ -771,6 +851,10 @@
     {
       "name": "Files",
       "description": "ファイル管理API"
+    },
+    {
+      "name": "Filters",
+      "description": "フィルタ画像管理API"
     }
   ]
 }

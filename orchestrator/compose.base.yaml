@@ -16,7 +16,7 @@ services:
       - default
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 5s
+      interval:  30s
       timeout: 3s
       retries: 5
       start_period: 10s
@@ -36,7 +36,7 @@ services:
       - default
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
       retries: 5
       start_period: 10s
@@ -79,7 +79,7 @@ services:
       - default
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 3s
+      interval: 30s
       timeout: 3s
       retries: 5
       start_period: 10s
@@ -114,8 +114,8 @@ services:
     networks:
       - default
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health/ready"]
-      interval: 5s
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health/live"]
+      interval: 30s
       timeout: 3s
       retries: 6
       start_period: 30s

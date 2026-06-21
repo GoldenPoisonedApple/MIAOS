@@ -90,7 +90,9 @@ graph TD
 スタイリングには **CSS Modules** (`*.module.css`) を採用しています。クラス名のスコープが各コンポーネント内に閉じられるため、他のコンポーネントへの意図しないスタイルの影響を防ぎ、保守性を高めています。
 
 ### 3.4 実験付属ファイル（MinIO）の参照
-実験レコードの `files` は実行時に「ファイル名 → MinIO オブジェクトキー」へと解釈し、**``${実験ID}/${ファイル名}` ``** としてバックエンドの `GET /api/files/{key}` に渡します。パス上の `key` はスラッシュを含み得るため、クライアントでは `encodeURIComponent` した相対パス（`fileApiPath`）で同一オリジンにリクエストします（開発時は Vite のプロキシ経由で API に到達）。
+実験レコードの `files` は「表示名（キー）→ MinIO オブジェクトキー（値）」のマップです。値（例: `results/42/roc_curve.png`）をそのまま `GET /api/files/{key}` に渡します。パス上の `key` はスラッシュを含み得るため、クライアントでは `encodeURIComponent` した相対パス（`fileApiPath`）で同一オリジンにリクエストします（開発時は Vite のプロキシ経由で API に到達）。
+
+フィルタ画像はバケット直下の `filters/{id}.png` キーで参照します（`GET /api/filters` で一覧、`POST /api/filters` でアップロード）。
 
 - **別タブ / 直リンク**: ブラウザのナビゲーションとして開く場合は blob ではなく上記 URL を用い、サーバーが返す `Content-Type` に従い表示またはダウンロードとなります。
 - **モーダル内プレビュー**: `openapi-fetch` の `parseAs: "blob"` でバイナリを取得し、`URL.createObjectURL` による画像・テキスト表示やダウンロード用一時 URL を組み立てます。閉じる・キー変更時に `revokeObjectURL` で解放します。

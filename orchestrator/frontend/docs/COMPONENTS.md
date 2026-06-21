@@ -102,7 +102,7 @@
   - `useDynamicColumns` を用いて、`hyperparameters`, `other_metrics`, `files` を動的カラムとして展開。
   - `DataTable` に `storageKey="experiments"` を渡し、表示カラム・列順・ソートをブラウザに永続化。
   - `DataTable` に `initialSorting={[{ id: "id", desc: false }]}`（**ID 昇順**）と `getRowId={(row) => String(row.id)}` を渡す。行選択のキーは実験 ID 文字列であり、列ソート後も一括削除が正しい ID に紐づく。
-  - `files` 列: セル値はファイル名のみを想定。MinIO オブジェクトキーは `` `${row.id}/${ファイル名}` `` で組み立てる。ファイル名をクリックすると `FilePreviewModal` が開く。横の **⧉** リンクは `fileApiPath` で組み立てた同一オリジン URL を **別タブ** で開く（`GET /api/files/{key}`、`key` はパス用に `encodeURIComponent`）。
+  - `files` 列: セル値は MinIO オブジェクトキー（例: `results/42/roc_curve.png`）。表示名はマップのキー（相対ファイル名）。ファイル名をクリックすると `FilePreviewModal` が開く。横の **⧉** リンクは `fileApiPath` で組み立てた同一オリジン URL を **別タブ** で開く（`GET /api/files/{key}`、`key` はパス用に `encodeURIComponent`）。
   - `FilePreviewModal` 内でもフェッチは `openapi-fetch` の `parseAs: "blob"`。プレビュー下部に「別タブで開く」（API 直リンク）と blob ベースの「ダウンロード」を配置。
   - `DataTable` に静的カラム（ID, 名前, ステータス等）と動的カラムを結合して表示。選択列は `enableSorting: false`。`id` 列は `sortingFn: "basic"` で数値ソート。
   - ヘッダー部に「新しい実験を作成」ボタンと、選択項目がある場合のみ「選択した項目を削除」ボタンを表示。

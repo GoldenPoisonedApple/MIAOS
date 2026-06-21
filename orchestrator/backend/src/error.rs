@@ -67,7 +67,9 @@ impl IntoResponse for ServerError {
     let (status, message) = match self {
       ServerError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
       ServerError::Conflict(msg) => (StatusCode::CONFLICT, msg),
-      ServerError::InvalidPath(msg) => (StatusCode::BAD_REQUEST, msg),
+      ServerError::InvalidPath(msg) | ServerError::DataFormatError(msg) => {
+        (StatusCode::BAD_REQUEST, msg)
+      }
       _ => (
         StatusCode::INTERNAL_SERVER_ERROR,
         "Internal Server Error".to_string(),

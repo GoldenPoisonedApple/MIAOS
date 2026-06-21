@@ -104,10 +104,15 @@ openapi-live:
 
 
 # Celeryを起動
+# -A: アプリケーションのモジュール名
 .PHONY: celery
 celery:
 	uv run celery -A src.workers.celery_tasks worker --loglevel=info -P solo
 
+# Celeryの状態を表示
+.PHONY: celery-inspect
+celery-inspect:
+	uv run celery -A src.workers.celery_tasks inspect active
 
 # フォーマット
 .PHONY: format

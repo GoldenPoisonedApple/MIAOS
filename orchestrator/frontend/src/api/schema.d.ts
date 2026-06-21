@@ -77,6 +77,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 登録済みフィルタ一覧 */
+        get: operations["list_filters"];
+        put?: never;
+        /** フィルタ画像をアップロードする */
+        post: operations["upload_filter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks": {
         parameters: {
             query?: never;
@@ -213,6 +231,15 @@ export interface components {
         };
         /** @enum {string} */
         ExperimentStatus: "Waiting" | "Running" | "Succeeded" | "Failed";
+        /** @description フィルタ一覧レスポンス */
+        FilterListResponse: {
+            filters: components["schemas"]["FilterSummary"][];
+        };
+        /** @description 登録済みフィルタの概要 */
+        FilterSummary: {
+            /** @description フィルタ ID（MinIO キー `filters/{id}.png` の {id} 部分） */
+            id: string;
+        };
         /** @enum {string} */
         MiaMethod: "OfflineLira" | "Shokri";
         Model: {
@@ -594,6 +621,74 @@ export interface operations {
             };
             /** @description ファイルが見つからない */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description サーバー内部エラー */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_filters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description フィルタ一覧 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilterListResponse"];
+                };
+            };
+            /** @description サーバー内部エラー */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    upload_filter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description アップロード成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilterSummary"];
+                };
+            };
+            /** @description バリデーションエラー */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description フィルタ ID が既に存在 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

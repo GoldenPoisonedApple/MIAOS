@@ -7,6 +7,9 @@ import mimetypes
 # logファイルをtext/plainとして認識させる
 mimetypes.add_type("text/plain", ".log")
 
+FILTERS_PREFIX = "filters/"
+RESULTS_PREFIX = "results/"
+
 
 def get_s3_client():
     return boto3.client(
@@ -17,21 +20,51 @@ def get_s3_client():
     )
 
 
+def _results_remote_prefix(experiment_id: int) -> str:
+    return f"{RESULTS_PREFIX}{experiment_id}/"
+
+
+def download_filter(filter_id: str) -> str:
+    """
+    MinIO の filters/{filter_id}.png をローカルキャッシュにダウンロードする。
+    戻り値としてローカルの絶対パスを返す。
+    """
+    remote_key = f"{FILTERS_PREFIX}{filter_id}.png"
+    local_dir = os.path.join(cfg.LOCAL_CACHE_DIR, "filters")
+    os.makedirs(local_dir, exist_ok=True)
+    local_path = os.path.join(local_dir, f"{filter_id}.png")
+
+    s3 = get_s3_client()
+    if os.path.isfile(local_path):
+        try:
+            head = s3.head_object(Bucket=cfg._MINIO_BUCKET_NAME, Key=remote_key)
+            if os.path.getsize(local_path) == head["ContentLength"]:
+                print(f"[{cfg.PC_NAME}] Cached filter: {remote_key}")
+                return local_path
+        except Exception:
+            pass
+
+    print(f"[{cfg.PC_NAME}] Downloading filter: {remote_key} -> {local_path}")
+    s3.download_file(cfg._MINIO_BUCKET_NAME, remote_key, local_path)
+    return local_path
+
+
 def download_model_dir(experiment_id: int) -> str:
     """
-    MinIOから指定されたディレクトリ配下のファイルをローカルキャッシュにダウンロードする。
+    MinIOから results/{experiment_id}/ 配下のファイルをローカルキャッシュにダウンロードする。
     戻り値として、ローカルの絶対パスを返す。
     """
     s3 = get_s3_client()
-    local_dir_path = os.path.join(cfg.LOCAL_CACHE_DIR, experiment_id)
+    remote_prefix = _results_remote_prefix(experiment_id)
+    local_dir_path = os.path.join(
+        cfg.LOCAL_CACHE_DIR, RESULTS_PREFIX, str(experiment_id)
+    )
     os.makedirs(local_dir_path, exist_ok=True)
 
     # ページネーションを使ってリモートディレクトリ内のオブジェクト一覧を取得
     paginator = s3.get_paginator("list_objects_v2")
     # page: 一度に全てのファイルリストを返すとメモリ不足になるため、ページに分けて取得
-    for page in paginator.paginate(
-        Bucket=cfg._MINIO_BUCKET_NAME, Prefix=f"{experiment_id}/"
-    ):
+    for page in paginator.paginate(Bucket=cfg._MINIO_BUCKET_NAME, Prefix=remote_prefix):
         # Contentsがない場合はスキップ
         if "Contents" not in page:
             continue
@@ -40,12 +73,12 @@ def download_model_dir(experiment_id: int) -> str:
         # obj: ファイルの情報
         for obj in page["Contents"]:
             remote_file_path = obj["Key"]
-            # ローカルキャッシュのパスを作成
-            local_file_path = os.path.join(cfg.LOCAL_CACHE_DIR, remote_file_path)
-
             # ディレクトリ自体のキーはスキップ
             if remote_file_path.endswith("/"):
                 continue
+
+            relative_path = os.path.relpath(remote_file_path, remote_prefix)
+            local_file_path = os.path.join(local_dir_path, relative_path)
 
             # ローカルキャッシュのディレクトリを作成
             os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
@@ -78,7 +111,9 @@ def upload_results_dir(local_dir: str, remote_prefix: str):
             # ローカルパスからの相対パスを計算し、リモートのパスを作成
             relative_path = os.path.relpath(local_file_path, local_dir)
             # ファイル名に prefix を付与
-            remote_file_path = os.path.join(remote_prefix, relative_path)
+            remote_file_path = os.path.join(remote_prefix, relative_path).replace(
+                "\\", "/"
+            )
 
             # コンテンツタイプ指定(MINIOで表示可能にするため)
             content_type, _ = mimetypes.guess_type(local_file_path)

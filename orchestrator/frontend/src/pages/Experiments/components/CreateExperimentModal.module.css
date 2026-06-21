@@ -69,3 +69,27 @@
   padding-top: 24px;
   border-top: 1px solid var(--border);
 }
+
+.watermarkFieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 0;
+}
+
+.watermarkFieldset legend {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 6px;
+}
+
+.toggleTestSplits {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+  margin-bottom: 8px;
+  text-align: left;
+}
