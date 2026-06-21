@@ -15,6 +15,7 @@ use server::repositories::task::TaskRepository;
 use server::routes::app_routes;
 use server::services::experiment::ExperimentService;
 use server::services::file::StorageService;
+use server::services::filter::FilterService;
 use server::state::{AppState, HealthState};
 
 // メモリ管理最適化
@@ -59,15 +60,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     client: client.clone(),
     bucket_name: bucket_name.clone(),
   };
+  let storage_repository = StorageRepository::new(client.clone(), bucket_name.clone());
   let app_state = AppState {
     experiment_service: Arc::new(ExperimentService::new(
       ExperimentRepository::new(db_pool),
       TaskRepository::new(redis_pool, celery_app),
     )),
-    storage_service: Arc::new(StorageService::new(StorageRepository::new(
-      client,
-      bucket_name,
-    ))),
+    storage_service: Arc::new(StorageService::new(storage_repository.clone())),
+    filter_service: Arc::new(FilterService::new(storage_repository)),
   };
 
   // ルーティング

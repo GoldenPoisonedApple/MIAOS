@@ -4,7 +4,7 @@
 
 本システムは **MIAOS (Member Inference Attack Orchestration System)** のバックエンド API サーバーです。機械学習モデルに対する **Membership Inference Attack (MIA)** などの実験を管理・自動実行します。
 
-実験のパラメータ（ハイパーパラメータやデータセットの分割比率など）を PostgreSQL で管理し、非同期タスクキュー（Celery / Redis）を用いて重い実験処理をワーカーに委譲します。また、実験結果のメトリクスや生成されたアーティファクト（MinIO 上のオブジェクトキーなど）を一元管理し、**S3 互換 API** 経由でオブジェクトを取得するエンドポイントを提供します。
+実験のパラメータ（ハイパーパラメータやデータセットの分割比率など）を PostgreSQL で管理し、非同期タスクキュー（Celery / Redis）を用いて重い実験処理をワーカーに委譲します。また、実験結果のメトリクスや生成されたアーティファクト（MinIO 上のオブジェクトキーなど）を一元管理し、**S3 互換 API** 経由でオブジェクトを取得するエンドポイントを提供します。透かし用の **32×32 フィルタ画像** は MinIO 上で管理し、一覧取得・アップロード API を提供します（合成ロジックはワーカー側）。
 
 ## 2. アーキテクチャ (Architecture)
 
@@ -27,11 +27,11 @@
 
 | レイヤー | パス | 役割 |
 | -------- | ---- | ---- |
-| Handlers | `src/handlers/` | HTTP リクエストの受け取り、レスポンスの返却 |
-| Services | `src/services/` | ビジネスロジック、複数リポジトリのオーケストレーション |
+| Handlers | `src/handlers/` | HTTP リクエストの受け取り、レスポンスの返却（`experiment`, `file`, `filter`, `health`） |
+| Services | `src/services/` | ビジネスロジック、複数リポジトリのオーケストレーション（`experiment`, `file`, `filter`） |
 | Repositories | `src/repositories/` | DB・Redis（Celery）・S3（MinIO）へのアクセス抽象化（トレイトでモック可能） |
 | Entities | `src/entities/` | ドメインモデル（DB テーブルおよび Celery タスク表現） |
-| DTO | `src/dto/` | API リクエスト／レスポンス、Celery タスク引数用のデータ転送オブジェクト |
+| DTO | `src/dto/` | API リクエスト／レスポンス、Celery タスク引数用のデータ転送オブジェクト（`experiment`, `filter`, `task`, `health`） |
 | Infrastructure | `src/infrastructure.rs` | DB / Redis / Celery / MinIO 接続の確立、ヘルスチェック用 ping |
 | Config | `src/config/` | 起動設定（`app.rs`）および実験作成時のデフォルトパラメータ（`default.rs`） |
 | State | `src/state.rs` | Axum へ注入するアプリケーション状態 |
@@ -44,8 +44,9 @@ HTTP 層には 2 種類の状態を渡します。
 
 - `experiment_service`: 実験・タスクの CRUD と Celery エンキュー
 - `storage_service`: MinIO からのオブジェクト取得
+- `filter_service`: 透かし用フィルタ画像の一覧取得・アップロード
 
-Axum の **`FromRef<AppState>`** により、ハンドラごとに `State<Arc<ExperimentService<…>>>` や `State<Arc<StorageService<…>>>` を注入します。
+Axum の **`FromRef<AppState>`** により、ハンドラごとに `State<Arc<ExperimentService<…>>>`、`State<Arc<StorageService<…>>>`、`State<Arc<FilterService<…>>>` を注入します。
 
 #### `HealthState`（ヘルスチェック用）
 
@@ -76,11 +77,37 @@ PostgreSQL の `experiments` テーブルに対応する主要エンティティ
 | カテゴリ | フィールド | 説明 |
 | -------- | ---------- | ---- |
 | 基本情報 | `id`, `name`, `notes`, `method` | 攻撃手法は `offline_lira` / `shokri`（PostgreSQL ENUM） |
-| 実験条件 | `batch_size`, `max_epochs`, `num_shadow_models`, 各種データサイズ, `seed`, `hyperparameters`（JSONB） | `CreateExperimentRequest` の未指定項目は `config/default.rs` の値を使用 |
+| 実験条件 | `batch_size`, `max_epochs`, `num_shadow_models`, 各種データサイズ, `seed`, `hyperparameters`（JSONB） | `CreateExperimentRequest` の未指定項目は `config/default.rs` の値を使用。透かし設定は `hyperparameters.watermark` に格納（バックエンドはパススルー、ワーカーが解釈） |
 | データ流用 | `base_experiment_id`, `load_target_model`, `load_shadow_model`, `load_attack_model` | 既存実験結果の再利用フラグ |
 | 状態管理 | `status`, `worker_name`, `completed_at`, `error_message` | ステータス遷移は下記「状態遷移ルール」参照 |
 | 実験結果 | `global_auc`, `tpr_at_1_fpr`, `threshold_at_1_fpr`, `tpr_at_01_fpr`, `threshold_at_01_fpr`, `other_metrics`（JSONB）, `total_time` | 1% FPR / 0.1% FPR における TPR・閾値 |
-| ファイル | `files`（JSONB） | アーティファクト等の MinIO オブジェクトキー参照 |
+| ファイル | `files`（JSONB） | アーティファクトの MinIO オブジェクトキー参照。キーは表示用の相対パス、値はバケット内フルキー（例: `results/42/roc_curve.png`） |
+
+#### `hyperparameters.watermark`（参考）
+
+バックエンドはスキーマ検証を行わず JSONB として保存・Celery へ渡します。ワーカーが解釈する透かし設定の例:
+
+```json
+{
+  "watermark": {
+    "enabled": true,
+    "filter_id": "circle",
+    "apply": {
+      "target_train": 1.0,
+      "shadow_train": 0.5
+    },
+    "seed_offset": 0
+  }
+}
+```
+
+| キー | 説明 |
+| ---- | ---- |
+| `filter_id` | MinIO キー `filters/{filter_id}.png` の ID |
+| `apply` | 分割名 → 付与割合（0.0–1.0）。値 ≤ 0 またはキーなしは未適用 |
+| `seed_offset` | 透かし対象選定シード = `seed + seed_offset` |
+
+有効な `apply` キー: `target_train`, `target_test`, `shadow_train`, `shadow_test`
 | メタ情報 | `created_at` | 作成日時（DB デフォルト: `NOW()`） |
 
 #### 状態遷移ルール
@@ -120,12 +147,23 @@ Celery タスク定義は `infrastructure::run_attack`（`#[celery::task(name = 
 
 | ステータス | 条件 |
 | ---------- | ---- |
-| `400 Bad Request` | 無効なファイルキー（`..` を含む等） |
+| `400 Bad Request` | 無効なファイルキー（`..` を含む等）、フィルタ ID・画像のバリデーションエラー、multipart 不正 |
 | `404 Not Found` | 実験・タスク・オブジェクトが存在しない |
-| `409 Conflict` | 実験ステータスの不正遷移（二重 claim、未 claim での結果反映等） |
+| `409 Conflict` | 実験ステータスの不正遷移（二重 claim、未 claim での結果反映等）、フィルタ ID の重複登録 |
 | `500 Internal Server Error` | DB / Redis / Celery / S3 等の内部エラー |
 
-### 実験・タスク・ファイル
+### MinIO オブジェクトレイアウト
+
+バケット内の主要プレフィックスは次のとおりです（旧 `{experiment_id}/` 直下レイアウトは非対応）。
+
+| プレフィックス | 内容 |
+| -------------- | ---- |
+| `filters/{id}.png` | 共有 32×32 RGBA 透かしフィルタ画像 |
+| `results/{experiment_id}/` | 実験成果物（`dataset.json`, モデル, グラフ, `watermark_preview.png` 等） |
+
+`StorageRepository` は `get_object` に加え `list_objects`、`put_object`、`object_exists` を提供します。フィルタ管理は `FilterService`（`src/services/filter.rs`）が担当します。
+
+### 実験・タスク・ファイル・フィルタ
 
 | メソッド | エンドポイント | 説明 | 主なエラー |
 | -------- | -------------- | ---- | ---------- |
@@ -137,6 +175,8 @@ Celery タスク定義は `infrastructure::run_attack`（`#[celery::task(name = 
 | `GET` | `/api/tasks` | Redis キュー上のタスク一覧を取得 | `500` |
 | `DELETE` | `/api/tasks/{id}` | 指定 UUID のタスクをキューから削除（キャンセル） | `404`, `500` |
 | `GET` | `/api/files/{key}` | MinIO 上のオブジェクトをストリーミングで返す | `400`, `404`, `500` |
+| `GET` | `/api/filters` | 登録済みフィルタ ID 一覧を取得 | `500` |
+| `POST` | `/api/filters` | フィルタ PNG をアップロード（`multipart/form-data`） | `400`, `409`, `500` |
 
 **ファイル取得 (`/api/files/{key}`) の補足:**
 
@@ -144,6 +184,15 @@ Celery タスク定義は `infrastructure::run_attack`（`#[celery::task(name = 
 - ハンドラ側で URL デコード（`%2F` → `/` など）を実施。
 - `..` を含むキーは `400 Bad Request` で拒否。
 - 未エンコードの複数パスセグメント（`/api/files/a/b`）にはマッチしません。将来、クエリパラメータ方式への変更を検討する余地あり。
+- 実験成果物は `results/{experiment_id}/...`、フィルタ画像は `filters/{id}.png` など、**バケット内フルキー**をそのまま渡します。
+
+**フィルタ API (`/api/filters`) の補足:**
+
+- **一覧 (`GET`)**: `filters/` プレフィックス配下のオブジェクトから ID を抽出し、JSON `{ "filters": [{ "id": "circle" }, ...] }` を返します。
+- **アップロード (`POST`)**: `multipart/form-data` で `id`（フィルタ ID）と `file`（PNG バイナリ）を受け取ります。
+- **バリデーション**: ID は `^[a-zA-Z0-9_-]+$`。画像は PNG のみ、**32×32** 固定。同一 ID が既に存在する場合は `409 Conflict`。
+- **保存先**: MinIO キー `filters/{id}.png`（`Content-Type: image/png`）。
+- **プレビュー**: 既存の `GET /api/files/{key}` を流用（例: `filters/circle.png`）。
 
 ### ヘルスチェック（OpenAPI 未掲載）
 
@@ -195,8 +244,8 @@ sequenceDiagram
 	Worker->>MIAOS: PUT /api/experiments/claim
 	MIAOS->>DB: status → RUNNING
 	Worker->>Worker: MIA 実験実行
-	Worker->>MINIO: 成果物アップロード
-	Worker->>MIAOS: PUT /api/experiments（結果反映）
+	Worker->>MINIO: 成果物を results/{id}/ へアップロード
+	Worker->>MIAOS: PUT /api/experiments（結果反映・files にフルキー）
 	MIAOS->>DB: メトリクス・files 等を保存
 ```
 
@@ -212,10 +261,13 @@ sequenceDiagram
 
 3. **タスクの実行 (Worker)**  
    - ワーカーが Redis からタスクをフェッチし、MIA 実験を実行。  
-   - 必要に応じて MinIO からオブジェクトを取得し、成果物を MinIO にアップロード。
+   - 透かし有効時は MinIO から `filters/{filter_id}.png` を取得し、データセットに合成。  
+   - ベース実験流用時は `results/{base_experiment_id}/` 配下から成果物をダウンロード。  
+   - 成果物は MinIO の `results/{experiment_id}/` プレフィックスへアップロード。
 
 4. **結果の反映 (Worker → API)**  
    - 完了時、ワーカーは `PUT /api/experiments` を呼び出し、評価メトリクスと `files` 等を送信。  
+   - `files` の値には MinIO フルキー（例: `results/42/roc_curve.png`）を格納する。  
    - システムは該当 `Experiment` を更新し、ステータス・結果を保存。  
    - `RUNNING` 以外の状態からの結果反映は `409 Conflict` となります。
 

@@ -12,6 +12,7 @@ use crate::handlers::experiment::{
   get_all_tasks, reflect_experiment_results,
 };
 use crate::handlers::file::get_file;
+use crate::handlers::filter::{list_filters, upload_filter};
 use crate::handlers::health::{liveness, readiness};
 
 #[derive(OpenApi)]
@@ -25,12 +26,16 @@ use crate::handlers::health::{liveness, readiness};
 		crate::handlers::experiment::delete_task,
 		crate::handlers::experiment::claim_experiment,
 		crate::handlers::file::get_file,
+		crate::handlers::filter::list_filters,
+		crate::handlers::filter::upload_filter,
 	),
 	components(
 		schemas(
 			crate::dto::experiment::CreateExperimentRequest,
 			crate::dto::experiment::UpdateResultsRequest,
 			crate::dto::experiment::ClaimExperimentRequest,
+			crate::dto::filter::FilterSummary,
+			crate::dto::filter::FilterListResponse,
 			crate::entities::experiment::Model,
 			crate::entities::experiment::ExperimentStatus,
 			crate::entities::experiment::MiaMethod,
@@ -40,7 +45,8 @@ use crate::handlers::health::{liveness, readiness};
 	tags(
 		(name = "Experiments", description = "実験管理API"),
 		(name = "Tasks", description = "タスク管理API"),
-		(name = "Files", description = "ファイル管理API")
+		(name = "Files", description = "ファイル管理API"),
+		(name = "Filters", description = "フィルタ画像管理API")
 	)
 )]
 pub struct ApiDoc; // utoipaで生成されたOpenAPIドキュメントを保持する構造体
@@ -61,13 +67,11 @@ pub fn app_routes(app_state: AppState, health_state: HealthState) -> Router {
     .route("/api/experiments/{id}", delete(delete_experiment))
     .route("/api/tasks", get(get_all_tasks))
     .route("/api/tasks/{id}", delete(delete_task))
-    .route(
-      // {*key}は任意のパスを受け取れる test/sample.logなど / を含めることができる
-      // 今回はkeyをURLエンコードしているため * である必要はない
-      //一部プロキシは%2Fですら特別扱いするためちゃんとやるならクエリとかが良い
-      "/api/files/{key}",
-      get(get_file),
-    )
+    // {*key}は任意のパスを受け取れる test/sample.logなど / を含めることができる
+    // 今回はkeyをURLエンコードしているため * である必要はない
+    //一部プロキシは%2Fですら特別扱いするためちゃんとやるならクエリとかが良い
+    .route("/api/files/{key}", get(get_file))
+    .route("/api/filters", get(list_filters).post(upload_filter))
     .with_state(app_state);
 
   let health_router = Router::new()

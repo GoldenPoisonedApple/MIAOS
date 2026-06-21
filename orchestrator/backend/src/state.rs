@@ -3,6 +3,7 @@ use crate::repositories::storage::StorageRepository;
 use crate::repositories::task::TaskRepository;
 use crate::services::experiment::ExperimentService;
 use crate::services::file::StorageService;
+use crate::services::filter::FilterService;
 use axum::extract::FromRef;
 use sea_orm::DatabaseConnection;
 use std::sync::Arc;
@@ -17,6 +18,8 @@ pub struct AppState {
   pub experiment_service: Arc<ExperimentService<ExperimentRepository, TaskRepository>>,
   /// ストレージサービス
   pub storage_service: Arc<StorageService<StorageRepository>>,
+  /// フィルタサービス
+  pub filter_service: Arc<FilterService<StorageRepository>>,
 }
 
 // #[derive(FromRef)]で生成されるやつ
@@ -31,6 +34,11 @@ impl FromRef<AppState> for Arc<ExperimentService<ExperimentRepository, TaskRepos
 impl FromRef<AppState> for Arc<StorageService<StorageRepository>> {
   fn from_ref(app: &AppState) -> Self {
     app.storage_service.clone()
+  }
+}
+impl FromRef<AppState> for Arc<FilterService<StorageRepository>> {
+  fn from_ref(app: &AppState) -> Self {
+    app.filter_service.clone()
   }
 }
 
