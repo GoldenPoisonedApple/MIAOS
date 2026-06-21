@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.3.0...v0.4.0) (2026-06-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* frontendとworkerを対応
+
+### Features
+
+* backendのフィルタ対応 ([6ea0459](https://github.com/GoldenPoisonedApple/MIAOS/commit/6ea04599d9ac6357bbbfdef3bf05b48fae470922))
+* celeryのworkerの状態確認コマンド追加 ([2597f5c](https://github.com/GoldenPoisonedApple/MIAOS/commit/2597f5ca764e4895c1f0035cee140921f66c05a3))
+* frontendとworkerを対応 ([952ba40](https://github.com/GoldenPoisonedApple/MIAOS/commit/952ba40dd3c91dc794d08a6a4f1b85496aacd1c2))
+* フィルタ ([3230a43](https://github.com/GoldenPoisonedApple/MIAOS/commit/3230a4378f0c0899e8d93c39519c6a036ff5ba16))
+
 ## [0.3.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.2.2...v0.3.0) (2026-06-18)
 
 
