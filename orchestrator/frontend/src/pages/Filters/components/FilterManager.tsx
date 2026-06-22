@@ -119,8 +119,8 @@ export const FilterManager = () => {
                   className={styles.thumbnail}
                   src={fileApiPath(`filters/${f.id}.png`)}
                   alt={f.id}
-                  width={32}
-                  height={32}
+                  width={96}
+                  height={96}
                 />
                 <span className={styles.filterId}>{f.id}</span>
                 <div className={styles.itemActions}>

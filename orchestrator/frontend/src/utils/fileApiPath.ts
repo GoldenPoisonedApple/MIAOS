@@ -2,3 +2,7 @@
 export function fileApiPath(objectKey: string): string {
   return `/api/files/${encodeURIComponent(objectKey)}`;
 }
+
+export function isPngObjectKey(objectKey: string): boolean {
+  return /\.png$/i.test(objectKey);
+}

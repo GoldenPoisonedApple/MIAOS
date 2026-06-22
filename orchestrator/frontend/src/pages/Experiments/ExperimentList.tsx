@@ -2,14 +2,13 @@ import { useState, useMemo, useCallback } from "react";
 import { useExperiments } from "../../hooks/useExperiments";
 import { useDynamicColumns, type DictionaryCellRenderContext } from "../../hooks/useDynamicColumns";
 import { CreateExperimentModal } from "./components/CreateExperimentModal";
-import { FilePreviewModal } from "./components/FilePreviewModal";
 import { ConfirmModal } from "../../components/ui/ConfirmModal/ConfirmModal";
 import { Button } from "../../components/ui/Button/Button";
 import { Badge } from "../../components/ui/Badge/Badge";
 import { DataTable } from "../../components/ui/DataTable/DataTable";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { components } from "../../api/schema";
-import { fileApiPath } from "../../utils/fileApiPath";
+import { fileApiPath, isPngObjectKey } from "../../utils/fileApiPath";
 import styles from "./ExperimentList.module.css";
 
 type Experiment = components["schemas"]["Model"];
@@ -21,7 +20,6 @@ export const ExperimentList = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState({});
-  const [previewKey, setPreviewKey] = useState<string | null>(null);
 
   const filesRenderCell = useCallback((ctx: DictionaryCellRenderContext<Experiment>) => {
     const { value, dictKey } = ctx;
@@ -30,29 +28,39 @@ export const ExperimentList = () => {
     const objectKey = String(value);
     if (!objectKey) return "-";
     const displayName = dictKey || objectKey.split("/").pop() || objectKey;
+    const apiPath = fileApiPath(objectKey);
+
+    if (isPngObjectKey(objectKey)) {
+      return (
+        <span className={styles.fileCell}>
+          <a
+            className={styles.fileCellImageLink}
+            href={apiPath}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="別タブで開く"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              className={styles.fileCellImage}
+              src={apiPath}
+              alt={displayName}
+            />
+          </a>
+        </span>
+      );
+    }
+
     return (
-      <span className={styles.fileCell}>
-        <button
-          type="button"
-          className={styles.fileLink}
-          onClick={(e) => {
-            e.stopPropagation();
-            setPreviewKey(objectKey);
-          }}
-        >
-          {displayName}
-        </button>
-        <a
-          className={styles.openTabGlyph}
-          href={fileApiPath(objectKey)}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="別タブで開く"
-          onClick={(e) => e.stopPropagation()}
-        >
-          ⧉
-        </a>
-      </span>
+      <a
+        className={styles.fileTabLink}
+        href={apiPath}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {displayName}
+      </a>
     );
   }, []);
 
@@ -209,7 +217,6 @@ export const ExperimentList = () => {
         isConfirming={isDeleting}
       />
 
-      <FilePreviewModal objectKey={previewKey} onClose={() => setPreviewKey(null)} />
     </div>
   );
 };

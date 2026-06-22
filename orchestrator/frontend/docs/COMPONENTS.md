@@ -113,8 +113,7 @@
   - `useDynamicColumns` を用いて、`hyperparameters`, `other_metrics`, `files` を動的カラムとして展開。
   - `DataTable` に `storageKey="experiments"` を渡し、表示カラム・列順・ソートをブラウザに永続化。
   - `DataTable` に `initialSorting={[{ id: "id", desc: false }]}`（**ID 昇順**）と `getRowId={(row) => String(row.id)}` を渡す。行選択のキーは実験 ID 文字列であり、列ソート後も一括削除が正しい ID に紐づく。
-  - `files` 列: セル値は MinIO オブジェクトキー（例: `results/42/roc_curve.png`）。表示名はマップのキー（相対ファイル名）。ファイル名をクリックすると `FilePreviewModal` が開く。横の **⧉** リンクは `fileApiPath` で組み立てた同一オリジン URL を **別タブ** で開く（`GET /api/files/{key}`、`key` はパス用に `encodeURIComponent`）。
-  - `FilePreviewModal` 内でもフェッチは `openapi-fetch` の `parseAs: "blob"`。プレビュー下部に「別タブで開く」（API 直リンク）と blob ベースの「ダウンロード」を配置。
+  - `files` 列: セル値は MinIO オブジェクトキー（例: `results/42/roc_curve.png`）。表示名はマップのキー（相対ファイル名）。`isPngObjectKey` で PNG と判定し、PNG は `fileApiPath` を `src` にした `<img>` でセル内表示＋ **⧉** で別タブ。非 PNG はファイル名リンク（`fileApiPath`、`target="_blank"`）のみ。
   - `DataTable` に静的カラム（ID, 名前, ステータス等）と動的カラムを結合して表示。選択列は `enableSorting: false`。`id` 列は `sortingFn: "basic"` で数値ソート。
   - ヘッダー部に「新しい実験を作成」ボタンと、選択項目がある場合のみ「選択した項目を削除」ボタンを表示。
 
@@ -141,16 +140,8 @@
 
 - **構成:**
   - `useFilters` で一覧取得。エラー時はページ上部に表示。
-  - `FilterManager` で登録済みフィルタのプレビュー・削除（`ConfirmModal`）および PNG アップロードを提供。
+  - `FilterManager` で登録済みフィルタのプレビュー（96×96）・削除（`ConfirmModal`）および PNG アップロードを提供。
   - アップロード ID は `deriveFilterId` によりファイル名から自動導出。導出不可または既存 ID 衝突時のみ ID 入力欄を表示。
-
-### 3.5 `FilePreviewModal` (`src/pages/Experiments/components/FilePreviewModal.tsx`)
-実験一覧から開くファイルプレビュー用モーダル。
-
-- **Props:** `objectKey`（MinIO キー全文、`null` で閉じる扱い）、`onClose`
-- **取得:** `apiClient.GET("/api/files/{key}", { params: { path: { key: objectKey } }, parseAs: "blob" } })`
-- **表示分岐:** `Content-Type` およびサイズ上限に応じて画像（`createObjectURL`）、テキスト（`<pre>`）、その他はバイナリ案内＋ダウンロードリンク。アンマウント時に `revokeObjectURL`。
-- **別タブ:** `fileApiPath(objectKey)` を `href` にしたリンク（モーダル内の一覧アクションと同じ URL 方針）。
 
 ---
 
@@ -159,10 +150,10 @@
 ### 4.1 `fileApiPath` (`src/utils/fileApiPath.ts`)
 MinIO ファイル取得 API への相対パスを返す。
 
-- **シグネチャ:** `fileApiPath(objectKey: string): string`
-- **戻り値:** `` `/api/files/${encodeURIComponent(objectKey)}` ``（`objectKey` に `/` を含めても 1 パスセグメントとしてエンコードされる）
+- **`fileApiPath(objectKey: string): string`**: `` `/api/files/${encodeURIComponent(objectKey)}` ``（`objectKey` に `/` を含めても 1 パスセグメントとしてエンコードされる）
+- **`isPngObjectKey(objectKey: string): boolean`**: オブジェクトキー末尾が `.png`（大文字小文字無視）かどうか
 
-実験一覧の `files` 列（別タブ ⧉）および `FilePreviewModal` の「別タブで開く」から利用する。
+実験一覧の `files` 列およびフィルタ一覧のプレビューから利用する。
 
 ### 4.2 `filterId` (`src/utils/filterId.ts`)
 フィルタ ID のバリデーションとファイル名からの導出。
