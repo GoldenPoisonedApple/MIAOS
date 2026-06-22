@@ -4,7 +4,7 @@
 
 本システムは **MIAOS (Member Inference Attack Orchestration System)** のバックエンド API サーバーです。機械学習モデルに対する **Membership Inference Attack (MIA)** などの実験を管理・自動実行します。
 
-実験のパラメータ（ハイパーパラメータやデータセットの分割比率など）を PostgreSQL で管理し、非同期タスクキュー（Celery / Redis）を用いて重い実験処理をワーカーに委譲します。また、実験結果のメトリクスや生成されたアーティファクト（MinIO 上のオブジェクトキーなど）を一元管理し、**S3 互換 API** 経由でオブジェクトを取得するエンドポイントを提供します。透かし用の **32×32 フィルタ画像** は MinIO 上で管理し、一覧取得・アップロード API を提供します（合成ロジックはワーカー側）。
+実験のパラメータ（ハイパーパラメータやデータセットの分割比率など）を PostgreSQL で管理し、非同期タスクキュー（Celery / Redis）を用いて重い実験処理をワーカーに委譲します。また、実験結果のメトリクスや生成されたアーティファクト（MinIO 上のオブジェクトキーなど）を一元管理し、**S3 互換 API** 経由でオブジェクトを取得するエンドポイントを提供します。透かし用の **32×32 フィルタ画像** は MinIO 上で管理し、一覧取得・アップロード・削除 API を提供します（合成ロジックはワーカー側）。
 
 ## 2. アーキテクチャ (Architecture)
 
@@ -44,7 +44,7 @@ HTTP 層には 2 種類の状態を渡します。
 
 - `experiment_service`: 実験・タスクの CRUD と Celery エンキュー
 - `storage_service`: MinIO からのオブジェクト取得
-- `filter_service`: 透かし用フィルタ画像の一覧取得・アップロード
+- `filter_service`: 透かし用フィルタ画像の一覧取得・アップロード・削除
 
 Axum の **`FromRef<AppState>`** により、ハンドラごとに `State<Arc<ExperimentService<…>>>`、`State<Arc<StorageService<…>>>`、`State<Arc<FilterService<…>>>` を注入します。
 
@@ -148,7 +148,7 @@ Celery タスク定義は `infrastructure::run_attack`（`#[celery::task(name = 
 | ステータス | 条件 |
 | ---------- | ---- |
 | `400 Bad Request` | 無効なファイルキー（`..` を含む等）、フィルタ ID・画像のバリデーションエラー、multipart 不正 |
-| `404 Not Found` | 実験・タスク・オブジェクトが存在しない |
+| `404 Not Found` | 実験・タスク・オブジェクト・フィルタが存在しない |
 | `409 Conflict` | 実験ステータスの不正遷移（二重 claim、未 claim での結果反映等）、フィルタ ID の重複登録 |
 | `500 Internal Server Error` | DB / Redis / Celery / S3 等の内部エラー |
 
@@ -161,7 +161,7 @@ Celery タスク定義は `infrastructure::run_attack`（`#[celery::task(name = 
 | `filters/{id}.png` | 共有 32×32 RGBA 透かしフィルタ画像 |
 | `results/{experiment_id}/` | 実験成果物（`dataset.json`, モデル, グラフ, `watermark_preview.png` 等） |
 
-`StorageRepository` は `get_object` に加え `list_objects`、`put_object`、`object_exists` を提供します。フィルタ管理は `FilterService`（`src/services/filter.rs`）が担当します。
+`StorageRepository` は `get_object` に加え `delete_object`、`list_objects`、`put_object`、`object_exists` を提供します。フィルタ管理は `FilterService`（`src/services/filter.rs`）が担当します。
 
 ### 実験・タスク・ファイル・フィルタ
 
@@ -176,7 +176,8 @@ Celery タスク定義は `infrastructure::run_attack`（`#[celery::task(name = 
 | `DELETE` | `/api/tasks/{id}` | 指定 UUID のタスクをキューから削除（キャンセル） | `404`, `500` |
 | `GET` | `/api/files/{key}` | MinIO 上のオブジェクトをストリーミングで返す | `400`, `404`, `500` |
 | `GET` | `/api/filters` | 登録済みフィルタ ID 一覧を取得 | `500` |
-| `POST` | `/api/filters` | フィルタ PNG をアップロード（`multipart/form-data`） | `400`, `409`, `500` |
+| `POST` | `/api/filters/{id}` | フィルタ PNG をアップロード（`multipart/form-data`、パスに ID を指定） | `400`, `409`, `500` |
+| `DELETE` | `/api/filters/{id}` | 指定 ID のフィルタ PNG を削除 | `404`, `500` |
 
 **ファイル取得 (`/api/files/{key}`) の補足:**
 
@@ -188,11 +189,20 @@ Celery タスク定義は `infrastructure::run_attack`（`#[celery::task(name = 
 
 **フィルタ API (`/api/filters`) の補足:**
 
-- **一覧 (`GET`)**: `filters/` プレフィックス配下のオブジェクトから ID を抽出し、JSON `{ "filters": [{ "id": "circle" }, ...] }` を返します。
-- **アップロード (`POST`)**: `multipart/form-data` で `id`（フィルタ ID）と `file`（PNG バイナリ）を受け取ります。
-- **バリデーション**: ID は `^[a-zA-Z0-9_-]+$`。画像は PNG のみ、**32×32** 固定。同一 ID が既に存在する場合は `409 Conflict`。
+- **一覧 (`GET /api/filters`)**: `filters/` プレフィックス配下のオブジェクトから ID を抽出し、JSON `{ "filters": [{ "id": "circle" }, ...] }` を返します。
+- **アップロード (`POST /api/filters/{id}`)**: パスの `{id}` でフィルタ ID を指定し、`multipart/form-data` の `file` フィールド（PNG バイナリ）のみを受け取ります。成功時は `201 Created` と `{ "id": "..." }` を返します。
+- **削除 (`DELETE /api/filters/{id}`)**: パスの `{id}` で指定したフィルタを MinIO から削除します。存在しない場合は `404 Not Found`。成功時は `200 OK` と `{ "id": "..." }` を返します。
+- **バリデーション**: ID は `^[a-zA-Z0-9_-]+$`。画像は PNG のみ、**32×32** 固定。同一 ID が既に存在する場合は `409 Conflict`（アップロード時）。
 - **保存先**: MinIO キー `filters/{id}.png`（`Content-Type: image/png`）。
 - **プレビュー**: 既存の `GET /api/files/{key}` を流用（例: `filters/circle.png`）。
+
+リソース URL の対応:
+
+| メソッド | パス | 役割 |
+| -------- | ---- | ---- |
+| `GET` | `/api/filters` | コレクション一覧 |
+| `POST` | `/api/filters/{id}` | 指定 ID の新規作成（クライアント指定 ID、重複不可） |
+| `DELETE` | `/api/filters/{id}` | 指定 ID の削除 |
 
 ### ヘルスチェック（OpenAPI 未掲載）
 

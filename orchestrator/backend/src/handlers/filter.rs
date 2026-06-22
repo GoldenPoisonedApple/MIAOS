@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use axum::extract::{Multipart, State};
+use axum::extract::{Multipart, Path, State};
+use axum::http::StatusCode;
 use axum::Json;
 
 use crate::dto::filter::{FilterListResponse, FilterSummary};
@@ -28,9 +29,12 @@ pub async fn list_filters(
 /// フィルタ画像をアップロードする
 #[utoipa::path(
   post,
-  path = "/api/filters",
+  path = "/api/filters/{id}",
+  params(
+    ("id" = String, Path, description = "フィルタ ID（`[a-zA-Z0-9_-]+`）")
+  ),
   responses(
-    (status = 200, description = "アップロード成功", body = FilterSummary),
+    (status = 201, description = "アップロード成功", body = FilterSummary),
     (status = 400, description = "バリデーションエラー"),
     (status = 409, description = "フィルタ ID が既に存在"),
     (status = 500, description = "サーバー内部エラー")
@@ -39,9 +43,9 @@ pub async fn list_filters(
 )]
 pub async fn upload_filter(
   State(service): State<Arc<FilterService<StorageRepository>>>,
+  Path(id): Path<String>,
   mut multipart: Multipart,
-) -> Result<Json<FilterSummary>, ServerError> {
-  let mut filter_id: Option<String> = None;
+) -> Result<(StatusCode, Json<FilterSummary>), ServerError> {
   let mut file_bytes: Option<Vec<u8>> = None;
 
   while let Some(field) = multipart
@@ -51,13 +55,7 @@ pub async fn upload_filter(
   {
     let name = field.name().unwrap_or("").to_string();
     match name.as_str() {
-      "id" => {
-        let text = field
-          .text()
-          .await
-          .map_err(|e| ServerError::DataFormatError(format!("id field error: {e}")))?;
-        filter_id = Some(text);
-      }
+      // フィルタPNGフィールド
       "file" => {
         let bytes = field
           .bytes()
@@ -69,12 +67,33 @@ pub async fn upload_filter(
     }
   }
 
-  let id = filter_id
-    .ok_or_else(|| ServerError::DataFormatError("multipart field 'id' is required".to_string()))?;
   let bytes = file_bytes.ok_or_else(|| {
     ServerError::DataFormatError("multipart field 'file' is required".to_string())
   })?;
 
+  // フィルタPNGをアップロード
   service.upload_filter(&id, bytes).await?;
+  Ok((StatusCode::CREATED, Json(FilterSummary { id })))
+}
+
+/// フィルタPNGを削除する
+#[utoipa::path(
+  delete,
+  path = "/api/filters/{id}",
+  params(
+    ("id" = String, Path, description = "フィルタ ID")
+  ),
+  responses(
+    (status = 200, description = "削除成功", body = FilterSummary),
+    (status = 404, description = "フィルタが見つからない"),
+    (status = 500, description = "サーバー内部エラー")
+  ),
+  tag = "Filters"
+)]
+pub async fn delete_filter(
+  State(service): State<Arc<FilterService<StorageRepository>>>,
+  Path(id): Path<String>,
+) -> Result<Json<FilterSummary>, ServerError> {
+  service.delete_filter(&id).await?;
   Ok(Json(FilterSummary { id }))
 }
