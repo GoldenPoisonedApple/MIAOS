@@ -45,10 +45,13 @@ graph TD
 │   └── useTablePreferences.ts # テーブル UI 設定の状態管理と localStorage 永続化
 │
 ├── utils/           # 画面横断の小さな純関数
+│   ├── columnAlign.ts       # テーブル列の text-align 推論（数値列右寄せ）
 │   ├── fileApiPath.ts       # MinIO オブジェクトキー → /api/files/... 相対パス
 │   ├── filterId.ts          # ファイル名からフィルタ ID を導出する純関数
 │   └── tablePreferences.ts  # テーブル設定の読み書き・マージ・バリデーション
 │
+├── types/           # 型拡張
+│   └── tanstack-table.d.ts  # ColumnMeta.align 等の TanStack Table 拡張
 ├── components/      # 汎用コンポーネント層
 │   ├── layout/      # 画面の共通レイアウト (Header, Navigation 等)
 │   └── ui/          # 画面に依存しない再利用可能なUI部品
@@ -84,7 +87,8 @@ graph TD
 
 ### 3.2 テーブル設計と動的カラム
 カラム数が非常に多いデータ（実験一覧等）を扱うため、`@tanstack/react-table` を利用しています。
-- **動的カラムの展開**: JSON（辞書型）のプロパティ（例: `hyperparameters`, `files`）は、`useDynamicColumns` フックにより内部のキーを抽出し、テーブルのフラットなカラムとして動的に展開されます。辞書単位で任意の `renderCell` を差し込める（実験の `files` は PNG をセル内インライン表示、⧉ で別タブ、非 PNG はファイル名リンクで別タブのみ等）。
+- **動的カラムの展開**: JSON（辞書型）のプロパティ（例: `hyperparameters`, `files`）は、`useDynamicColumns` フックにより内部のキーを抽出し、テーブルのフラットなカラムとして動的に展開されます。辞書単位で任意の `renderCell` を差し込める（実験の `files` は PNG をセル内インライン表示し、画像クリックで別タブ、非 PNG はファイル名リンクで別タブのみ等）。`renderCell` 指定列は `meta.align: "left"` を付与し、カスタム描画列の配置を固定します。
+- **列の配置**: `DataTable` は `resolveColumnAlign`（`columnAlign.ts`）により各列の `text-align` を決定します。`meta.align` が明示されていればそれを優先し、未指定時は全行の生値がすべて `number` なら右寄せ、それ以外は左寄せ、選択列は中央寄せとします。静的列・動的列の追加時に個別指定は不要です（数値のみの動的列は自動で右寄せ）。
 - **列ソート**: `getSortedRowModel` とヘッダー上の昇順・降順操作により、単一キーでソート状態を管理します。実験一覧は初期状態で **ID 昇順**。動的列には比較可能な文字列表現へ正規化する `sortingFn` を付与しています。
 - **行 ID と行選択**: 列ソート後もチェックボックスの選択がデータ行と一致するよう、`DataTable` は任意の `getRowId`（実験は数値 `id` の文字列化、タスクは UUID）を TanStack Table に渡し、`rowSelection` のキーを行インデックスから切り離しています。
 - **カラムの制御**: カラムの表示/非表示の切り替え、および `@dnd-kit` を用いたヘッダーのドラッグ＆ドロップによる**列の並び順**変更が実装されています（行の並び替えとは別レイヤー）。
@@ -99,9 +103,9 @@ graph TD
 
 フィルタ画像はバケット直下の `filters/{id}.png` キーで参照します（`GET /api/filters` で一覧、`POST /api/filters/{id}` でアップロード、`DELETE /api/filters/{id}` で削除）。管理 UI は `/filters` タブの `FilterManager` で提供します（一覧プレビューは 96×96、`image-rendering: pixelated`）。アップロード時の ID は基本ファイル名（拡張子除く）を自動使用し、既存 ID と衝突する場合のみ手動入力を促します。
 
-- **実験 `files` 列・PNG**: `fileApiPath` を `src` にした `<img>` でセル内インライン表示。⧉ リンクで別タブも開ける。
+- **実験 `files` 列・PNG**: `fileApiPath` を `src` にした `<img>` をセル内に表示（高さ 160px、`object-fit: contain` で小画像も拡大）。画像を `<a target="_blank">` で包み、クリックで別タブを開く。
 - **実験 `files` 列・その他**: ファイル名を `fileApiPath` へのリンクとし、別タブで開くのみ。
-- **別タブ / 直リンク**: ブラウザのナビゲーションとして blob ではなく上記 URL を用い、サーバーが返す `Content-Type` に従い表示またはダウンロードとなります。
+- **別タブ / 直リンク**: blob フェッチは行わず、上記 URL をブラウザのナビゲーションに用いる。サーバーが返す `Content-Type` に従い表示またはダウンロードとなる。
 
 ## 4. ルーティング設計
 
@@ -112,4 +116,4 @@ graph TD
 - `/tasks` : タスク一覧画面 (`<TaskList />`)
 - `/filters` : フィルタ管理画面 (`<FilterList />`)
 
-共通レイアウト (`<Layout />`) が全画面をラップし、ヘッダーのタブナビゲーションを提供します。
+共通レイアウト (`<Layout />`) が全画面をラップし、ヘッダーに「実験一覧」「タスク一覧」「フィルタ」のタブナビゲーションを提供します。

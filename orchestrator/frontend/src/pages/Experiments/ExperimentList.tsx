@@ -124,19 +124,27 @@ export const ExperimentList = () => {
       { 
 				accessorKey: "global_auc", 
 				header: "全体AUC(%)",
-				cell: ({ row }) => (row.original.global_auc != null ? (row.original.global_auc * 100).toFixed(4) : "-"),
+				cell: ({ row }) => (row.original.global_auc != null ? (row.original.global_auc * 100).toFixed(3) : "-"),
 			},
-			{ accessorKey: "threshold_at_01_fpr", header: "閾値 (0.1% FPR)" },
-			{ accessorKey: "threshold_at_1_fpr", header: "閾値 (1% FPR)" },
+			{ 
+				accessorKey: "threshold_at_01_fpr", 
+				header: "閾値 (0.1% FPR)",
+				cell: ({ row }) => (row.original.threshold_at_01_fpr != null ? row.original.threshold_at_01_fpr.toFixed(3) : "-"),
+			},
+			{ 
+				accessorKey: "threshold_at_1_fpr", 
+				header: "閾値 (1% FPR)",
+				cell: ({ row }) => (row.original.threshold_at_1_fpr != null ? row.original.threshold_at_1_fpr.toFixed(3) : "-"),
+			},
       { 
 				accessorKey: "tpr_at_01_fpr", 
 				header: "TPR (0.1% FPR)(%)",
-				cell: ({ row }) => (row.original.tpr_at_01_fpr != null ? (row.original.tpr_at_01_fpr * 100).toFixed(4) : "-"),
+				cell: ({ row }) => (row.original.tpr_at_01_fpr != null ? (row.original.tpr_at_01_fpr * 100).toFixed(3) : "-"),
 			},
       { 
 				accessorKey: "tpr_at_1_fpr", 
 				header: "TPR (1% FPR)(%)",
-				cell: ({ row }) => (row.original.tpr_at_1_fpr != null ? (row.original.tpr_at_1_fpr * 100).toFixed(4) : "-"),
+				cell: ({ row }) => (row.original.tpr_at_1_fpr != null ? (row.original.tpr_at_1_fpr * 100).toFixed(3) : "-"),
 			},
       { 
 				accessorKey: "total_time", 

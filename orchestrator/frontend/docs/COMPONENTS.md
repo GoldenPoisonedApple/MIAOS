@@ -25,7 +25,7 @@
   - `refetch()`: データを再取得
 - **状態:** `loading`, `error`, `isDeleting`
 
-### 1.4 `useFilters`
+### 1.3 `useFilters`
 フィルタ画像の一覧取得、アップロード、削除を行うためのフック。multipart アップロードのため `fetch` を直接使用。
 
 - **取得データ:** `filters` (`FilterSummary[]`)
@@ -36,7 +36,7 @@
 - **状態:** `loading`, `error`, `isUploading`, `isDeleting`
 - **エラー:** `FilterApiError`（`status` プロパティ付き）。409 は ID 衝突時に UI 側で手動 ID 入力へ誘導
 
-### 1.5 `useDynamicColumns`
+### 1.4 `useDynamicColumns`
 辞書型プロパティ（JSONオブジェクト）からキーを動的に抽出し、TanStack Table 用のカラム定義（`ColumnDef`）を生成するユーティリティフック。
 
 - **引数:**
@@ -46,11 +46,11 @@
   - `dynamicColumns`: 生成された `ColumnDef[]`
   - `defaultHiddenColumns`: 生成されたカラムのIDをキーとし、`false` を値に持つオブジェクト（初期非表示設定用）
 
-`renderCell` を指定した辞書のみセル表示を上書きできます（例: 実験一覧の `files` 列でオブジェクトキーをクリック可能にする）。
+`renderCell` を指定した辞書はセル表示を上書きし、`meta: { align: "left" }` を付与して配置を固定します（例: 実験一覧の `files` 列で PNG インライン表示・リンク）。
 
-各動的列には `sortingFn` が付与され、値は文字列化（オブジェクトは `JSON.stringify`）したうえで `localeCompare`（`numeric: true`）により比較されます。
+各動的列には `sortingFn` が付与され、値は文字列化（オブジェクトは `JSON.stringify`）したうえで `localeCompare`（`numeric: true`）により比較されます。`renderCell` 未指定の動的列は、列の生値がすべて数値のとき `DataTable` 側で右寄せになります。
 
-### 1.6 `useTablePreferences`
+### 1.5 `useTablePreferences`
 `DataTable` の UI 設定（表示カラム・列順・ソート）を管理し、任意で `localStorage` に永続化するフック。
 
 - **引数:**
@@ -75,6 +75,7 @@
   - カラムの表示・非表示の切り替え (`ColumnVisibilityMenu` を内包)
   - カラムヘッダーのドラッグ＆ドロップによる並び替え (`@dnd-kit` 統合)
   - 列ソート: `getSortedRowModel` によりソート済み行を表示。チェック列以外のヘッダーに **昇順（▲）・降順（▼）** ボタンがあり、クリックした列のみが `SortingState` に反映される（タスクマネージャ風の単一キーソート）。
+  - 列の配置: `resolveColumnAlign` により `th` / `td` の `text-align` を決定。数値列は右寄せ、選択列は中央、それ以外は左寄せ（詳細は `columnAlign.ts`）。
   - 設定の永続化: `storageKey` 指定時、表示カラム・列順・ソートを `localStorage` に自動保存・復元（`useTablePreferences` 経由）
 - **Props:**
   - `columns`: テーブルのカラム定義 (`ColumnDef[]`)
@@ -113,9 +114,10 @@
   - `useDynamicColumns` を用いて、`hyperparameters`, `other_metrics`, `files` を動的カラムとして展開。
   - `DataTable` に `storageKey="experiments"` を渡し、表示カラム・列順・ソートをブラウザに永続化。
   - `DataTable` に `initialSorting={[{ id: "id", desc: false }]}`（**ID 昇順**）と `getRowId={(row) => String(row.id)}` を渡す。行選択のキーは実験 ID 文字列であり、列ソート後も一括削除が正しい ID に紐づく。
-  - `files` 列: セル値は MinIO オブジェクトキー（例: `results/42/roc_curve.png`）。表示名はマップのキー（相対ファイル名）。`isPngObjectKey` で PNG と判定し、PNG は `fileApiPath` を `src` にした `<img>` でセル内表示＋ **⧉** で別タブ。非 PNG はファイル名リンク（`fileApiPath`、`target="_blank"`）のみ。
+  - `files` 列: セル値は MinIO オブジェクトキー（例: `results/42/roc_curve.png`）。`isPngObjectKey` で PNG と判定し、PNG は高さ 160px の `<img>` をセル内表示し、画像クリック（`<a target="_blank">`）で別タブを開く。非 PNG はファイル名リンク（`fileApiPath`、`target="_blank"`）のみ。
+  - 一部静的列は表示用に変換（例: AUC・TPR を `%` 表示、`total_time` を分単位、真偽値フラグを `○`）。ソート・配置推論は `accessorKey` の生値（数値）に基づくため、数値列は右寄せとなる。
   - `DataTable` に静的カラム（ID, 名前, ステータス等）と動的カラムを結合して表示。選択列は `enableSorting: false`。`id` 列は `sortingFn: "basic"` で数値ソート。
-  - ヘッダー部に「新しい実験を作成」ボタンと、選択項目がある場合のみ「選択した項目を削除」ボタンを表示。
+  - ヘッダー部に「新しい実験を作成」ボタンと、選択項目がある場合のみ「選択した項目を削除」ボタンを表示。フィルタ管理は `/filters` タブで行う（本画面には含めない）。
 
 ### 3.2 `CreateExperimentModal`
 実験一覧ページ内に配置される、新規実験作成用フォーム。
@@ -124,6 +126,7 @@
   - `useState` で `CreateExperimentRequest` 型に基づくフォーム状態を管理。
   - 基本的な設定は標準の `<input>` や `<select>` を使用。
   - `hyperparameters` プロパティの入力には、`KeyValueEditor` を使用し、安全なJSON生成を実現。
+  - 透かし設定: `useFilters` で取得したフィルタ一覧から `filter_id` を `<select>` で選択。`hyperparameters.watermark` に `enabled`, `filter_id`, `apply`, `seed_offset` を送信。
 
 ### 3.3 `TaskList`
 タスクデータの一覧を表示するページコンポーネント。
@@ -135,13 +138,13 @@
   - `DataTable` に `getRowId={(row) => row.id}`（タスクの UUID）を渡し、列ソート後も行選択・一括削除が正しいタスク ID に紐づく。選択列は `enableSorting: false`。
   - 実験一覧と同様のヘッダーソート（▲▼）と選択・一括削除 UI を提供。
 
-### 3.4 `FilterList`
-フィルタ画像の一覧・管理画面。
+### 3.4 `FilterList` / `FilterManager`
+フィルタ画像の一覧・管理画面（`/filters`）。
 
-- **構成:**
-  - `useFilters` で一覧取得。エラー時はページ上部に表示。
-  - `FilterManager` で登録済みフィルタのプレビュー（96×96）・削除（`ConfirmModal`）および PNG アップロードを提供。
-  - アップロード ID は `deriveFilterId` によりファイル名から自動導出。導出不可または既存 ID 衝突時のみ ID 入力欄を表示。
+- **`FilterList`**: ページコンテナ。`useFilters` のエラーを上部に表示し、`FilterManager` を配置。
+- **`FilterManager`**:
+  - 登録済みフィルタを 96×96 サムネイル（`image-rendering: pixelated`）で一覧表示。「プレビュー」リンクで別タブ、`ConfirmModal` 経由で削除。
+  - PNG アップロード: `POST /api/filters/{id}`。ID は `deriveFilterId` でファイル名から自動導出。導出不可・既存 ID 衝突・409 時のみ ID 入力欄を表示。
 
 ---
 
@@ -155,14 +158,24 @@ MinIO ファイル取得 API への相対パスを返す。
 
 実験一覧の `files` 列およびフィルタ一覧のプレビューから利用する。
 
-### 4.2 `filterId` (`src/utils/filterId.ts`)
+### 4.2 `columnAlign` (`src/utils/columnAlign.ts`)
+`DataTable` の列 `text-align` を決定する純関数群。
+
+- **`TableColumnAlign`:** `"left" | "right" | "center"`
+- **`isNumericCellValue(value)`:** `number` かどうか（`null` / `undefined` は推論時に無視）
+- **`inferAlignFromValues(values)`:** 非 null 値がすべて数値なら `"right"`、それ以外は `"left"`
+- **`resolveColumnAlign(column, table)`:** `column.columnDef.meta?.align` を最優先。未指定時は `select` 列を中央、それ以外は全行の生値から `inferAlignFromValues` で推論
+
+列定義の `meta: { align: "right" }` で明示上書き可能。型は `src/types/tanstack-table.d.ts` で拡張。
+
+### 4.3 `filterId` (`src/utils/filterId.ts`)
 フィルタ ID のバリデーションとファイル名からの導出。
 
 - **`FILTER_ID_RE`:** `^[a-zA-Z0-9_-]+$`
 - **`deriveFilterId(filename)`:** `.png` 拡張子を除いたベース名が正規表現に合致すれば ID を返す。不合致時は `null`
 - **`isValidFilterId(id)`:** ID 文字列の妥当性チェック
 
-### 4.3 `tablePreferences` (`src/utils/tablePreferences.ts`)
+### 4.4 `tablePreferences` (`src/utils/tablePreferences.ts`)
 テーブル UI 設定の `localStorage` 読み書きとマージを担う純粋関数群。
 
 - **ストレージキー:** `app:table-preferences:v1:{storageKey}`
