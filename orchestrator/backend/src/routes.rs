@@ -73,7 +73,10 @@ pub fn app_routes(app_state: AppState, health_state: HealthState) -> Router {
     //一部プロキシは%2Fですら特別扱いするためちゃんとやるならクエリとかが良い
     .route("/api/files/{key}", get(get_file))
     .route("/api/filters", get(list_filters))
-    .route("/api/filters/{id}", delete(delete_filter).post(upload_filter))
+    .route(
+      "/api/filters/{id}",
+      delete(delete_filter).post(upload_filter),
+    )
     .with_state(app_state);
 
   let health_router = Router::new()

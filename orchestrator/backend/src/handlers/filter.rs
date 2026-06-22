@@ -54,16 +54,12 @@ pub async fn upload_filter(
     .map_err(|e| ServerError::DataFormatError(format!("multipart error: {e}")))?
   {
     let name = field.name().unwrap_or("").to_string();
-    match name.as_str() {
-      // フィルタPNGフィールド
-      "file" => {
-        let bytes = field
-          .bytes()
-          .await
-          .map_err(|e| ServerError::DataFormatError(format!("file field error: {e}")))?;
-        file_bytes = Some(bytes.to_vec());
-      }
-      _ => {}
+    if name.as_str() == "file" {
+      let bytes = field
+        .bytes()
+        .await
+        .map_err(|e| ServerError::DataFormatError(format!("file field error: {e}")))?;
+      file_bytes = Some(bytes.to_vec());
     }
   }
 

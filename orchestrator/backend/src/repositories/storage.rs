@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use aws_sdk_s3::error::{ProvideErrorMetadata, SdkError};
 use aws_sdk_s3::{operation::get_object::GetObjectOutput, primitives::ByteStream, Client};
 
+#[cfg_attr(test, mockall::automock)]
 #[async_trait] // 非同期関数を含むトレイト用のマクロ
 pub trait StorageRepositoryTrait: Send + Sync {
   /// オブジェクトを取得する
@@ -188,8 +189,6 @@ impl StorageRepositoryTrait for StorageRepository {
       Err(e) => Err(ServerError::S3Error(format!("S3 head error: {e}"))),
     }
   }
-
-
 }
 
 #[cfg(all(test, feature = "integration-test"))]
@@ -210,40 +209,121 @@ mod tests {
   use crate::config::app::AppConfig;
   use crate::infrastructure::establish_storage_client;
   use aws_sdk_s3::primitives::ByteStream;
+  use uuid::Uuid;
+
+  /// 結合テスト用の一意なオブジェクトキー
+  /// * prefix: &str - プレフィックス
+  /// * 戻り値: String - 一意なオブジェクトキー
+  pub fn unique_storage_key(prefix: &str) -> String {
+    format!("{prefix}/{}", Uuid::new_v4())
+  }
+
+  async fn setup_repository() -> StorageRepository {
+    let config = AppConfig::test_defaults().unwrap();
+    let client = establish_storage_client(&config).await;
+    StorageRepository::new(client, config.minio_bucket_name.clone())
+  }
+
+  /// put → get で内容が一致すること
+  #[tokio::test]
+  async fn test_put_and_get_object() {
+    let repository = setup_repository().await;
+    let key = unique_storage_key("test/storage");
+    let file_content = "hello world";
+    let body = ByteStream::from(file_content.as_bytes().to_vec());
+
+    repository
+      .put_object(&key, body, "text/plain")
+      .await
+      .unwrap();
+
+    let object = repository.get_object(&key).await.unwrap();
+    let content = object.body.collect().await.unwrap().into_bytes();
+    let content = String::from_utf8(content.to_vec()).unwrap();
+    assert_eq!(content, file_content);
+
+    repository.delete_object(&key).await.unwrap();
+  }
 
   /// オブジェクトの取得テスト
   #[tokio::test]
   async fn test_get_object() {
-    // Arrange
-    let config = AppConfig::test_defaults().unwrap();
-    let client = establish_storage_client(&config).await;
-    let bucket_name = config.minio_bucket_name.clone();
-    // 読み取るためのサンプルファイルをstorageに作成
-    let file_path = "test/sample.log";
+    let repository = setup_repository().await;
+    let key = unique_storage_key("test/storage");
     let file_content = "hello world";
     let body = ByteStream::from(file_content.as_bytes().to_vec());
-    client
-      .put_object()
-      .bucket(bucket_name.clone())
-      .key(file_path)
-      .body(body)
-      .send()
+    repository
+      .put_object(&key, body, "text/plain")
       .await
       .unwrap();
-    let repository = StorageRepository::new(client.clone(), bucket_name.clone());
-    // Act
-    let object = repository.get_object(file_path).await.unwrap();
-    // Assert
+
+    let object = repository.get_object(&key).await.unwrap();
     let content = object.body.collect().await.unwrap().into_bytes();
     let content = String::from_utf8(content.to_vec()).unwrap();
-    assert_eq!(content, file_content); // 正常に取得できていること
-                                       // ファイルを削除
-    client
-      .delete_object()
-      .bucket(bucket_name)
-      .key(file_path)
-      .send()
+    assert_eq!(content, file_content);
+
+    repository.delete_object(&key).await.unwrap();
+  }
+
+  /// delete 後は get で NotFound になること
+  #[tokio::test]
+  async fn test_delete_object() {
+    let repository = setup_repository().await;
+    let key = unique_storage_key("test/storage");
+    let body = ByteStream::from(b"delete me".to_vec());
+    repository
+      .put_object(&key, body, "text/plain")
       .await
       .unwrap();
+
+    repository.delete_object(&key).await.unwrap();
+
+    let err = repository.get_object(&key).await.unwrap_err();
+    assert!(matches!(err, ServerError::NotFound(_)));
+  }
+
+  /// object_exists が存在・非存在を正しく返すこと
+  #[tokio::test]
+  async fn test_object_exists() {
+    let repository = setup_repository().await;
+    let key = unique_storage_key("test/storage");
+    let body = ByteStream::from(b"exists".to_vec());
+
+    assert!(!repository.object_exists(&key).await.unwrap());
+
+    repository
+      .put_object(&key, body, "text/plain")
+      .await
+      .unwrap();
+    assert!(repository.object_exists(&key).await.unwrap());
+
+    repository.delete_object(&key).await.unwrap();
+    assert!(!repository.object_exists(&key).await.unwrap());
+  }
+
+  /// list_objects がプレフィックス配下を列挙し、ディレクトリプレースホルダを除外すること
+  #[tokio::test]
+  async fn test_list_objects() {
+    let repository = setup_repository().await;
+    let prefix = unique_storage_key("test/list");
+    let key_a = format!("{prefix}/a.log");
+    let key_b = format!("{prefix}/b.log");
+
+    repository
+      .put_object(&key_a, ByteStream::from(b"a".to_vec()), "text/plain")
+      .await
+      .unwrap();
+    repository
+      .put_object(&key_b, ByteStream::from(b"b".to_vec()), "text/plain")
+      .await
+      .unwrap();
+
+    let keys = repository.list_objects(&prefix).await.unwrap();
+    assert!(keys.contains(&key_a));
+    assert!(keys.contains(&key_b));
+    assert!(!keys.iter().any(|k| k.ends_with('/')));
+
+    repository.delete_object(&key_a).await.unwrap();
+    repository.delete_object(&key_b).await.unwrap();
   }
 }
