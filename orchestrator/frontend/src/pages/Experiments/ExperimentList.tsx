@@ -2,7 +2,6 @@ import { useState, useMemo, useCallback } from "react";
 import { useExperiments } from "../../hooks/useExperiments";
 import { useDynamicColumns, type DictionaryCellRenderContext } from "../../hooks/useDynamicColumns";
 import { CreateExperimentModal } from "./components/CreateExperimentModal";
-import { FilterManager } from "./components/FilterManager";
 import { FilePreviewModal } from "./components/FilePreviewModal";
 import { ConfirmModal } from "../../components/ui/ConfirmModal/ConfirmModal";
 import { Button } from "../../components/ui/Button/Button";
@@ -182,8 +181,6 @@ export const ExperimentList = () => {
           </Button>
         </div>
       </div>
-
-      <FilterManager />
 
       <DataTable
         storageKey="experiments"

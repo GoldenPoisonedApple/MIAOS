@@ -25,7 +25,18 @@
   - `refetch()`: データを再取得
 - **状態:** `loading`, `error`, `isDeleting`
 
-### 1.3 `useDynamicColumns`
+### 1.4 `useFilters`
+フィルタ画像の一覧取得、アップロード、削除を行うためのフック。multipart アップロードのため `fetch` を直接使用。
+
+- **取得データ:** `filters` (`FilterSummary[]`)
+- **提供メソッド:**
+  - `uploadFilter({ id, file }, options?)`: `POST /api/filters/{id}` で PNG をアップロード
+  - `deleteFilter(id, options?)`: `DELETE /api/filters/{id}` で削除
+  - `refetch()`: データを再取得
+- **状態:** `loading`, `error`, `isUploading`, `isDeleting`
+- **エラー:** `FilterApiError`（`status` プロパティ付き）。409 は ID 衝突時に UI 側で手動 ID 入力へ誘導
+
+### 1.5 `useDynamicColumns`
 辞書型プロパティ（JSONオブジェクト）からキーを動的に抽出し、TanStack Table 用のカラム定義（`ColumnDef`）を生成するユーティリティフック。
 
 - **引数:**
@@ -39,7 +50,7 @@
 
 各動的列には `sortingFn` が付与され、値は文字列化（オブジェクトは `JSON.stringify`）したうえで `localeCompare`（`numeric: true`）により比較されます。
 
-### 1.4 `useTablePreferences`
+### 1.6 `useTablePreferences`
 `DataTable` の UI 設定（表示カラム・列順・ソート）を管理し、任意で `localStorage` に永続化するフック。
 
 - **引数:**
@@ -125,7 +136,15 @@
   - `DataTable` に `getRowId={(row) => row.id}`（タスクの UUID）を渡し、列ソート後も行選択・一括削除が正しいタスク ID に紐づく。選択列は `enableSorting: false`。
   - 実験一覧と同様のヘッダーソート（▲▼）と選択・一括削除 UI を提供。
 
-### 3.4 `FilePreviewModal` (`src/pages/Experiments/components/FilePreviewModal.tsx`)
+### 3.4 `FilterList`
+フィルタ画像の一覧・管理画面。
+
+- **構成:**
+  - `useFilters` で一覧取得。エラー時はページ上部に表示。
+  - `FilterManager` で登録済みフィルタのプレビュー・削除（`ConfirmModal`）および PNG アップロードを提供。
+  - アップロード ID は `deriveFilterId` によりファイル名から自動導出。導出不可または既存 ID 衝突時のみ ID 入力欄を表示。
+
+### 3.5 `FilePreviewModal` (`src/pages/Experiments/components/FilePreviewModal.tsx`)
 実験一覧から開くファイルプレビュー用モーダル。
 
 - **Props:** `objectKey`（MinIO キー全文、`null` で閉じる扱い）、`onClose`
@@ -145,7 +164,14 @@ MinIO ファイル取得 API への相対パスを返す。
 
 実験一覧の `files` 列（別タブ ⧉）および `FilePreviewModal` の「別タブで開く」から利用する。
 
-### 4.2 `tablePreferences` (`src/utils/tablePreferences.ts`)
+### 4.2 `filterId` (`src/utils/filterId.ts`)
+フィルタ ID のバリデーションとファイル名からの導出。
+
+- **`FILTER_ID_RE`:** `^[a-zA-Z0-9_-]+$`
+- **`deriveFilterId(filename)`:** `.png` 拡張子を除いたベース名が正規表現に合致すれば ID を返す。不合致時は `null`
+- **`isValidFilterId(id)`:** ID 文字列の妥当性チェック
+
+### 4.3 `tablePreferences` (`src/utils/tablePreferences.ts`)
 テーブル UI 設定の `localStorage` 読み書きとマージを担う純粋関数群。
 
 - **ストレージキー:** `app:table-preferences:v1:{storageKey}`

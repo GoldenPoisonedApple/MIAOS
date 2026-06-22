@@ -23,6 +23,14 @@ export const Layout = () => {
           >
             タスク一覧
           </NavLink>
+          <NavLink
+            to="/filters"
+            className={({ isActive }) =>
+              isActive ? `${styles.tabButton} ${styles.active}` : styles.tabButton
+            }
+          >
+            フィルタ
+          </NavLink>
         </nav>
       </header>
       <main className={styles.appMain}>

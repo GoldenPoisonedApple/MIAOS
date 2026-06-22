@@ -243,15 +243,28 @@
             "description": "サーバー内部エラー"
           }
         }
-      },
+      }
+    },
+    "/api/filters/{id}": {
       "post": {
         "tags": [
           "Filters"
         ],
         "summary": "フィルタ画像をアップロードする",
         "operationId": "upload_filter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "フィルタ ID（`[a-zA-Z0-9_-]+`）",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
-          "200": {
+          "201": {
             "description": "アップロード成功",
             "content": {
               "application/json": {
@@ -266,6 +279,42 @@
           },
           "409": {
             "description": "フィルタ ID が既に存在"
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Filters"
+        ],
+        "summary": "フィルタPNGを削除する",
+        "operationId": "delete_filter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "フィルタ ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "削除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilterSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "フィルタが見つからない"
           },
           "500": {
             "description": "サーバー内部エラー"

@@ -6,11 +6,6 @@
   background: var(--code-bg);
 }
 
-.section h3 {
-  margin: 0 0 12px;
-  font-size: 16px;
-}
-
 .filterList {
   list-style: none;
   margin: 0 0 16px;
@@ -68,4 +63,23 @@
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text-h);
+}
+
+.errorMessage {
+  margin: 0;
+  font-size: 14px;
+  color: var(--danger, #c62828);
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.itemActions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }

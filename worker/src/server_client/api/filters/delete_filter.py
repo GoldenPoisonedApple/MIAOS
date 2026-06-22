@@ -15,7 +15,7 @@ def _get_kwargs(
 ) -> dict[str, Any]:
 
     _kwargs: dict[str, Any] = {
-        "method": "post",
+        "method": "delete",
         "url": "/api/filters/{id}".format(
             id=quote(str(id), safe=""),
         ),
@@ -27,18 +27,14 @@ def _get_kwargs(
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
 ) -> Any | FilterSummary | None:
-    if response.status_code == 201:
-        response_201 = FilterSummary.from_dict(response.json())
+    if response.status_code == 200:
+        response_200 = FilterSummary.from_dict(response.json())
 
-        return response_201
+        return response_200
 
-    if response.status_code == 400:
-        response_400 = cast(Any, None)
-        return response_400
-
-    if response.status_code == 409:
-        response_409 = cast(Any, None)
-        return response_409
+    if response.status_code == 404:
+        response_404 = cast(Any, None)
+        return response_404
 
     if response.status_code == 500:
         response_500 = cast(Any, None)
@@ -66,7 +62,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
 ) -> Response[Any | FilterSummary]:
-    """フィルタ画像をアップロードする
+    """フィルタPNGを削除する
 
     Args:
         id (str):
@@ -95,7 +91,7 @@ def sync(
     *,
     client: AuthenticatedClient | Client,
 ) -> Any | FilterSummary | None:
-    """フィルタ画像をアップロードする
+    """フィルタPNGを削除する
 
     Args:
         id (str):
@@ -119,7 +115,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
 ) -> Response[Any | FilterSummary]:
-    """フィルタ画像をアップロードする
+    """フィルタPNGを削除する
 
     Args:
         id (str):
@@ -146,7 +142,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient | Client,
 ) -> Any | FilterSummary | None:
-    """フィルタ画像をアップロードする
+    """フィルタPNGを削除する
 
     Args:
         id (str):

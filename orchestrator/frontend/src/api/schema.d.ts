@@ -87,9 +87,26 @@ export interface paths {
         /** 登録済みフィルタ一覧 */
         get: operations["list_filters"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/filters/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
         /** フィルタ画像をアップロードする */
         post: operations["upload_filter"];
-        delete?: never;
+        /** フィルタPNGを削除する */
+        delete: operations["delete_filter"];
         options?: never;
         head?: never;
         patch?: never;
@@ -666,13 +683,16 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /** @description フィルタ ID（`[a-zA-Z0-9_-]+`） */
+                id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             /** @description アップロード成功 */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -689,6 +709,43 @@ export interface operations {
             };
             /** @description フィルタ ID が既に存在 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description サーバー内部エラー */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_filter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description フィルタ ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 削除成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilterSummary"];
+                };
+            };
+            /** @description フィルタが見つからない */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
