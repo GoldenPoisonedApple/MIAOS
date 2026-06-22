@@ -22,8 +22,7 @@
 .dataTable {
   width: 100%;
   border-collapse: collapse;
-  text-align: left;
-  /* Removed table-layout: fixed; to allow columns to naturally fit content */
+  /* 列ごとの text-align は resolveColumnAlign で td/th に指定 */
 }
 
 .dataTable th,
@@ -38,6 +37,15 @@
   font-weight: 600;
   color: var(--text-h);
   background: var(--social-bg);
+}
+
+.thRight .headerMain {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.thCenter .headerMain {
+  justify-content: center;
 }
 
 .dataTable tr:last-child td {
