@@ -72,7 +72,7 @@ class WatermarkConfig:
         if watermark is UNSET or watermark is None:
             return None
 
-        watermark_data = watermark.additional_properties
+        watermark_data = watermark.to_dict()
         if not watermark_data:
             return None
 

@@ -245,8 +245,8 @@ export interface components {
              * @default 10520
              */
             target_train_size: number;
-            /** @description 透かし設定 */
-            watermark?: Record<string, never>;
+            /** @default null */
+            watermark: null | components["schemas"]["WatermarkConfig"];
         };
         /** @enum {string} */
         ExperimentStatus: "Waiting" | "Running" | "Succeeded" | "Failed";
@@ -374,7 +374,7 @@ export interface components {
              */
             tpr_at_1_fpr?: number | null;
             /** @description 透かし設定 */
-            watermark: Record<string, never>;
+            watermark: components["schemas"]["WatermarkConfig"];
             /** @description 作業PC名 */
             worker_name?: string | null;
         };

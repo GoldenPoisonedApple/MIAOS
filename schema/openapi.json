@@ -512,8 +512,16 @@
             "default": 10520
           },
           "watermark": {
-            "type": "object",
-            "description": "透かし設定"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WatermarkConfig",
+                "description": "透かし設定"
+              }
+            ],
+            "default": null
           }
         }
       },
@@ -754,7 +762,7 @@
             "description": "1%FPRでのTPR"
           },
           "watermark": {
-            "type": "object",
+            "$ref": "#/components/schemas/WatermarkConfig",
             "description": "透かし設定"
           },
           "worker_name": {

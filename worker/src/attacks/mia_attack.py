@@ -354,4 +354,12 @@ class MIA_Attack(ABC):
             idx
         ]  # 元のインデックスに戻す [0, 1, 3] → 1番目の = 1
 
-        return tpr[best_idx], thresholds[best_idx]
+        tpr_value = float(tpr[best_idx])
+        threshold_value = float(thresholds[best_idx])
+        # roc_curve の thresholds[0] は inf になり得る。JSON 送信不可のため -1.0 に正規化
+        if not np.isfinite(threshold_value):
+            threshold_value = -1.0
+        if not np.isfinite(tpr_value):
+            tpr_value = 0.0
+
+        return tpr_value, threshold_value

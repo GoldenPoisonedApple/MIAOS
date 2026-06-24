@@ -6,6 +6,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 
 use crate::dto::experiment::{ClaimExperimentRequest, UpdateResultsRequest};
+use crate::dto::watermark::WatermarkConfig;
 use crate::error::ServerError;
 
 #[derive(
@@ -88,7 +89,7 @@ pub struct Model {
   #[schema(value_type = Object)]
   pub hyperparameters: Json, // SeaORMのJson型
   /// 透かし設定
-  #[schema(value_type = Object)]
+  #[schema(value_type = WatermarkConfig)]
   pub watermark: Json,
 
   // データ流用
