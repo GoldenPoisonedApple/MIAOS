@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { CreateExperimentRequest } from "../../../hooks/useExperiments";
+import type { components } from "../../../api/schema";
 import { useFilters } from "../../../hooks/useFilters";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Button } from "../../../components/ui/Button/Button";
@@ -14,6 +15,7 @@ const WATERMARK_SPLITS = [
 ] as const;
 
 type ApplySplit = (typeof WATERMARK_SPLITS)[number]["key"];
+type WatermarkConfig = components["schemas"]["WatermarkConfig"];
 
 interface Props {
   isOpen: boolean;
@@ -73,10 +75,9 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
     });
   };
 
-  const buildHyperparameters = (): Record<string, unknown> => {
-    const base = { ...(formData.hyperparameters as Record<string, unknown>) };
+  const buildWatermark = (): WatermarkConfig => {
     if (!filterId) {
-      return base;
+      return {};
     }
 
     const apply: Record<string, number> = {};
@@ -90,13 +91,10 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
     }
 
     return {
-      ...base,
-      watermark: {
-        enabled: true,
-        filter_id: filterId,
-        apply,
-        seed_offset: seedOffset,
-      },
+      enabled: true,
+      filter_id: filterId,
+      apply,
+      seed_offset: seedOffset,
     };
   };
 
@@ -104,7 +102,8 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
     e.preventDefault();
     await onSubmit({
       ...formData,
-      hyperparameters: buildHyperparameters() as Record<string, never>,
+      hyperparameters: formData.hyperparameters as Record<string, never>,
+      watermark: buildWatermark(),
     });
     onClose();
   };

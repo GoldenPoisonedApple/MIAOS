@@ -245,6 +245,8 @@ export interface components {
              * @default 10520
              */
             target_train_size: number;
+            /** @description 透かし設定 */
+            watermark?: Record<string, never>;
         };
         /** @enum {string} */
         ExperimentStatus: "Waiting" | "Running" | "Succeeded" | "Failed";
@@ -371,6 +373,8 @@ export interface components {
              * @description 1%FPRでのTPR
              */
             tpr_at_1_fpr?: number | null;
+            /** @description 透かし設定 */
+            watermark: Record<string, never>;
             /** @description 作業PC名 */
             worker_name?: string | null;
         };
@@ -442,6 +446,22 @@ export interface components {
             tpr_at_1_fpr?: number | null;
             /** @description 作業PC名 */
             worker_name: string;
+        };
+        /** @description 透かし設定（`experiments.watermark` JSONB） */
+        WatermarkConfig: {
+            /** @description 分割名 → 適用割合（0.0〜1.0） */
+            apply?: {
+                [key: string]: number;
+            };
+            /** @description 透かしを有効にするか */
+            enabled?: boolean;
+            /** @description MinIO フィルタ ID（`filters/{id}.png`） */
+            filter_id?: string | null;
+            /**
+             * Format: int32
+             * @description シードオフセット
+             */
+            seed_offset?: number;
         };
     };
     responses: never;

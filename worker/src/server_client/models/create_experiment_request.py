@@ -13,6 +13,9 @@ if TYPE_CHECKING:
     from ..models.create_experiment_request_hyperparameters import (
         CreateExperimentRequestHyperparameters,
     )
+    from ..models.create_experiment_request_watermark import (
+        CreateExperimentRequestWatermark,
+    )
 
 
 T = TypeVar("T", bound="CreateExperimentRequest")
@@ -39,6 +42,7 @@ class CreateExperimentRequest:
         shadow_train_size (int | Unset): シャドウモデルのトレーニングサイズ Default: 10520.
         target_test_size (int | Unset): ターゲットモデルのテストサイズ Default: 10520.
         target_train_size (int | Unset): ターゲットモデルのトレーニングサイズ Default: 10520.
+        watermark (CreateExperimentRequestWatermark | Unset): 透かし設定
     """
 
     base_experiment_id: int | None | Unset = UNSET
@@ -57,6 +61,7 @@ class CreateExperimentRequest:
     shadow_train_size: int | Unset = 10520
     target_test_size: int | Unset = 10520
     target_train_size: int | Unset = 10520
+    watermark: CreateExperimentRequestWatermark | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -104,6 +109,10 @@ class CreateExperimentRequest:
 
         target_train_size = self.target_train_size
 
+        watermark: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.watermark, Unset):
+            watermark = self.watermark.to_dict()
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({})
@@ -139,6 +148,8 @@ class CreateExperimentRequest:
             field_dict["target_test_size"] = target_test_size
         if target_train_size is not UNSET:
             field_dict["target_train_size"] = target_train_size
+        if watermark is not UNSET:
+            field_dict["watermark"] = watermark
 
         return field_dict
 
@@ -146,6 +157,9 @@ class CreateExperimentRequest:
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.create_experiment_request_hyperparameters import (
             CreateExperimentRequestHyperparameters,
+        )
+        from ..models.create_experiment_request_watermark import (
+            CreateExperimentRequestWatermark,
         )
 
         d = dict(src_dict)
@@ -210,6 +224,13 @@ class CreateExperimentRequest:
 
         target_train_size = d.pop("target_train_size", UNSET)
 
+        _watermark = d.pop("watermark", UNSET)
+        watermark: CreateExperimentRequestWatermark | Unset
+        if isinstance(_watermark, Unset):
+            watermark = UNSET
+        else:
+            watermark = CreateExperimentRequestWatermark.from_dict(_watermark)
+
         create_experiment_request = cls(
             base_experiment_id=base_experiment_id,
             batch_size=batch_size,
@@ -227,6 +248,7 @@ class CreateExperimentRequest:
             shadow_train_size=shadow_train_size,
             target_test_size=target_test_size,
             target_train_size=target_train_size,
+            watermark=watermark,
         )
 
         create_experiment_request.additional_properties = d

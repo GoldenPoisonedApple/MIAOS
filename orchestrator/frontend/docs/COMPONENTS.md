@@ -126,7 +126,7 @@
   - `useState` で `CreateExperimentRequest` 型に基づくフォーム状態を管理。
   - 基本的な設定は標準の `<input>` や `<select>` を使用。
   - `hyperparameters` プロパティの入力には、`KeyValueEditor` を使用し、安全なJSON生成を実現。
-  - 透かし設定: `useFilters` で取得したフィルタ一覧から `filter_id` を `<select>` で選択。`hyperparameters.watermark` に `enabled`, `filter_id`, `apply`, `seed_offset` を送信。
+  - 透かし設定: `useFilters` で取得したフィルタ一覧から `filter_id` を `<select>` で選択。`CreateExperimentRequest.watermark` に `enabled`, `filter_id`, `apply`, `seed_offset` をトップレベルで送信。
 
 ### 3.3 `TaskList`
 タスクデータの一覧を表示するページコンポーネント。

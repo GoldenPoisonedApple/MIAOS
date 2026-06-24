@@ -510,6 +510,10 @@
             "format": "int32",
             "description": "ターゲットモデルのトレーニングサイズ",
             "default": 10520
+          },
+          "watermark": {
+            "type": "object",
+            "description": "透かし設定"
           }
         }
       },
@@ -572,6 +576,7 @@
           "shadow_test_size",
           "seed",
           "hyperparameters",
+          "watermark",
           "load_target_model",
           "load_shadow_model",
           "load_attack_model",
@@ -748,6 +753,10 @@
             "format": "double",
             "description": "1%FPRでのTPR"
           },
+          "watermark": {
+            "type": "object",
+            "description": "透かし設定"
+          },
           "worker_name": {
             "type": [
               "string",
@@ -883,6 +892,39 @@
           "worker_name": {
             "type": "string",
             "description": "作業PC名"
+          }
+        }
+      },
+      "WatermarkConfig": {
+        "type": "object",
+        "description": "透かし設定（`experiments.watermark` JSONB）",
+        "properties": {
+          "apply": {
+            "type": "object",
+            "description": "分割名 → 適用割合（0.0〜1.0）",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "透かしを有効にするか"
+          },
+          "filter_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "MinIO フィルタ ID（`filters/{id}.png`）"
+          },
+          "seed_offset": {
+            "type": "integer",
+            "format": "int32",
+            "description": "シードオフセット"
           }
         }
       }
