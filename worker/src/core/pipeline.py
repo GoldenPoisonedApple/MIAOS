@@ -17,6 +17,7 @@ from src.data.dataset import dataset
 from src.models.target_model import TargetCNN
 from src.attacks.mia_lira import MIA_LIRA
 from src.attacks.mia_shokri import MIA_Shokri
+from src.attacks.watermark_probe import WatermarkProbeAnalysis
 
 
 def run_experiment(
@@ -163,11 +164,40 @@ def run_experiment(
     )
 
     # ----------------------------------
+    # 透かし probe 解析（透かし有効時のみ）
+    # ----------------------------------
+    watermark_probe_metrics = None
+    if dataset_instance.watermark_config is not None:
+        logger.info("[Phase 4.5] Watermark probe analysis...")
+        p45_start_time = time.time()
+        probe = WatermarkProbeAnalysis(
+            dataset_instance, work_dir, logger, request, variant="on_black"
+        )
+        watermark_probe_metrics = probe.analyze(shadow_models, target_model)
+        logger.info(
+            f"-> {time.time() - p45_start_time:.2f} sec: {((time.time() - p45_start_time) / 60):.2f} min"
+        )
+
+    # ----------------------------------
     # 総合評価
     # ----------------------------------
     logger.info("[Phase 5] Comprehensive evaluation...")
     p5_start_time = time.time()
     metrics = mia_class.comprehensive_evaluate(scores, trues)
+
+    # 透かし probe 解析結果を追加
+    if watermark_probe_metrics is not None:
+        for key, value in watermark_probe_metrics.items():
+            if isinstance(value, dict):
+                for sub_key, sub_value in value.items():
+                    if isinstance(sub_value, bool):
+                        sub_value = float(sub_value)
+                    elif isinstance(sub_value, (int, float)):
+                        sub_value = float(sub_value)
+                    metrics[f"watermark_probe_{key}_{sub_key}"] = sub_value
+            elif isinstance(value, (bool, int, float)):
+                metrics[f"watermark_probe_{key}"] = float(value)
+
     logger.info(
         f"-> {time.time() - p5_start_time:.2f} sec: {((time.time() - p5_start_time) / 60):.2f} min"
     )
