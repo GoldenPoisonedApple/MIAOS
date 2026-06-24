@@ -117,8 +117,8 @@ class MIA_Attack(ABC):
         Args:
                 shadow_models: シャドーモデル
         Returns:
-                member_trues: np.ndarray 真のラベル(メンバー)
                 member_scores: np.ndarray 攻撃スコア(メンバー)
+                member_trues: np.ndarray 真値ラベル(メンバー)
         """
         pass
 
@@ -268,7 +268,17 @@ class MIA_Attack(ABC):
                 loader: データローダー
         Returns:
                 predictions: 予測結果確率(256*n, 100)
+                例:
+                tensor([
+                                        [0.01, 0.00, 0.03, ..., 0.02],  # サンプル0
+                                        [0.00, 0.01, 0.00, ..., 0.15],  # サンプル1
+                                        [0.05, 0.00, 0.70, ..., 0.00],  # サンプル2
+                                        [0.00, 0.00, 0.00, ..., 0.92],  # サンプル3
+                                        [0.01, 0.00, 0.00, ..., 0.03],  # サンプル4
+                                        [0.00, 0.02, 0.01, ..., 0.00],  # サンプル5
+                                ])
                 labels: 正解ラベル (256*n,)
+                例: tensor([12, 45,  3, 99, 45, 17]) -> 一つ目のデータの正解ラベルは12
         """
         model = model.to(cfg.DEVICE)
         model.eval()  # 評価モード: 全結合、固定挙動

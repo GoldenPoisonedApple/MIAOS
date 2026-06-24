@@ -157,7 +157,7 @@ def run_experiment(
     # ----------------------------------
     logger.info("[Phase 4] Attacking and evaluating...")
     p4_start_time = time.time()
-    member_trues, member_scores = mia_class.attack(shadow_models, target_model)
+    scores, trues = mia_class.attack(shadow_models, target_model)
     logger.info(
         f"-> {time.time() - p4_start_time:.2f} sec: {((time.time() - p4_start_time) / 60):.2f} min"
     )
@@ -167,7 +167,7 @@ def run_experiment(
     # ----------------------------------
     logger.info("[Phase 5] Comprehensive evaluation...")
     p5_start_time = time.time()
-    metrics = mia_class.comprehensive_evaluate(member_trues, member_scores)
+    metrics = mia_class.comprehensive_evaluate(scores, trues)
     logger.info(
         f"-> {time.time() - p5_start_time:.2f} sec: {((time.time() - p5_start_time) / 60):.2f} min"
     )
