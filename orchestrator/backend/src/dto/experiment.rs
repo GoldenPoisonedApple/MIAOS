@@ -37,6 +37,9 @@ pub struct CreateExperimentRequest {
   /// その他のハイパーパラメータ
   #[schema(value_type = Object)]
   pub hyperparameters: Value,
+  /// 透かし設定
+  #[schema(value_type = Object)]
+  pub watermark: Value,
 
   // -- データ流用 --
   /// 既存実験結果を流用する実験結果
@@ -67,6 +70,7 @@ impl Default for CreateExperimentRequest {
       shadow_test_size: SHADOW_TEST_SIZE,
       seed: SEED,
       hyperparameters: serde_json::json!({}),
+      watermark: serde_json::json!({}),
       // データ流用
       base_experiment_id: None,
       load_target_model: LOAD_TARGET_MODEL,
@@ -94,6 +98,7 @@ impl From<CreateExperimentRequest> for ActiveModel {
       shadow_test_size: Set(req.shadow_test_size),
       seed: Set(req.seed),
       hyperparameters: Set(req.hyperparameters),
+      watermark: Set(req.watermark),
 
       // データ流用
       base_experiment_id: Set(req.base_experiment_id),

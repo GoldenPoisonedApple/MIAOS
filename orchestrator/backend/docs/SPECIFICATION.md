@@ -77,27 +77,25 @@ PostgreSQL の `experiments` テーブルに対応する主要エンティティ
 | カテゴリ | フィールド | 説明 |
 | -------- | ---------- | ---- |
 | 基本情報 | `id`, `name`, `notes`, `method` | 攻撃手法は `offline_lira` / `shokri`（PostgreSQL ENUM） |
-| 実験条件 | `batch_size`, `max_epochs`, `num_shadow_models`, 各種データサイズ, `seed`, `hyperparameters`（JSONB） | `CreateExperimentRequest` の未指定項目は `config/default.rs` の値を使用。透かし設定は `hyperparameters.watermark` に格納（バックエンドはパススルー、ワーカーが解釈） |
+| 実験条件 | `batch_size`, `max_epochs`, `num_shadow_models`, 各種データサイズ, `seed`, `hyperparameters`（JSONB）, `watermark`（JSONB） | `CreateExperimentRequest` の未指定項目は `config/default.rs` の値を使用。透かし設定は `watermark` 列に格納（バックエンドはパススルー、ワーカーが解釈） |
 | データ流用 | `base_experiment_id`, `load_target_model`, `load_shadow_model`, `load_attack_model` | 既存実験結果の再利用フラグ |
 | 状態管理 | `status`, `worker_name`, `completed_at`, `error_message` | ステータス遷移は下記「状態遷移ルール」参照 |
 | 実験結果 | `global_auc`, `tpr_at_1_fpr`, `threshold_at_1_fpr`, `tpr_at_01_fpr`, `threshold_at_01_fpr`, `other_metrics`（JSONB）, `total_time` | 1% FPR / 0.1% FPR における TPR・閾値 |
 | ファイル | `files`（JSONB） | アーティファクトの MinIO オブジェクトキー参照。キーは表示用の相対パス、値はバケット内フルキー（例: `results/42/roc_curve.png`） |
 
-#### `hyperparameters.watermark`（参考）
+#### `watermark`（参考）
 
-バックエンドはスキーマ検証を行わず JSONB として保存・Celery へ渡します。ワーカーが解釈する透かし設定の例:
+バックエンドはスキーマ検証を行わず JSONB として保存・Celery へ渡します。OpenAPI 上は `WatermarkConfig` としても定義されています。ワーカーが解釈する透かし設定の例:
 
 ```json
 {
-  "watermark": {
-    "enabled": true,
-    "filter_id": "circle",
-    "apply": {
-      "target_train": 1.0,
-      "shadow_train": 0.5
-    },
-    "seed_offset": 0
-  }
+  "enabled": true,
+  "filter_id": "circle",
+  "apply": {
+    "target_train": 1.0,
+    "shadow_train": 0.5
+  },
+  "seed_offset": 0
 }
 ```
 

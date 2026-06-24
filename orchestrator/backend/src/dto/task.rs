@@ -33,6 +33,8 @@ pub struct CreateTaskRequest {
   pub seed: i32,
   /// その他のハイパーパラメータ
   pub hyperparameters: Value,
+  /// 透かし設定
+  pub watermark: Value,
 
   // -- データ流用 --
   /// 既存実験結果を流用する実験結果
@@ -63,6 +65,7 @@ impl From<&Model> for CreateTaskRequest {
       shadow_test_size: model.shadow_test_size,
       seed: model.seed,
       hyperparameters: model.hyperparameters.clone(),
+      watermark: model.watermark.clone(),
       // -- データ流用 --
       base_experiment_id: model.base_experiment_id,
       load_target_model: model.load_target_model,

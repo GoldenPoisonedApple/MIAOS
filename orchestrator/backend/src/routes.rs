@@ -35,6 +35,7 @@ use crate::handlers::health::{liveness, readiness};
 			crate::dto::experiment::CreateExperimentRequest,
 			crate::dto::experiment::UpdateResultsRequest,
 			crate::dto::experiment::ClaimExperimentRequest,
+			crate::dto::watermark::WatermarkConfig,
 			crate::dto::filter::FilterSummary,
 			crate::dto::filter::FilterListResponse,
 			crate::entities::experiment::Model,
