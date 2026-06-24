@@ -167,7 +167,7 @@ class dataset:
         self._log_watermark_info()
 
     def _initialize_watermark_for_new_experiment(self) -> None:
-        self.watermark_config = WatermarkConfig.from_hyperparameters(self.settings)
+        self.watermark_config = WatermarkConfig.from_request(self.settings)
         if self.watermark_config is None:
             return
 

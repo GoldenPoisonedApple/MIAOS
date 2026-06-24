@@ -67,14 +67,12 @@ class WatermarkConfig:
         )
 
     @classmethod
-    def from_hyperparameters(
-        cls, settings: CreateExperimentRequest
-    ) -> WatermarkConfig | None:
-        hyperparameters = settings.hyperparameters
-        if hyperparameters is UNSET or hyperparameters is None:
+    def from_request(cls, settings: CreateExperimentRequest) -> WatermarkConfig | None:
+        watermark = settings.watermark
+        if watermark is UNSET or watermark is None:
             return None
 
-        watermark_data = hyperparameters.additional_properties.get("watermark")
+        watermark_data = watermark.additional_properties
         if not watermark_data:
             return None
 
