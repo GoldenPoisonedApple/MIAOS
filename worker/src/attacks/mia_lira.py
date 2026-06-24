@@ -100,7 +100,7 @@ class MIA_LIRA(MIA_Attack):
             self.dataset.get_eval_target_dataloaders()
         )
 
-        # ------------- 特徴量抽出 -------------
+        # ------------- シャドーモデルから検証データのOUT分布を推定 -------------
         # ターゲットデータを学習に使用しなかったモデルを選び出し、Out分布を推定(targetのデータはshadowモデルで一切学習していないため使用可能)
         # -------------------------------------
         shadow_out_logits = []
@@ -137,7 +137,7 @@ class MIA_LIRA(MIA_Attack):
         shadow_out_means = np.mean(shadow_out_logits, axis=0)
         shadow_out_stds = np.std(shadow_out_logits, axis=0) + 1e-8  # ゼロ除算防止
 
-        # ------- 攻撃スコア計算 ---------------
+        # ------- ターゲットモデルから検証データ特徴量抽出 ---------------
         # ターゲットモデルから、同じ検証したいデータのロジットを抽出
         # -------------------------------------
         preds_1, labels_1 = MIA_Attack.get_predictions(
@@ -182,11 +182,12 @@ class MIA_LIRA(MIA_Attack):
         )
 
         # ------------- 可視化 -------------
-        members_scores = lira_scores[lira_trues == 1]
-        non_members_scores = lira_scores[lira_trues == 0]
+        # z スコアの分布を可視化
+        members_scores = z_scores[lira_trues == 1]
+        non_members_scores = z_scores[lira_trues == 0]
         # スコアの最小値と最大値からビンの範囲を決定 (外れ値が大きすぎると見えなくなるためパーセンタイルでクリップ)
-        min_val = np.percentile(lira_scores, 0.1)
-        max_val = np.percentile(lira_scores, 99.9)
+        min_val = np.percentile(z_scores, 0.1)
+        max_val = np.percentile(z_scores, 99.9)
         bins = np.linspace(min_val, max_val, 100)
         # 密度(density=True)としてプロットし、2つの分布を比較しやすくする
         plt.figure(figsize=(10, 6))
@@ -219,5 +220,44 @@ class MIA_LIRA(MIA_Attack):
         plt.savefig(dist_plot_path, dpi=300, bbox_inches="tight")
         plt.close()
         self.logger.info(f"Saved score distribution plot to: {dist_plot_path}")
+
+        # cdfの分布を可視化
+        members_scores = lira_scores[lira_trues == 1]
+        non_members_scores = lira_scores[lira_trues == 0]
+        # スコアの最小値と最大値からビンの範囲を決定 (外れ値が大きすぎると見えなくなるためパーセンタイルでクリップ)
+        min_val = np.percentile(lira_scores, 0.1)
+        max_val = np.percentile(lira_scores, 99.9)
+        bins = np.linspace(min_val, max_val, 100)
+        # 密度(density=True)としてプロットし、2つの分布を比較しやすくする
+        plt.figure(figsize=(10, 6))
+        plt.hist(
+            members_scores,
+            bins=bins,
+            alpha=0.6,
+            color="royalblue",
+            label="Members",
+            density=True,
+        )
+        plt.hist(
+            non_members_scores,
+            bins=bins,
+            alpha=0.6,
+            color="crimson",
+            label="Non-Members",
+            density=True,
+        )
+        # 情報追加
+        plt.xlabel("Attack Score CDF (LiRA)")
+        plt.ylabel("Density")
+        plt.title("Distribution of Attack Scores CDF (Offline LiRA)")
+        plt.legend(loc="upper right")
+        plt.grid(True, linestyle="--", alpha=0.5)
+        # 保存
+        dist_plot_path = os.path.join(
+            self.MODEL_SAVE_DIR, "score_distribution_lira_cdf.png"
+        )
+        plt.savefig(dist_plot_path, dpi=300, bbox_inches="tight")
+        plt.close()
+        self.logger.info(f"Saved score distribution cdf plot to: {dist_plot_path}")
 
         return lira_scores, lira_trues
