@@ -33,7 +33,7 @@ function getCellValue<TData extends RowData>(
   columnDef: ColumnDef<TData, unknown>,
   rowIndex: number
 ): unknown {
-  if (columnDef.accessorFn) {
+  if ("accessorFn" in columnDef && typeof columnDef.accessorFn === "function") {
     return columnDef.accessorFn(row, rowIndex);
   }
   if ("accessorKey" in columnDef && typeof columnDef.accessorKey === "string") {
