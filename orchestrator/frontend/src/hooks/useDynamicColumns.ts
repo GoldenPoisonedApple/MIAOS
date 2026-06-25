@@ -47,6 +47,7 @@ export function useDynamicColumns<TData extends Record<string, unknown>>(
             return dict ? dict[dictKey] : undefined;
           },
           header: `${prefix}: ${dictKey}`,
+          meta: renderCell ? { align: "left" } : undefined,
           sortingFn: (rowA, rowB, columnId) => {
             const a = rowA.getValue(columnId);
             const b = rowB.getValue(columnId);

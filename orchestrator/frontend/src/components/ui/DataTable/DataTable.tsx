@@ -33,6 +33,7 @@ import styles from "./DataTable.module.css";
 import { ColumnVisibilityMenu } from "../ColumnVisibilityMenu/ColumnVisibilityMenu";
 import { useTablePreferences } from "../../../hooks/useTablePreferences";
 import { getColumnId } from "../../../utils/tablePreferences";
+import { resolveColumnAlign } from "../../../utils/columnAlign";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -75,9 +76,18 @@ function DraggableHeader<TData, TValue>({ header }: { header: Header<TData, TVal
   const { table } = header.getContext();
   const canSort = header.column.getCanSort();
   const sorted = header.column.getIsSorted();
+  const align = resolveColumnAlign(header.column, table);
+  const thAlignClass =
+    align === "right" ? styles.thRight : align === "center" ? styles.thCenter : undefined;
 
   return (
-    <th key={header.id} colSpan={header.colSpan} ref={setNodeRef} style={style} className={styles.th}>
+    <th
+      key={header.id}
+      colSpan={header.colSpan}
+      ref={setNodeRef}
+      style={{ ...style, textAlign: align }}
+      className={`${styles.th}${thAlignClass ? ` ${thAlignClass}` : ""}`}
+    >
       <div className={styles.headerContent}>
         <div {...attributes} {...listeners} className={styles.dragHandle}>
           ⋮⋮
@@ -234,11 +244,14 @@ export function DataTable<TData, TValue>({
               {table.getRowModel().rows.length > 0 ? (
                 table.getRowModel().rows.map((row) => (
                   <tr key={row.id}>
-                    {row.getVisibleCells().map((cell) => (
-  <td key={cell.id} style={{ textAlign: cell.column.id === "select" ? "center" : "left" }}>
-    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-  </td>
-                    ))}
+                    {row.getVisibleCells().map((cell) => {
+                      const align = resolveColumnAlign(cell.column, table);
+                      return (
+                        <td key={cell.id} style={{ textAlign: align }}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))
               ) : (

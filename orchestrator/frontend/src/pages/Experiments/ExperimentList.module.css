@@ -23,41 +23,43 @@
 
 .fileCell {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
   max-width: 100%;
 }
 
-.fileLink {
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--link-color, #0a58ca);
+.fileCellImageLink {
+  display: inline-block;
+  line-height: 0;
   cursor: pointer;
-  text-align: left;
-  font: inherit;
+}
+
+.fileCellImageLink:hover .fileCellImage {
+  border-color: var(--link-color, #0a58ca);
+}
+
+.fileCellImage {
+  display: block;
+  height: 160px;
+  width: auto;
+  max-width: min(320px, 100%);
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  transition: border-color 0.15s ease;
+}
+
+.fileTabLink {
+  color: var(--link-color, #0a58ca);
   text-decoration: underline;
   min-width: 0;
-  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.openTabGlyph {
-  flex: 0 0 auto;
-  color: var(--link-color, #0a58ca);
-  text-decoration: none;
-  line-height: 1;
-  font-size: 1.1em;
-}
-
-.openTabGlyph:hover {
-  color: var(--link-hover-color, #084298);
-}
-
-.fileLink:hover {
+.fileTabLink:hover {
   color: var(--link-hover-color, #084298);
 }

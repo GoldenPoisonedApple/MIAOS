@@ -6,6 +6,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 
 use crate::dto::experiment::{ClaimExperimentRequest, UpdateResultsRequest};
+use crate::dto::watermark::WatermarkConfig;
 use crate::error::ServerError;
 
 #[derive(
@@ -87,6 +88,9 @@ pub struct Model {
   /// その他のハイパーパラメータ
   #[schema(value_type = Object)]
   pub hyperparameters: Json, // SeaORMのJson型
+  /// 透かし設定
+  #[schema(value_type = WatermarkConfig)]
+  pub watermark: Json,
 
   // データ流用
   /// 既存実験結果を流用する実験結果
@@ -223,6 +227,7 @@ impl Model {
       shadow_test_size: Set(self.shadow_test_size),
       seed: Set(self.seed),
       hyperparameters: Set(self.hyperparameters),
+      watermark: Set(self.watermark),
       base_experiment_id: Set(self.base_experiment_id),
       load_target_model: Set(self.load_target_model),
       load_shadow_model: Set(self.load_shadow_model),
@@ -265,6 +270,7 @@ mod tests {
       shadow_test_size: 10,
       seed: 10,
       hyperparameters: serde_json::json!({}),
+      watermark: serde_json::json!({}),
       base_experiment_id: None,
       load_target_model: false,
       load_shadow_model: false,

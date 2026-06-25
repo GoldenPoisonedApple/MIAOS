@@ -20,6 +20,8 @@ from .task_args_positional import TaskArgsPositional
 from .update_results_request import UpdateResultsRequest
 from .update_results_request_files import UpdateResultsRequestFiles
 from .update_results_request_other_metrics import UpdateResultsRequestOtherMetrics
+from .watermark_config import WatermarkConfig
+from .watermark_config_apply import WatermarkConfigApply
 
 __all__ = (
     "ClaimExperimentRequest",
@@ -40,4 +42,6 @@ __all__ = (
     "UpdateResultsRequest",
     "UpdateResultsRequestFiles",
     "UpdateResultsRequestOtherMetrics",
+    "WatermarkConfig",
+    "WatermarkConfigApply",
 )

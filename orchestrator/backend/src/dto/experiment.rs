@@ -4,6 +4,7 @@ use serde_json::Value;
 use utoipa::ToSchema;
 
 use crate::config::default::*;
+use crate::dto::watermark::WatermarkConfig;
 use crate::entities::experiment::{ActiveModel, ExperimentStatus, MiaMethod};
 
 /// 実験の作成リクエスト
@@ -37,6 +38,8 @@ pub struct CreateExperimentRequest {
   /// その他のハイパーパラメータ
   #[schema(value_type = Object)]
   pub hyperparameters: Value,
+  /// 透かし設定
+  pub watermark: Option<WatermarkConfig>,
 
   // -- データ流用 --
   /// 既存実験結果を流用する実験結果
@@ -67,6 +70,7 @@ impl Default for CreateExperimentRequest {
       shadow_test_size: SHADOW_TEST_SIZE,
       seed: SEED,
       hyperparameters: serde_json::json!({}),
+      watermark: None,
       // データ流用
       base_experiment_id: None,
       load_target_model: LOAD_TARGET_MODEL,
@@ -94,6 +98,7 @@ impl From<CreateExperimentRequest> for ActiveModel {
       shadow_test_size: Set(req.shadow_test_size),
       seed: Set(req.seed),
       hyperparameters: Set(req.hyperparameters),
+      watermark: Set(serde_json::to_value(req.watermark.unwrap_or_default()).unwrap_or_default()),
 
       // データ流用
       base_experiment_id: Set(req.base_experiment_id),

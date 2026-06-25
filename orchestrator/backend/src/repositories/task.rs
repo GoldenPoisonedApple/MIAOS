@@ -225,6 +225,7 @@ mod tests {
       shadow_test_size: 10,
       seed: 10,
       hyperparameters: serde_json::json!({}),
+      watermark: serde_json::json!({}),
       base_experiment_id: None,
       load_target_model: false,
       load_shadow_model: false,

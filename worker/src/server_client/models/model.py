@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from ..models.model_files_type_0 import ModelFilesType0
     from ..models.model_hyperparameters import ModelHyperparameters
     from ..models.model_other_metrics_type_0 import ModelOtherMetricsType0
+    from ..models.watermark_config import WatermarkConfig
 
 
 T = TypeVar("T", bound="Model")
@@ -42,6 +43,7 @@ class Model:
         status (ExperimentStatus):
         target_test_size (int): ターゲットモデルのテストサイズ
         target_train_size (int): ターゲットモデルのトレーニングサイズ
+        watermark (WatermarkConfig): 透かし設定（`experiments.watermark` JSONB）
         base_experiment_id (int | None | Unset): 既存実験結果を流用する実験結果
         completed_at (datetime.datetime | None | Unset): 完了日時
         error_message (None | str | Unset): エラーメッセージ
@@ -74,6 +76,7 @@ class Model:
     status: ExperimentStatus
     target_test_size: int
     target_train_size: int
+    watermark: WatermarkConfig
     base_experiment_id: int | None | Unset = UNSET
     completed_at: datetime.datetime | None | Unset = UNSET
     error_message: None | str | Unset = UNSET
@@ -126,6 +129,8 @@ class Model:
         target_test_size = self.target_test_size
 
         target_train_size = self.target_train_size
+
+        watermark = self.watermark.to_dict()
 
         base_experiment_id: int | None | Unset
         if isinstance(self.base_experiment_id, Unset):
@@ -232,6 +237,7 @@ class Model:
                 "status": status,
                 "target_test_size": target_test_size,
                 "target_train_size": target_train_size,
+                "watermark": watermark,
             }
         )
         if base_experiment_id is not UNSET:
@@ -268,6 +274,7 @@ class Model:
         from ..models.model_files_type_0 import ModelFilesType0
         from ..models.model_hyperparameters import ModelHyperparameters
         from ..models.model_other_metrics_type_0 import ModelOtherMetricsType0
+        from ..models.watermark_config import WatermarkConfig
 
         d = dict(src_dict)
         batch_size = d.pop("batch_size")
@@ -303,6 +310,8 @@ class Model:
         target_test_size = d.pop("target_test_size")
 
         target_train_size = d.pop("target_train_size")
+
+        watermark = WatermarkConfig.from_dict(d.pop("watermark"))
 
         def _parse_base_experiment_id(data: object) -> int | None | Unset:
             if data is None:
@@ -469,6 +478,7 @@ class Model:
             status=status,
             target_test_size=target_test_size,
             target_train_size=target_train_size,
+            watermark=watermark,
             base_experiment_id=base_experiment_id,
             completed_at=completed_at,
             error_message=error_message,

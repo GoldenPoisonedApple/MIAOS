@@ -243,15 +243,28 @@
             "description": "サーバー内部エラー"
           }
         }
-      },
+      }
+    },
+    "/api/filters/{id}": {
       "post": {
         "tags": [
           "Filters"
         ],
         "summary": "フィルタ画像をアップロードする",
         "operationId": "upload_filter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "フィルタ ID（`[a-zA-Z0-9_-]+`）",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
-          "200": {
+          "201": {
             "description": "アップロード成功",
             "content": {
               "application/json": {
@@ -266,6 +279,42 @@
           },
           "409": {
             "description": "フィルタ ID が既に存在"
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Filters"
+        ],
+        "summary": "フィルタPNGを削除する",
+        "operationId": "delete_filter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "フィルタ ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "削除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilterSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "フィルタが見つからない"
           },
           "500": {
             "description": "サーバー内部エラー"
@@ -461,6 +510,18 @@
             "format": "int32",
             "description": "ターゲットモデルのトレーニングサイズ",
             "default": 10520
+          },
+          "watermark": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WatermarkConfig",
+                "description": "透かし設定"
+              }
+            ],
+            "default": null
           }
         }
       },
@@ -523,6 +584,7 @@
           "shadow_test_size",
           "seed",
           "hyperparameters",
+          "watermark",
           "load_target_model",
           "load_shadow_model",
           "load_attack_model",
@@ -699,6 +761,10 @@
             "format": "double",
             "description": "1%FPRでのTPR"
           },
+          "watermark": {
+            "$ref": "#/components/schemas/WatermarkConfig",
+            "description": "透かし設定"
+          },
           "worker_name": {
             "type": [
               "string",
@@ -834,6 +900,39 @@
           "worker_name": {
             "type": "string",
             "description": "作業PC名"
+          }
+        }
+      },
+      "WatermarkConfig": {
+        "type": "object",
+        "description": "透かし設定（`experiments.watermark` JSONB）",
+        "properties": {
+          "apply": {
+            "type": "object",
+            "description": "分割名 → 適用割合（0.0〜1.0）",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "透かしを有効にするか"
+          },
+          "filter_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "MinIO フィルタ ID（`filters/{id}.png`）"
+          },
+          "seed_offset": {
+            "type": "integer",
+            "format": "int32",
+            "description": "シードオフセット"
           }
         }
       }

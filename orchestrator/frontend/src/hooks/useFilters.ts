@@ -8,6 +8,22 @@ export interface FilterListResponse {
   filters: FilterSummary[];
 }
 
+export class FilterApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "FilterApiError";
+    this.status = status;
+  }
+}
+
+async function throwIfNotOk(response: Response, fallbackMessage: string): Promise<void> {
+  if (response.ok) return;
+  const text = await response.text();
+  throw new FilterApiError(text || `${fallbackMessage} (${response.status})`, response.status);
+}
+
 export const useFilters = () => {
   const queryClient = useQueryClient();
 
@@ -15,10 +31,7 @@ export const useFilters = () => {
     queryKey: ["filters"],
     queryFn: async (): Promise<FilterSummary[]> => {
       const response = await fetch("/api/filters");
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || `フィルタ一覧の取得に失敗 (${response.status})`);
-      }
+      await throwIfNotOk(response, "フィルタ一覧の取得に失敗");
       const body = (await response.json()) as FilterListResponse;
       return body.filters ?? [];
     },
@@ -27,25 +40,30 @@ export const useFilters = () => {
   const uploadMutation = useMutation({
     mutationFn: async ({ id, file }: { id: string; file: File }) => {
       const formData = new FormData();
-      formData.append("id", id);
       formData.append("file", file);
 
-      const response = await fetch("/api/filters", {
+      const response = await fetch(`/api/filters/${encodeURIComponent(id)}`, {
         method: "POST",
         body: formData,
       });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || `フィルタのアップロードに失敗 (${response.status})`);
-      }
+      await throwIfNotOk(response, "フィルタのアップロードに失敗");
       return (await response.json()) as FilterSummary;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["filters"] });
     },
-    onError: (err) => {
-      console.error(err);
-      alert(err instanceof Error ? err.message : "フィルタのアップロードに失敗しました");
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/filters/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      await throwIfNotOk(response, "フィルタの削除に失敗");
+      return (await response.json()) as FilterSummary;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["filters"] });
     },
   });
 
@@ -56,5 +74,7 @@ export const useFilters = () => {
     refetch,
     uploadFilter: uploadMutation.mutate,
     isUploading: uploadMutation.isPending,
+    deleteFilter: deleteMutation.mutate,
+    isDeleting: deleteMutation.isPending,
   };
 };

@@ -17,6 +17,11 @@ class FilterImage:
         self._rgb = rgb.astype(np.float32)
         self._alpha = alpha.astype(np.float32)
 
+    # PIL画像に変換
+    def to_pil(self) -> Image.Image:
+        rgb = np.clip(self._rgb, 0, 255).astype(np.uint8)
+        return Image.fromarray(rgb, mode="RGB")
+
     @property
     def rgb(self) -> np.ndarray:
         return self._rgb

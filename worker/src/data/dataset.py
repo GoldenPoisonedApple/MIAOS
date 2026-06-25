@@ -1,7 +1,8 @@
 import logging
 import torchvision
 import torchvision.transforms as transforms
-from torch.utils.data import DataLoader, ConcatDataset, Dataset
+import torch
+from torch.utils.data import DataLoader, ConcatDataset, Dataset, TensorDataset
 import src.core.config as cfg
 from src.server_client.models import CreateExperimentRequest
 import src.utils.minio_utils as minio_utils
@@ -167,7 +168,7 @@ class dataset:
         self._log_watermark_info()
 
     def _initialize_watermark_for_new_experiment(self) -> None:
-        self.watermark_config = WatermarkConfig.from_hyperparameters(self.settings)
+        self.watermark_config = WatermarkConfig.from_request(self.settings)
         if self.watermark_config is None:
             return
 
@@ -415,3 +416,56 @@ class dataset:
             len(shadow_train_idx),
             len(shadow_test_idx),
         )
+
+    def _build_watermark_probe_pil(self, variant: str = "on_black") -> Image.Image:
+        """透かしフィルタ1枚を probe 用 PIL として返す"""
+        if self.watermark_transform is None or self.watermark_config is None:
+            raise ValueError("Watermark is not enabled for this experiment")
+
+        filter_path = minio_utils.download_filter(self.watermark_config.filter_id)
+        filter_image = FilterImage.load(filter_path)
+
+        if variant == "filter_rgb":
+            return filter_image.to_pil()
+        if variant == "on_black":
+            base = Image.new("RGB", (32, 32), (0, 0, 0))
+            return self.watermark_transform(base)
+        if variant == "on_gray":
+            base = Image.new("RGB", (32, 32), (128, 128, 128))
+            return self.watermark_transform(base)
+
+        raise ValueError(f"Unknown watermark probe variant: {variant}")
+
+    def get_watermark_probe_dataloader(self, variant: str = "on_black"):
+        """透かし probe 1枚用 DataLoader（評価と同じ transform_test）"""
+        probe_pil = self._build_watermark_probe_pil(variant)
+        tensor = self.transform_test(probe_pil).unsqueeze(0)
+        dummy_label = torch.tensor([0], dtype=torch.long)
+        loader = DataLoader(
+            TensorDataset(tensor, dummy_label),
+            batch_size=1,
+            shuffle=False,
+            num_workers=0,
+            pin_memory=True if cfg.DEVICE.type == "cuda" else False,
+        )
+        return loader, variant
+
+    def get_cifar_probe_dataloader(self, global_idx: int | None = None):
+        """対照用: 透かしなし CIFAR 1枚の probe DataLoader"""
+        if global_idx is None:
+            global_idx = int(self.target_train_idx[0])
+
+        x, y = self.full_dataset[global_idx]
+        if not isinstance(x, Image.Image):
+            raise TypeError("Expected PIL image from full_dataset")
+
+        tensor = self.transform_test(x).unsqueeze(0)
+        label = torch.tensor([int(y)], dtype=torch.long)
+        loader = DataLoader(
+            TensorDataset(tensor, label),
+            batch_size=1,
+            shuffle=False,
+            num_workers=0,
+            pin_memory=True if cfg.DEVICE.type == "cuda" else False,
+        )
+        return loader, global_idx, int(y)

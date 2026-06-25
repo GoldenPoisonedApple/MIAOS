@@ -2,15 +2,13 @@ import { useState, useMemo, useCallback } from "react";
 import { useExperiments } from "../../hooks/useExperiments";
 import { useDynamicColumns, type DictionaryCellRenderContext } from "../../hooks/useDynamicColumns";
 import { CreateExperimentModal } from "./components/CreateExperimentModal";
-import { FilterManager } from "./components/FilterManager";
-import { FilePreviewModal } from "./components/FilePreviewModal";
 import { ConfirmModal } from "../../components/ui/ConfirmModal/ConfirmModal";
 import { Button } from "../../components/ui/Button/Button";
 import { Badge } from "../../components/ui/Badge/Badge";
 import { DataTable } from "../../components/ui/DataTable/DataTable";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { components } from "../../api/schema";
-import { fileApiPath } from "../../utils/fileApiPath";
+import { fileApiPath, isPngObjectKey } from "../../utils/fileApiPath";
 import styles from "./ExperimentList.module.css";
 
 type Experiment = components["schemas"]["Model"];
@@ -22,7 +20,6 @@ export const ExperimentList = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState({});
-  const [previewKey, setPreviewKey] = useState<string | null>(null);
 
   const filesRenderCell = useCallback((ctx: DictionaryCellRenderContext<Experiment>) => {
     const { value, dictKey } = ctx;
@@ -31,29 +28,39 @@ export const ExperimentList = () => {
     const objectKey = String(value);
     if (!objectKey) return "-";
     const displayName = dictKey || objectKey.split("/").pop() || objectKey;
+    const apiPath = fileApiPath(objectKey);
+
+    if (isPngObjectKey(objectKey)) {
+      return (
+        <span className={styles.fileCell}>
+          <a
+            className={styles.fileCellImageLink}
+            href={apiPath}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="別タブで開く"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              className={styles.fileCellImage}
+              src={apiPath}
+              alt={displayName}
+            />
+          </a>
+        </span>
+      );
+    }
+
     return (
-      <span className={styles.fileCell}>
-        <button
-          type="button"
-          className={styles.fileLink}
-          onClick={(e) => {
-            e.stopPropagation();
-            setPreviewKey(objectKey);
-          }}
-        >
-          {displayName}
-        </button>
-        <a
-          className={styles.openTabGlyph}
-          href={fileApiPath(objectKey)}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="別タブで開く"
-          onClick={(e) => e.stopPropagation()}
-        >
-          ⧉
-        </a>
-      </span>
+      <a
+        className={styles.fileTabLink}
+        href={apiPath}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {displayName}
+      </a>
     );
   }, []);
 
@@ -114,12 +121,36 @@ export const ExperimentList = () => {
       { accessorKey: "base_experiment_id", header: "ベース実験ID" },
       { accessorKey: "worker_name", header: "ワーカー名" },
       { accessorKey: "error_message", header: "エラーメッセージ" },
-      { accessorKey: "global_auc", header: "全体AUC" },
-			{ accessorKey: "threshold_at_01_fpr", header: "閾値 (0.1% FPR)" },
-			{ accessorKey: "threshold_at_1_fpr", header: "閾値 (1% FPR)" },
-      { accessorKey: "tpr_at_01_fpr", header: "TPR (0.1% FPR)" },
-      { accessorKey: "tpr_at_1_fpr", header: "TPR (1% FPR)" },
-      { accessorKey: "total_time", header: "実行時間(秒)" },
+      { 
+				accessorKey: "global_auc", 
+				header: "全体AUC(%)",
+				cell: ({ row }) => (row.original.global_auc != null ? (row.original.global_auc * 100).toFixed(3) : "-"),
+			},
+			{ 
+				accessorKey: "threshold_at_01_fpr", 
+				header: "閾値 (0.1% FPR)",
+				cell: ({ row }) => (row.original.threshold_at_01_fpr != null ? row.original.threshold_at_01_fpr.toFixed(3) : "-"),
+			},
+			{ 
+				accessorKey: "threshold_at_1_fpr", 
+				header: "閾値 (1% FPR)",
+				cell: ({ row }) => (row.original.threshold_at_1_fpr != null ? row.original.threshold_at_1_fpr.toFixed(3) : "-"),
+			},
+      { 
+				accessorKey: "tpr_at_01_fpr", 
+				header: "TPR (0.1% FPR)(%)",
+				cell: ({ row }) => (row.original.tpr_at_01_fpr != null ? (row.original.tpr_at_01_fpr * 100).toFixed(3) : "-"),
+			},
+      { 
+				accessorKey: "tpr_at_1_fpr", 
+				header: "TPR (1% FPR)(%)",
+				cell: ({ row }) => (row.original.tpr_at_1_fpr != null ? (row.original.tpr_at_1_fpr * 100).toFixed(3) : "-"),
+			},
+      { 
+				accessorKey: "total_time", 
+				header: "実行時間(分)",
+				cell: ({ row }) => (row.original.total_time != null ? Math.round(row.original.total_time / 60) : "-"),
+			},
       { accessorKey: "batch_size", header: "バッチサイズ" },
       { accessorKey: "max_epochs", header: "最大エポック数" },
       { accessorKey: "seed", header: "シード値" },
@@ -131,17 +162,17 @@ export const ExperimentList = () => {
       {
         accessorKey: "load_attack_model",
         header: "Load Attack Model",
-        cell: ({ row }) => (row.original.load_attack_model ? "Yes" : "No"),
+        cell: ({ row }) => (row.original.load_attack_model ? "○" : ""),
       },
       {
         accessorKey: "load_shadow_model",
         header: "Load Shadow Model",
-        cell: ({ row }) => (row.original.load_shadow_model ? "Yes" : "No"),
+        cell: ({ row }) => (row.original.load_shadow_model ? "○" : ""),
       },
       {
         accessorKey: "load_target_model",
         header: "Load Target Model",
-        cell: ({ row }) => (row.original.load_target_model ? "Yes" : "No"),
+        cell: ({ row }) => (row.original.load_target_model ? "○" : ""),
       },
       { accessorKey: "notes", header: "備考" },
       ...dynamicColumns,
@@ -183,8 +214,6 @@ export const ExperimentList = () => {
         </div>
       </div>
 
-      <FilterManager />
-
       <DataTable
         storageKey="experiments"
         data={experiments}
@@ -212,7 +241,6 @@ export const ExperimentList = () => {
         isConfirming={isDeleting}
       />
 
-      <FilePreviewModal objectKey={previewKey} onClose={() => setPreviewKey(null)} />
     </div>
   );
 };

@@ -117,8 +117,8 @@ class MIA_Attack(ABC):
         Args:
                 shadow_models: シャドーモデル
         Returns:
-                member_trues: np.ndarray 真のラベル(メンバー)
                 member_scores: np.ndarray 攻撃スコア(メンバー)
+                member_trues: np.ndarray 真値ラベル(メンバー)
         """
         pass
 
@@ -268,7 +268,17 @@ class MIA_Attack(ABC):
                 loader: データローダー
         Returns:
                 predictions: 予測結果確率(256*n, 100)
+                例:
+                tensor([
+                                        [0.01, 0.00, 0.03, ..., 0.02],  # サンプル0
+                                        [0.00, 0.01, 0.00, ..., 0.15],  # サンプル1
+                                        [0.05, 0.00, 0.70, ..., 0.00],  # サンプル2
+                                        [0.00, 0.00, 0.00, ..., 0.92],  # サンプル3
+                                        [0.01, 0.00, 0.00, ..., 0.03],  # サンプル4
+                                        [0.00, 0.02, 0.01, ..., 0.00],  # サンプル5
+                                ])
                 labels: 正解ラベル (256*n,)
+                例: tensor([12, 45,  3, 99, 45, 17]) -> 一つ目のデータの正解ラベルは12
         """
         model = model.to(cfg.DEVICE)
         model.eval()  # 評価モード: 全結合、固定挙動
@@ -344,4 +354,12 @@ class MIA_Attack(ABC):
             idx
         ]  # 元のインデックスに戻す [0, 1, 3] → 1番目の = 1
 
-        return tpr[best_idx], thresholds[best_idx]
+        tpr_value = float(tpr[best_idx])
+        threshold_value = float(thresholds[best_idx])
+        # roc_curve の thresholds[0] は inf になり得る。JSON 送信不可のため -1.0 に正規化
+        if not np.isfinite(threshold_value):
+            threshold_value = -1.0
+        if not np.isfinite(tpr_value):
+            tpr_value = 0.0
+
+        return tpr_value, threshold_value
