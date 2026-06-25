@@ -68,6 +68,7 @@ export const ExperimentList = () => {
     () => [
       { key: "hyperparameters" as const, prefix: "HP" },
       { key: "other_metrics" as const, prefix: "Metric" },
+      { key: "watermark" as const, prefix: "WM" },
       { key: "files" as const, prefix: "File", renderCell: filesRenderCell },
     ],
     [filesRenderCell]
