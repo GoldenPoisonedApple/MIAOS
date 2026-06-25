@@ -26,8 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # ghcr.io push に必要
-      actions: write # GHA build cache
+      packages: write # ghcr.io push / buildcache に必要
     steps:
       # ソースコードを実行環境にチェックアウト
       - uses: actions/checkout@v4
@@ -39,6 +38,9 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # GHCR はリポジトリ名を小文字に正規化する
+      - name: Set image repository
+        run: echo "IMAGE_REPO=${{ env.REGISTRY }}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       # イメージのメタデータ自動生成
       - id: meta
@@ -65,21 +67,16 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           # メタ情報 Git commit, repo URL など
           labels: ${{ steps.meta.outputs.labels }}
-          # ビルドキャッシュを利用
-          # gha: GitHub Actions専用のキャッシュストレージを使用,
-          # max: ビルド途中の全てのレイヤーをキャッシュ対象に
-          # registry: 前回cdでのイメージをキャッシュ対象に コールドスタートに強い
-          cache-from: |
-            type=gha,scope=build-orchestrator-backend
-            type=registry,ref=ghcr.io/goldenpoisonedapple/miaos/orchestrator-backend:latest
-          cache-to: type=gha,mode=max,scope=build-orchestrator-backend
+          # ビルドキャッシュ: GHCR の専用タグに read/write（tag 間・ブランチをまたいで共有可能）
+          # mode=max: マルチステージの中間レイヤーも含めてキャッシュ
+          cache-from: type=registry,ref=${{ env.IMAGE_REPO }}/orchestrator-backend:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_REPO }}/orchestrator-backend:buildcache,mode=max
 
   build-orchestrator-frontend:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # ghcr.io push に必要
-      actions: write # GHA build cache
+      packages: write # ghcr.io push / buildcache に必要
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -88,6 +85,8 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set image repository
+        run: echo "IMAGE_REPO=${{ env.REGISTRY }}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
       - id: meta
         uses: docker/metadata-action@v5
         with:
@@ -103,17 +102,14 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha,scope=build-orchestrator-frontend
-            type=registry,ref=ghcr.io/goldenpoisonedapple/miaos/orchestrator-frontend:latest
-          cache-to: type=gha,mode=max,scope=build-orchestrator-frontend
+          cache-from: type=registry,ref=${{ env.IMAGE_REPO }}/orchestrator-frontend:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_REPO }}/orchestrator-frontend:buildcache,mode=max
 
   build-worker:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # ghcr.io push に必要
-      actions: write # GHA build cache
+      packages: write # ghcr.io push / buildcache に必要
     steps:
       - uses: actions/checkout@v4
       # arm64 ワーカー向けクロスビルド用（ubuntu-latest は amd64）
@@ -124,6 +120,8 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set image repository
+        run: echo "IMAGE_REPO=${{ env.REGISTRY }}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
       - id: meta
         uses: docker/metadata-action@v5
         with:
@@ -140,7 +138,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha,scope=build-worker
-            type=registry,ref=ghcr.io/goldenpoisonedapple/miaos/worker:latest
-          cache-to: type=gha,mode=max,scope=build-worker
+          cache-from: type=registry,ref=${{ env.IMAGE_REPO }}/worker:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_REPO }}/worker:buildcache,mode=max

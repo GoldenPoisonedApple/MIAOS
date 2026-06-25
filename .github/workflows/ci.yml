@@ -52,8 +52,8 @@ jobs:
               - '.github/workflows/ci.yml'
 
   # バックエンドのテスト
-  backend:
-    name: Backend (Rust)
+  backend-check:
+    name: Backend Check
     runs-on: ubuntu-latest
     needs: paths # pathsの判定結果を利用 pathsジョブの正常終了を待つ
     # backendジョブを実行するかどうかの判定
@@ -146,6 +146,31 @@ jobs:
           || (echo "Error: openapi.json is out of sync. Please run schema generator locally and commit." \
           && exit 1)
 
+  # run-onのイメージの空き容量が足りなくなったので分離
+  backend-prod-build:
+    name: Backend Prod Build
+    runs-on: ubuntu-latest
+    needs: paths # pathsの判定結果を利用 pathsジョブの正常終了を待つ
+    # backendジョブを実行するかどうかの判定
+    if: needs.paths.outputs.backend == 'true'
+    permissions:
+      contents: read
+      actions: write # docker/build-push-action の GHA キャッシュ書き込み用
+    # 作業ディレクトリ設定
+    defaults:
+      run:
+        working-directory: orchestrator
+    steps:
+      - uses: actions/checkout@v4
+
+      # docker buildx(高性能ビルド環境)初期化
+      - uses: docker/setup-buildx-action@v3
+
+      # runnerユーザがroot所有の.lockファイルを読めない問題を解消
+      - name: Set container user
+        run: |
+          echo "UID=$(id -u)" >> "$GITHUB_ENV"
+          echo "GID=$(id -g)" >> "$GITHUB_ENV"
 
       # 本番環境ビルド検証
       - name: Build backend for production
@@ -156,9 +181,10 @@ jobs:
           push: false
           cache-from: type=gha,scope=build-orchestrator-backend
           cache-to: type=gha,mode=max,scope=build-orchestrator-backend
+      
 
   frontend:
-    name: Frontend (Node)
+    name: Frontend Check
     runs-on: ubuntu-latest
     needs: paths
     if: needs.paths.outputs.frontend == 'true'
