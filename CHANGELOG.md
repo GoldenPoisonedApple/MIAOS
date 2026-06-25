@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.1](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.5.0...v0.5.1) (2026-06-25)
+
+
+### Features
+
+* Add watermark key to experiment metrics in ExperimentList ([53b0884](https://github.com/GoldenPoisonedApple/MIAOS/commit/53b0884aa0e96dfcbf463ebbcb058c0ba6e43027))
+
+
+### Bug Fixes
+
+* fillterのenabledを先に評価 ([f0641e4](https://github.com/GoldenPoisonedApple/MIAOS/commit/f0641e4dede2407ffa455f4d4141c6857b7918a2))
+* task viewでマイレンダー新しい参照で再帰的に再計算される現象を修正 ([498a0a4](https://github.com/GoldenPoisonedApple/MIAOS/commit/498a0a448b9cfb0c22f3dfa04e2f6ccd3c019221))
+* エラー修正 ([dca0a35](https://github.com/GoldenPoisonedApple/MIAOS/commit/dca0a35ac38a26512734880a1c4bbfbaccaef1d9))
+
 ## [0.5.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.4.0...v0.5.0) (2026-06-25)
 
 
