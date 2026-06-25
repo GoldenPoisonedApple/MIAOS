@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.5.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.4.0...v0.5.0) (2026-06-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* offline liraの手法が間違えて居たので修正
+
+### Features
+
+* [#27](https://github.com/GoldenPoisonedApple/MIAOS/issues/27) backend filterのdelete実装 ([f57975b](https://github.com/GoldenPoisonedApple/MIAOS/commit/f57975bc649e6918255c10eab36ca46b75a43645))
+* [#30](https://github.com/GoldenPoisonedApple/MIAOS/issues/30) 画像をそのまま表示するように変更 ([4e7bf01](https://github.com/GoldenPoisonedApple/MIAOS/commit/4e7bf01de84e6d60dcf5e1ff72aea5ed91a2b4c7))
+* frontendをフィルタ対応 ([ff18202](https://github.com/GoldenPoisonedApple/MIAOS/commit/ff18202c80f6d6197b6fb9f150c56c991db2ff0a))
+* Json 変更に伴う変更(worker) ([905233b](https://github.com/GoldenPoisonedApple/MIAOS/commit/905233b4461aa65e2d48fd6d8b3a048f5afc8c2c))
+* Json変更に伴う変更反映 ([4b14d5d](https://github.com/GoldenPoisonedApple/MIAOS/commit/4b14d5d9faae95c076afda15462d5aa3330f702c))
+* liraの出力グラフ追加 ([8d5665c](https://github.com/GoldenPoisonedApple/MIAOS/commit/8d5665c240c2da4b23a6109124db80dbe2403cdd))
+* offline liraの手法が間違えて居たので修正 ([95cd0ea](https://github.com/GoldenPoisonedApple/MIAOS/commit/95cd0ea6bfcb4e68bfa23c831b25575c2b3be1d4))
+* test作成 ([9abef34](https://github.com/GoldenPoisonedApple/MIAOS/commit/9abef34dcc55cb537bfdd19be46182cf83ffd66c))
+* watermarkを独立(backend) ([2bbb710](https://github.com/GoldenPoisonedApple/MIAOS/commit/2bbb710772c12be179a78d38e9ccdaec5146face))
+* 数値データは右寄せに ([4e85bc3](https://github.com/GoldenPoisonedApple/MIAOS/commit/4e85bc38c93e49e1f74d74686f3cd89ba48db51b))
+* 表示見やすいように ([ec94500](https://github.com/GoldenPoisonedApple/MIAOS/commit/ec94500aa0d8a4dc0ad4c004a61091f284d49861))
+* 透かし単体検証実験追加 ([a078f37](https://github.com/GoldenPoisonedApple/MIAOS/commit/a078f373cec532d308478f1c34581eafcd423bef))
+
+
+### Bug Fixes
+
+* Watermarkのデフォルト値が拒否されていたのでOptionにして記載しないように変更 ([77abb0d](https://github.com/GoldenPoisonedApple/MIAOS/commit/77abb0de10b0f0cd669106acab2601feec87ce60))
+
 ## [0.4.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.3.0...v0.4.0) (2026-06-21)
 
 
