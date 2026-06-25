@@ -33,7 +33,7 @@ import styles from "./DataTable.module.css";
 import { ColumnVisibilityMenu } from "../ColumnVisibilityMenu/ColumnVisibilityMenu";
 import { useTablePreferences } from "../../../hooks/useTablePreferences";
 import { getColumnId } from "../../../utils/tablePreferences";
-import { resolveColumnAlign } from "../../../utils/columnAlign";
+import { buildColumnAlignMapFromData, type TableColumnAlign } from "../../../utils/columnAlign";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -49,8 +49,18 @@ interface DataTableProps<TData, TValue> {
   storageKey?: string;
 }
 
+const EMPTY_COLUMN_VISIBILITY: VisibilityState = {};
+const EMPTY_SORTING: SortingState = [];
+const EMPTY_COLUMN_ORDER: ColumnOrderState = [];
+
 // Draggable Header Cell Component
-function DraggableHeader<TData, TValue>({ header }: { header: Header<TData, TValue> }) {
+function DraggableHeader<TData, TValue>({
+  header,
+  align,
+}: {
+  header: Header<TData, TValue>;
+  align: TableColumnAlign;
+}) {
   const { attributes, isDragging, listeners, setNodeRef, transform, transition } = useSortable({
     id: header.column.id,
   });
@@ -76,7 +86,6 @@ function DraggableHeader<TData, TValue>({ header }: { header: Header<TData, TVal
   const { table } = header.getContext();
   const canSort = header.column.getCanSort();
   const sorted = header.column.getIsSorted();
-  const align = resolveColumnAlign(header.column, table);
   const thAlignClass =
     align === "right" ? styles.thRight : align === "center" ? styles.thCenter : undefined;
 
@@ -135,8 +144,8 @@ export function DataTable<TData, TValue>({
   data,
   rowSelection,
   onRowSelectionChange,
-  initialColumnVisibility = {},
-  initialSorting = [],
+  initialColumnVisibility = EMPTY_COLUMN_VISIBILITY,
+  initialSorting = EMPTY_SORTING,
   getRowId,
   storageKey,
 }: DataTableProps<TData, TValue>) {
@@ -148,7 +157,7 @@ export function DataTable<TData, TValue>({
   const preferenceDefaults = useMemo(
     () => ({
       columnVisibility: initialColumnVisibility,
-      columnOrder: [] as ColumnOrderState,
+      columnOrder: EMPTY_COLUMN_ORDER,
       sorting: initialSorting,
     }),
     [initialColumnVisibility, initialSorting]
@@ -183,6 +192,11 @@ export function DataTable<TData, TValue>({
   });
 
   const currentColumnIds = table.getAllLeafColumns().map((c) => c.id);
+
+  const columnAlignById = useMemo(
+    () => buildColumnAlignMapFromData(data, columns),
+    [data, columns]
+  );
 
   // Setup DnD sensors
   const sensors = useSensors(
@@ -234,7 +248,11 @@ export function DataTable<TData, TValue>({
                     strategy={horizontalListSortingStrategy}
                   >
                     {headerGroup.headers.map((header) => (
-                      <DraggableHeader key={header.id} header={header} />
+                      <DraggableHeader
+                        key={header.id}
+                        header={header}
+                        align={columnAlignById[header.column.id] ?? "left"}
+                      />
                     ))}
                   </SortableContext>
                 </tr>
@@ -245,7 +263,7 @@ export function DataTable<TData, TValue>({
                 table.getRowModel().rows.map((row) => (
                   <tr key={row.id}>
                     {row.getVisibleCells().map((cell) => {
-                      const align = resolveColumnAlign(cell.column, table);
+                      const align = columnAlignById[cell.column.id] ?? "left";
                       return (
                         <td key={cell.id} style={{ textAlign: align }}>
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}

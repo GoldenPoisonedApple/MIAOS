@@ -15,11 +15,16 @@ export const TaskList = () => {
   const [rowSelection, setRowSelection] = useState({});
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
-  const { dynamicColumns, defaultHiddenColumns } = useDynamicColumns<Task>(tasks, [
-    { key: "args_control", prefix: "Ctrl" },
-    { key: "args_keyword", prefix: "Kwarg" },
-    { key: "args_positional", prefix: "Arg" },
-  ]);
+  const dictionaryConfigs = useMemo(
+    () => [
+      { key: "args_control" as const, prefix: "Ctrl" },
+      { key: "args_keyword" as const, prefix: "Kwarg" },
+      { key: "args_positional" as const, prefix: "Arg" },
+    ],
+    []
+  );
+
+  const { dynamicColumns, defaultHiddenColumns } = useDynamicColumns<Task>(tasks, dictionaryConfigs);
 
   const initialColumnVisibility = useMemo(
     () => ({ ...defaultHiddenColumns }),
@@ -46,9 +51,9 @@ export const TaskList = () => {
           />
         ),
       },
-      { accessorKey: "id", header: "ID" },
-			{ accessorKey: "experiment_id", header: "実験ID" },
-      { accessorKey: "task", header: "タスク名" },
+      { accessorKey: "id", header: "ID", meta: { align: "left" } },
+      { accessorKey: "experiment_id", header: "実験ID", meta: { align: "right" } },
+      { accessorKey: "task", header: "タスク名", meta: { align: "left" } },
       ...dynamicColumns,
     ],
     [dynamicColumns]

@@ -51,17 +51,18 @@ class WatermarkConfig:
             if fraction > 0.0:
                 apply[key] = fraction
 
+        enabled = bool(data.get("enabled", False))
+
         filter_id = data.get("filter_id")
-        if not filter_id:
+        if enabled and not filter_id:
             raise ValueError("filter_id is required when watermark is enabled")
 
-        enabled = bool(data.get("enabled", False))
         if enabled and not apply:
             raise ValueError("apply must contain at least one split with fraction > 0")
 
         return cls(
             enabled=enabled,
-            filter_id=str(filter_id),
+            filter_id=str(filter_id) if filter_id else "",
             apply=apply,
             seed_offset=int(data.get("seed_offset", 0)),
         )
