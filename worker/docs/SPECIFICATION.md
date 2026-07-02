@@ -1,167 +1,458 @@
 # Worker `src` パッケージ概要
 
-MIAOS ワーカーは、Celery 経由で実験ジョブを受け取り、メンバーシップ推論攻撃（MIA）の実験を実行して結果を MinIO と MIAOS API に返す Python パッケージです。以下は `worker/src` 直下のディレクトリ構成と役割です。
+MIAOS ワーカーは、Celery 経由で MIA 実験を実行し、結果を MinIO と MIAOS API に返す Python パッケージ。
 
-## ディレクトリ構成
+## パッケージ構成
+
+```mermaid
+flowchart TB
+    subgraph entry [エントリ]
+        workers["workers/celery_tasks.py"]
+    end
+    subgraph core [core]
+        config["config.py"]
+        pipeline["pipeline.py"]
+    end
+    subgraph data [data]
+        dataset["dataset.py"]
+        decorations["decorations/"]
+    end
+    subgraph ml [学習・攻撃]
+        models["models/"]
+        attacks["attacks/"]
+    end
+    subgraph io [外部連携]
+        utils["utils/minio_utils.py"]
+        api["server_client/"]
+    end
+    workers --> pipeline
+    pipeline --> dataset
+    pipeline --> attacks
+    dataset --> decorations
+    attacks --> models
+    workers --> utils
+    workers --> api
+    pipeline --> config
+```
 
 | パス | 役割 |
 |------|------|
-| `core/` | 環境変数・定数・実験パイプラインの中核 |
-| `data/` | CIFAR-100 データセットの分割、透かし合成、DataLoader 構築 |
-| `models/` | ターゲット CNN と Shokri 用の攻撃ネットワーク |
-| `attacks/` | MIA の抽象基底クラスと具体手法（LiRA / Shokri） |
-| `workers/` | Celery アプリとタスク定義 |
-| `utils/` | MinIO（S3 互換）へのアップロード・ダウンロード |
-| `server_client/` | MIAOS API 向けの自動生成 HTTP クライアントとモデル |
+| `core/` | 環境変数・定数・実験パイプライン |
+| `data/` | CIFAR-100 分割・装飾・DataLoader |
+| `models/` | TargetCNN / AttackNet |
+| `attacks/` | LiRA / Shokri MIA |
+| `workers/` | Celery タスク |
+| `utils/` | MinIO アップロード・ダウンロード |
+| `server_client/` | 自動生成 API クライアント |
 
-## 処理の流れ（エントリポイント）
+---
 
-1. **`workers/celery_tasks.py`** の Celery タスク `mia_tasks.run_attack`（`execute_attack_task`）が Redis ブローカーからパラメータを受け取る。
-2. `Client(base_url=cfg.MIAOS_API_URL)` で API クライアントを生成し、`claim_experiment` で実験の受領を通知する。
-3. **`main()`** が `CreateExperimentRequest.from_dict(params)` でリクエストを復元する。
-4. `base_experiment_id` がある場合は **`utils/minio_utils.download_model_dir`** で先行実験のアーティファクトを `./cache/<experiment_id>/` に取得し、ターゲット／シャドウ／攻撃モデルや `dataset.json` の読み込み元とする。
-5. **`core/pipeline.run_experiment`** を一時ディレクトリ上で実行し、成果物とメトリクスを得る。
-6. **`minio_utils.upload_results_dir`** で一時ディレクトリ全体を MinIO の `results/{experiment_id}/` プレフィックス付きでアップロードする。
-7. **`reflect_experiment_results`** で AUC・TPR・閾値・ファイル一覧などを API に POST する。例外時は `FAILED` と `error_message` を送る。
+## ジョブ処理フロー
 
-## `core/`
+```mermaid
+sequenceDiagram
+    participant Redis
+    participant Celery as celery_tasks
+    participant API as MIAOS API
+    participant MinIO
+    participant Pipeline as pipeline.run_experiment
 
-### `config.py`
+    Redis->>Celery: execute_attack_task
+    Celery->>API: claim_experiment
+    alt base_experiment_id あり
+        Celery->>MinIO: download_model_dir
+        Note over Celery: 親モデルを cache へ
+    end
+    Celery->>Pipeline: run_experiment
+    Pipeline-->>Celery: metrics
+    Celery->>MinIO: upload_results_dir
+    Celery->>API: reflect_experiment_results
+    Note over Celery,API: 失敗時は FAILED + error_message
+```
 
-- `python-dotenv` で `.env` を読み込み、Redis・MinIO・MIAOS API の URL／認証、ワーカー識別子 `PC_NAME` を設定する。
-- `DEVICE` は CUDA が利用可能なら GPU、否则 CPU。
-- データ・モデル保存の相対パス（`DATA_DIR`, `MODEL_DIR`, `LOCAL_CACHE_DIR`）と、保存ファイル名（`TARGET_MODEL_NAME` 等）、`NUM_CLASSES`（100）、`ATTACK_MODEL_EPOCHS` などを定義する。
-- **`MIAMethod`** 列挙型はパイプライン外の参照用。実際の分岐は `server_client.models.MiaMethod`（API スキーマ側）と整合させている。
+---
 
-### `pipeline.py` — `run_experiment`
+## 実験パイプライン（`pipeline.py`）
 
-`CreateExperimentRequest` と作業ディレクトリ `work_dir`、オプションの `assigned_model_path`（ベース実験のキャッシュパス）、`experiment_id` を受け取り、以下のフェーズで進む。
+```mermaid
+flowchart LR
+    P1["Phase 1<br/>dataset + MIA 選択"]
+    P2["Phase 2<br/>ターゲット学習/読込"]
+    P3["Phase 3<br/>シャドウ学習/読込"]
+    P4["Phase 4<br/>attack"]
+    P45["Phase 4.5<br/>watermark probe"]
+    P5["Phase 5<br/>ROC / AUC"]
 
-1. **Phase 1**: `dataset` を構築し、`request.method` に応じて `MIA_LIRA` または `MIA_Shokri` を選択する。
-2. **Phase 2**: ターゲットモデル `TargetCNN` を学習するか、`load_target_model` なら MinIO 由来の `target_model.pth` を読み込む。
-3. **Phase 3**: シャドウモデルを複数学習するか、`load_shadow_model` なら `shadow_models.pth`（state_dict のリスト）から復元する。
-4. **Phase 4**: 選択した MIA クラスの `attack()` でメンバーシップスコアと真値ラベルを得る。
-5. **Phase 5**: `comprehensive_evaluate` で ROC・AUC・所定 FPR における TPR／閾値を計算し、`roc_curve.png` を `work_dir` に保存する。
+    P1 --> P2 --> P3 --> P4
+    P4 --> P45
+    P4 --> P5
+    P45 --> P5
+```
 
-ログは `work_dir/execution.log` と標準出力の両方に出力される。
+| Phase | 内容 |
+|-------|------|
+| 1 | `dataset(work_dir, request)` 構築（分割は request のみ参照）、`MIA_LIRA` / `MIA_Shokri` 選択 |
+| 2 | `TargetCNN` 学習、または `assigned_model_path` から `load_target_model` |
+| 3 | シャドウ複数学習、または `assigned_model_path` から `load_shadow_model` |
+| 4 | `attack()` → メンバーシップスコア・真値 |
+| 4.5 | `decoration_config.has_watermark()` 時のみ `WatermarkProbeAnalysis` |
+| 5 | `comprehensive_evaluate` → `roc_curve.png` 等 |
 
-**補足**: `attack()` の戻り値は `(スコア配列, 真値配列)` の順である。`pipeline` では変数名が `member_trues, member_scores` だが、実際に渡している第1引数はスコア、第2は真値であり、`MIA_Attack.comprehensive_evaluate(self, scores, trues)` の引数順と一致している。
+`attack()` の戻り値は `(scores, trues)`。`comprehensive_evaluate(scores, trues)` の引数順と一致。
 
-## `data/`
+ログ: `work_dir/execution.log` + stdout
 
-### `dataset.py`
+---
 
-- CIFAR-100 の train+test を `ConcatDataset` として扱い、`CreateExperimentRequest` の `target_train_size` / `target_test_size` とシードでインデックスを分割する。
-- 新規実験では `work_dir` に **`dataset.json`**（ターゲット学習・テスト・シャドウ用プールのインデックス）を書き出す。ベース実験がある場合は `assigned_model_path` 上の `dataset.json` を読み、同一のデータ分割を再現する。
-- **`TransformedSubset`**: 学習用は拡張付き `transform_train`、テスト用は `transform_test`。評価・ロジット抽出用ローダー（`get_eval_*`）では、学習分割でも拡張を使わず `transform_test` で順序固定・shuffle 無効にする。
-- シャドウ用は `shadow_pool_indices` から `shadow_train_size` / `shadow_test_size` と `seed + i` で毎シャドウ分割を生成する。
+## `data/` — 責務分担
 
-### 透かし（`data/watermark/`）
+```mermaid
+flowchart TB
+    subgraph datasetLayer ["dataset.py"]
+        split["インデックス分割"]
+        dl["DataLoader 構築"]
+        cifarProbe["get_cifar_probe_dataloader"]
+    end
+    subgraph decorationsLayer ["decorations/"]
+        builder["SampleDecoratorBuilder"]
+        subset["TransformedSubset"]
+        wmProbe["watermark/probe.py"]
+    end
+    subgraph attacksLayer ["attacks/"]
+        wp["WatermarkProbeAnalysis"]
+    end
 
-MinIO 上の 32×32 RGBA フィルタ画像を参照し、Normalize 前の PIL 段階で alpha ブレンド合成する。設定は `CreateExperimentRequest.watermark` から読み取る。
+  datasetLayer --> builder
+  builder --> subset
+  subset --> dl
+  wmProbe --> wp
+  datasetLayer --> wp
+```
 
-**`watermark` 例**:
+| モジュール | 責務 |
+|-----------|------|
+| `dataset.py` | CIFAR 分割、`get_*_dataloaders`、CIFAR 対照 probe |
+| `decorations/` | 装飾設定パース・適用・透かし I/O |
+| `watermark_probe.py` | 透かし probe 解析（`build_probe_dataloader` 利用） |
+
+`dataset` は透かしの MinIO 取得や probe PIL 生成を**持たない**。`SampleDecoratorBuilder.get_watermark_loader()` 経由で透かし層に委譲する。
+
+---
+
+## データ分割
+
+`dataset.json` は使わない。毎回 `CreateExperimentRequest` の入力から分割を再計算する。
+
+```mermaid
+flowchart TD
+    full["full_dataset<br/>CIFAR-100 train+test Concat"]
+    seed["seed + target_train_size"]
+    split1["train_test_split"]
+    tt["target_train_idx"]
+    rem["remaining"]
+    split2["train_test_split<br/>seed + target_test_size"]
+    ttest["target_test_idx"]
+    shadow["shadow_pool_indices"]
+
+    full --> split1
+    seed --> split1
+    split1 --> tt
+    split1 --> rem
+    rem --> split2
+    split2 --> ttest
+    split2 --> shadow
+```
+
+シャドウ分割は `shadow_pool_indices` から `seed + i` で毎シャドウ再計算（`dataset.json` に保存しない）。
+
+### `base_experiment_id` の契約
+
+```mermaid
+flowchart LR
+    subgraph childReq ["子実験リクエスト"]
+        seed["seed / sizes"]
+        hp["hyperparameters"]
+        baseId["base_experiment_id"]
+    end
+    subgraph worker ["Worker"]
+        split["train_test_split"]
+        models["MinIO から親モデル"]
+    end
+    seed --> split
+    hp --> split
+    baseId --> models
+```
+
+親モデル流用時、呼び出し側が親と**同じ `seed` / `target_train_size` / `target_test_size`** を指定することで同一分割を再現する。Worker は親パラメータを API から取得しない。
+
+### DataLoader 対応
+
+```mermaid
+flowchart LR
+    subgraph train ["学習用 get_target / get_shadow"]
+        t1["transform_train"]
+        t2["shuffle=True"]
+    end
+    subgraph eval ["評価用 get_eval_*"]
+        e1["transform_test"]
+        e2["shuffle=False"]
+    end
+```
+
+---
+
+## `data/decorations/` — サンプル装飾
+
+設定の唯一の経路: `hyperparameters.eval_decoration` / `target_train_decoration`  
+1 サンプルに同時適用する装飾は 1 種類。Normalize 前の PIL 段階で適用。
+
+### モジュール構成
+
+```mermaid
+flowchart TB
+    subgraph decorations [decorations/]
+        protocol["protocol.py<br/>SampleDecorator"]
+        config["config.py<br/>DecorationConfig"]
+        apply["apply_policy.py<br/>fraction / seed"]
+        fractional["fractional.py<br/>FractionalDecorator"]
+        builder["builder.py<br/>lazy WatermarkLoader"]
+        subset["subset.py<br/>TransformedSubset"]
+        subgraph wm [watermark/]
+            filter["filter.py"]
+            transform["transform.py"]
+            loader["loader.py<br/>MinIO + cache"]
+            wdec["decorator.py"]
+            probe["probe.py<br/>preview / probe PIL"]
+        end
+        subgraph dm [display_mask/]
+            ddec["decorator.py"]
+        end
+    end
+    config --> builder
+    apply --> builder
+    builder -->|"watermark のみ"| loader
+    builder --> fractional
+    builder --> wm
+    builder --> dm
+    loader --> probe
+    fractional --> subset
+```
+
+### `WatermarkLoader` の lazy 初期化
+
+```mermaid
+flowchart TD
+    init["SampleDecoratorBuilder 生成"]
+    dmOnly["display_mask のみ"]
+    wmBuild["build WatermarkDecorationSpec"]
+    wmPreview["save_comparison_preview"]
+    wmProbe["build_probe_dataloader"]
+    lazy["get_watermark_loader 初回呼び出し"]
+    minio["MinIO filters/id.png"]
+
+    init --> dmOnly
+    init --> wmBuild
+    init --> wmPreview
+    wmBuild --> lazy
+    wmPreview --> lazy
+    wmProbe --> lazy
+    lazy --> minio
+    dmOnly -.->|"loader 未生成"| skip["MinIO アクセスなし"]
+```
+
+透かし装飾が不要な実験では `WatermarkLoader` は作られない。
+
+### 装飾パイプライン
+
+```mermaid
+flowchart LR
+    HP["hyperparameters"]
+    DC["DecorationConfig"]
+    B["SampleDecoratorBuilder"]
+    RS["seed + seed_offset"]
+    IDX["select_indices_by_fraction"]
+    FRAC["FractionalDecorator"]
+    INNER["watermark / display_mask"]
+    PIL["生 PIL"]
+    TT["ToTensor + Normalize"]
+
+    HP --> DC --> B
+    B --> RS --> IDX --> FRAC
+    B --> INNER --> FRAC
+    PIL --> FRAC --> TT
+```
+
+### 設定例
 
 ```json
 {
-  "enabled": true,
-  "filter_id": "circle",
-  "apply": {
-    "target_train": 1.0,
-    "shadow_train": 0.5
-  },
-  "seed_offset": 0
+  "eval_decoration": {"type": "watermark", "filter_id": "circle", "fraction": 1.0},
+  "target_train_decoration": {
+    "type": "display_mask",
+    "width": 16, "height": 16, "position": [0, 0],
+    "fraction": 0.5, "seed_offset": 0
+  }
 }
 ```
 
-| キー | 説明 |
-|------|------|
-| `enabled` | 透かし ON/OFF |
-| `filter_id` | MinIO キー `filters/{filter_id}.png` の ID |
-| `apply` | 分割名 → 付与割合（0.0–1.0）。キーがない、または値 ≤ 0 は未適用 |
-| `seed_offset` | 透かし対象選定シード = `seed + seed_offset`（分割ごとに `+ split_offset`） |
+| キー | 適用先 |
+|------|--------|
+| `eval_decoration` | `get_eval_target_dataloaders` / `get_eval_shadow_dataloader` |
+| `target_train_decoration` | `get_target_dataloaders` の train |
 
-有効な `apply` キー: `target_train`, `target_test`, `shadow_train`, `shadow_test`
+| `type` | パラメータ |
+|--------|-----------|
+| `watermark` | `filter_id`, `fraction`（省略時 1.0）, `seed_offset`（省略時 0） |
+| `display_mask` | `width`, `height`, `position`（`[x,y]` または `x`/`y`）, `fraction`, `seed_offset` |
 
-**フィルタ画像**: Worker は `minio_utils.download_filter` で `filters/{filter_id}.png` を `./cache/filters/` に取得する。
+**適用ポリシー（全装飾共通）**
 
-**再現性**: 透かし有効時、`dataset.json` に `watermark.config` と full_dataset 上の `watermarked_indices` を保存する。`base_experiment_id` 指定時は保存済み設定を読み込む。
+- 選定シード: `experiment.seed + seed_offset`
+- 同じ `fraction` + `seed_offset` + 同じ pool → type が違っても同一サンプルに適用
+- 透かしフィルタ: `WatermarkLoader` が MinIO `filters/{filter_id}.png` を `./cache/filters/` に取得
+- デバッグ: 透かし有効時 `work_dir/watermark_preview_{eval|target_train}.png`（role ごとに `save_comparison_preview`）
 
-**処理フロー**: PIL 読み込み →（対象インデックスなら）`ImageWatermark` 合成 → `ToTensor` → `Normalize`。学習・評価ローダーで同一の透かし判定を適用する。
+### 透かし probe フロー（Phase 4.5）
 
-**デバッグ**: 透かし有効時 `work_dir/watermark_preview.png` に透かしあり/なしの比較画像を保存する。
+```mermaid
+sequenceDiagram
+    participant Pipeline
+    participant Dataset as dataset
+    participant Config as DecorationConfig
+    participant ProbeMod as watermark/probe.py
+    participant WProbe as WatermarkProbeAnalysis
+
+    Pipeline->>Dataset: decoration_config.has_watermark
+    Pipeline->>WProbe: analyze
+    WProbe->>Config: watermark_roles
+    loop eval / target_train ごと
+        WProbe->>Dataset: get_watermark_loader
+        WProbe->>ProbeMod: build_probe_dataloader filter_id
+    end
+    WProbe->>Dataset: get_cifar_probe_dataloader
+    Note over WProbe: 各 role の透かし probe と CIFAR 対照を比較
+```
+
+`CreateExperimentRequest.watermark`（トップレベル）は**無視**。装飾は `hyperparameters` のみ。
+
+---
+
+## `attacks/` — MIA 手法
+
+```mermaid
+classDiagram
+    class MIA_Attack {
+        +train_target_model()
+        +train_shadow_models()
+        +attack()
+        +comprehensive_evaluate()
+    }
+    class MIA_LIRA {
+        Offline LiRA
+        z-score 攻撃
+    }
+    class MIA_Shokri {
+        AttackNet 学習
+        クラス別判定
+    }
+    class WatermarkProbeAnalysis {
+        build_probe_dataloader 利用
+        CIFAR 対照 probe
+    }
+    MIA_Attack <|-- MIA_LIRA
+    MIA_Attack <|-- MIA_Shokri
+```
+
+| クラス | 概要 |
+|--------|------|
+| `MIA_Attack` | 学習・予測・ROC 共通基底 |
+| `MIA_LIRA` | シャドウ分布から z-score、LiRA スコア |
+| `MIA_Shokri` | ソフトマックス特徴 → `AttackNet` |
+| `WatermarkProbeAnalysis` | `watermark_roles` ごとに probe を実行し、CIFAR 対照と prediction 差を比較 |
+
+---
 
 ## `models/`
 
-- **`target_model.TargetCNN`**: CIFAR-100（3×32×32、100 クラス）向けの畳み込み＋全結合ネットワーク。ターゲット・シャドウの両方に利用される。
-- **`attack_model.AttackNet`**: Shokri 手法で、正解クラスに対応する確率ベクトル（次元 `NUM_CLASSES`）からメンバーシップを判定する 2 クラス用の小さな MLP。
+| モジュール | 用途 |
+|-----------|------|
+| `TargetCNN` | CIFAR-100（3×32×32, 100 クラス）ターゲット・シャドウ共用 |
+| `AttackNet` | Shokri 用 2 クラス MLP |
 
-## `attacks/`
+---
 
-### `mia_attack.MIA_Attack`（抽象クラス）
+## MinIO 連携（`utils/minio_utils.py`）
 
-- ターゲット／シャドウの学習（AdamW + CosineAnnealingLR）、予測取得、精度計算、ROC 描画とメトリクス集計を共通化する。
-- **`attack`** はサブクラスで実装する。シグネチャは実装側で `(shadow_models, target_model)` を受け取る。
-- **`comprehensive_evaluate`**: `sklearn.metrics.roc_curve` / `auc` と対数軸の ROC 図保存。1%、0.1%、0.01% FPR 付近の TPR と閾値を算出する。
+```mermaid
+flowchart LR
+    subgraph download [ダウンロード]
+        dm["download_model_dir<br/>results/id/"]
+        df["download_filter<br/>filters/id.png"]
+    end
+    subgraph upload [アップロード]
+        ur["upload_results_dir<br/>work_dir → results/id/"]
+    end
+    MinIO[(MinIO)]
+    cache["./cache/"]
+    work["work_dir/"]
 
-### `mia_lira.MIA_LIRA`
+    MinIO --> dm --> cache
+    MinIO --> df --> cache
+    work --> ur --> MinIO
+```
 
-- Offline LiRA 系: シャドウモデル群で正解クラス確率のロジットを集め、メンバー／非メンバー分布の平均・標準偏差を推定し、ターゲットの z-score を攻撃スコアとする。
-- スコア分布のヒストグラムを `score_distribution_lira.png` に保存する。
-
-### `mia_shokri.MIA_Shokri`
-
-- 各シャドウのメンバー／非メンバーについてソフトマックス出力を特徴とし、クラスごとに `AttackNet` を学習する。
-- ターゲットの学習・テスト分割についてクラス別に攻撃モデルを適用し、メンバー確率をスコアとして ROC 用データを集約する。
-
-## `utils/minio_utils.py`
-
-- **`get_s3_client`**: `boto3` の S3 クライアントを `cfg.MINIO_URL` 等で構成する。
-- **`download_model_dir(experiment_id)`**: バケット内 `results/{experiment_id}/` 配下を `./cache/results/{experiment_id}/` に再帰ダウンロード。
-- **`download_filter(filter_id)`**: `filters/{filter_id}.png` を `./cache/filters/` に取得。
-- **`upload_results_dir(local_dir, remote_prefix)`**: ローカルディレクトリを走査し、`mimetypes` で `ContentType` を付与してアップロードする（`.log` は `text/plain` に登録済み）。実験成果物は `results/{experiment_id}/` プレフィックスを使用する。
+---
 
 ## `server_client/`
 
-OpenAPI から生成された **httpx** ベースのクライアント群である。
+OpenAPI 生成の httpx クライアント。ワーカーで主に使用:
 
-- **`client.Client` / `AuthenticatedClient`**: 同期・非同期の HTTP セッション管理。
-- **`models/`**: `CreateExperimentRequest`、`UpdateResultsRequest`、`MiaMethod`、`ExperimentStatus` など API の入出力型（attrs）。
-- **`api/`**: `experiments`（作成・一覧・クレーム・結果反映・削除）、`tasks` などエンドポイントごとの `sync` / `asyncio` 関数。
+```mermaid
+flowchart LR
+    Celery --> Client
+    Client --> claim["claim_experiment"]
+    Client --> reflect["reflect_experiment_results"]
+    Client --> models["CreateExperimentRequest 等"]
+```
 
-ワーカー本体では主に `Client`、`CreateExperimentRequest`、`ClaimExperimentRequest`、`UpdateResultsRequest` 関連と、`claim_experiment` / `reflect_experiment_results` が使われる。
+---
 
-## 環境変数（`core/config.py` 参照）
+## 環境変数
 
-実行前に `.env` などで次を設定する想定である。
+| 変数 | 用途 |
+|------|------|
+| `PC_NAME` | ワーカー識別名 |
+| `REDIS_URL` | Celery ブローカー |
+| `MINIO_URL` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET_NAME` | オブジェクトストレージ |
+| `MIAOS_API_URL` | オーケストレータ API |
 
-- `PC_NAME`: ワーカー識別名（API 報告用）
-- `REDIS_URL`: Celery ブローカー
-- `MINIO_URL`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET_NAME`
-- `MIAOS_API_URL`: オーケストレータ API のベース URL
+`core/config.py` 参照。`DEVICE` は CUDA 利用可能なら GPU。
 
-## モジュール import について
+---
 
-コードは `src.` プレフィックス付きでパッケージを import している（例: `from src.core.pipeline import run_experiment`）。実行時はプロジェクトルートまたは `PYTHONPATH` に `worker` が含まれる構成を前提とする。
+## import 規約
 
-## 関連ファイル一覧（抜粋）
+`from src.core.pipeline import run_experiment` のように `src.` プレフィックス付き。  
+実行時はプロジェクトルート（または `PYTHONPATH` に worker）を含む構成を前提とする。
+
+## 関連ファイル（`data/` 抜粋）
 
 ```
-src/
-├── README.md                 # 本ドキュメント
-├── core/config.py
-├── core/pipeline.py
-├── data/dataset.py
-├── data/watermark/
-│   ├── config.py
-│   ├── mask.py          # FilterImage
-│   └── transform.py     # ImageWatermark
-├── models/target_model.py
-├── models/attack_model.py
-├── attacks/mia_attack.py
-├── attacks/mia_lira.py
-├── attacks/mia_shokri.py
-├── workers/celery_tasks.py
-├── utils/minio_utils.py
-└── server_client/            # 生成クライアント一式
+data/
+├── dataset.py
+└── decorations/
+    ├── protocol.py
+    ├── apply_policy.py
+    ├── fractional.py
+    ├── config.py
+    ├── builder.py
+    ├── subset.py
+    ├── watermark/
+    │   ├── filter.py
+    │   ├── transform.py
+    │   ├── loader.py
+    │   ├── decorator.py
+    │   └── probe.py
+    └── display_mask/
+        └── decorator.py
 ```
