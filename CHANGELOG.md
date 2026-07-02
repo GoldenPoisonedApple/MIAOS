@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.2](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.5.1...v0.5.2) (2026-07-02)
+
+
+### Features
+
+* Add worker production build step to CI workflow with disk space cleanup ([0cb756c](https://github.com/GoldenPoisonedApple/MIAOS/commit/0cb756c7ab30b113e8fa8af317bcfef889c0c3f4))
+* デコレータ大幅改善 ([aeba59a](https://github.com/GoldenPoisonedApple/MIAOS/commit/aeba59a1a9c85350717f86cd8778a026dd35feb8))
+* デコレータ大幅改善 ([c06a438](https://github.com/GoldenPoisonedApple/MIAOS/commit/c06a438d5158abef2f16c76d2517849d7021e1f1))
+
 ## [0.5.1](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.5.0...v0.5.1) (2026-06-25)
 
 
