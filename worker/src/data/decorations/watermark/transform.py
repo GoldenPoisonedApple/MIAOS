@@ -3,16 +3,18 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
-from src.data.watermark.mask import FilterImage
+from src.data.decorations.watermark.filter import FilterImage
 
 
 class ImageWatermark:
     """PIL 画像にフィルタ画像を alpha ブレンドで合成する"""
 
+    # 初期化
     def __init__(self, filter_image: FilterImage):
         self._rgb = filter_image.rgb
         self._alpha = filter_image.alpha
 
+    # フィルタ画像を alpha ブレンドで合成する
     def __call__(self, image: Image.Image) -> Image.Image:
         if image.mode != "RGB":
             image = image.convert("RGB")

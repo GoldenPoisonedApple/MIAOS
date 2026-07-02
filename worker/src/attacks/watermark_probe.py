@@ -13,6 +13,7 @@ from tqdm import trange
 
 from src.attacks.mia_attack import MIA_Attack
 from src.data.dataset import dataset
+from src.data.decorations.watermark.probe import build_probe_dataloader
 from src.server_client.models import CreateExperimentRequest
 
 
@@ -36,8 +37,10 @@ class WatermarkProbeAnalysis:
     @staticmethod
     def _predict_probe(model: nn.Module, loader) -> np.ndarray:
         preds, _ = MIA_Attack.get_predictions(model, loader)
+        # 1枚分のデータのみなので次元削減
         return preds[0].numpy()
 
+    # 1枚の画像を解析
     def _analyze_one_probe(
         self,
         probe_loader,
@@ -45,8 +48,7 @@ class WatermarkProbeAnalysis:
         shadow_models: list[nn.Module],
         target_model: nn.Module,
     ) -> dict:
-        target_pred = self._predict_probe(target_model, probe_loader)
-
+        # シャドーモデルの予測結果取得
         shadow_preds = []
         for i in trange(
             len(shadow_models),
@@ -54,6 +56,9 @@ class WatermarkProbeAnalysis:
         ):
             shadow_preds.append(self._predict_probe(shadow_models[i], probe_loader))
             shadow_models[i].to("cpu")
+
+        # ターゲットモデルの予測結果取得
+        target_pred = self._predict_probe(target_model, probe_loader)
 
         shadow_preds = np.array(shadow_preds)
         shadow_mean = shadow_preds.mean(axis=0)
@@ -90,20 +95,20 @@ class WatermarkProbeAnalysis:
             },
         }
 
+    # 透かし probe 解析
     def analyze(
         self,
         shadow_models: list[nn.Module],
         target_model: nn.Module,
     ) -> dict:
-        watermark_loader, variant = self.dataset.get_watermark_probe_dataloader(
-            self.variant
-        )
-        watermark_result = self._analyze_one_probe(
-            watermark_loader,
-            probe_name=f"watermark_{variant}",
-            shadow_models=shadow_models,
-            target_model=target_model,
-        )
+        roles = self.dataset.decoration_config.watermark_roles()
+        if not roles:
+            raise ValueError(
+                "Watermark decoration is not configured for this experiment"
+            )
+
+        wm_loader = self.dataset.get_watermark_loader()
+        transform = self.dataset.transform_test
 
         cifar_loader, cifar_global_idx, cifar_label = (
             self.dataset.get_cifar_probe_dataloader()
@@ -115,41 +120,59 @@ class WatermarkProbeAnalysis:
             target_model=target_model,
         )
 
-        summary = {
-            "variant": variant,
-            "filter_id": self.dataset.watermark_config.filter_id,
-            "watermark_probe": watermark_result["metrics"],
+        summary: dict = {
+            "variant": self.variant,
             "cifar_control_probe": {
                 **cifar_result["metrics"],
                 "global_idx": cifar_global_idx,
                 "label": cifar_label,
             },
-            "watermark_minus_cifar_l2_delta": float(
-                np.linalg.norm(watermark_result["delta"] - cifar_result["delta"])
-            ),
         }
+        watermark_results: dict[str, dict] = {}
+
+        for role, filter_id in roles:
+            probe_loader, variant = build_probe_dataloader(
+                transform,
+                wm_loader,
+                filter_id,
+                self.variant,
+            )
+            watermark_result = self._analyze_one_probe(
+                probe_loader,
+                probe_name=f"watermark_{role}_{variant}",
+                shadow_models=shadow_models,
+                target_model=target_model,
+            )
+            watermark_results[role] = watermark_result
+            summary[role] = {
+                "filter_id": filter_id,
+                "watermark_probe": watermark_result["metrics"],
+                "watermark_minus_cifar_l2_delta": float(
+                    np.linalg.norm(watermark_result["delta"] - cifar_result["delta"])
+                ),
+            }
+            self._plot_delta(
+                watermark_result["delta"],
+                title_prefix=f"watermark {role} ({variant})",
+                filename=f"delta_topk_watermark_{role}.png",
+            )
+            self._plot_predictions(
+                watermark_result["target_pred"],
+                watermark_result["shadow_mean"],
+                title=f"Watermark probe ({role}): top-k class probabilities",
+                filename=f"pred_topk_watermark_{role}.png",
+            )
 
         out_dir = self._save_artifacts(
-            variant=variant,
-            watermark_result=watermark_result,
+            variant=self.variant,
+            watermark_results=watermark_results,
             cifar_result=cifar_result,
             summary=summary,
-        )
-        self._plot_delta(
-            watermark_result["delta"],
-            title_prefix=f"watermark ({variant})",
-            filename="delta_topk_watermark.png",
         )
         self._plot_delta(
             cifar_result["delta"],
             title_prefix="cifar control",
             filename="delta_topk_cifar_control.png",
-        )
-        self._plot_predictions(
-            watermark_result["target_pred"],
-            watermark_result["shadow_mean"],
-            title="Watermark probe: top-k class probabilities",
-            filename="pred_topk_watermark.png",
         )
         self._plot_predictions(
             cifar_result["target_pred"],
@@ -165,28 +188,33 @@ class WatermarkProbeAnalysis:
     def _save_artifacts(
         self,
         variant: str,
-        watermark_result: dict,
+        watermark_results: dict[str, dict],
         cifar_result: dict,
         summary: dict,
     ) -> str:
         out_dir = os.path.join(self.model_save_dir, "watermark_probe")
         os.makedirs(out_dir, exist_ok=True)
 
+        npz_payload: dict = {
+            "variant": variant,
+            "cifar_target_pred": cifar_result["target_pred"],
+            "cifar_shadow_preds": cifar_result["shadow_preds"],
+            "cifar_shadow_mean": cifar_result["shadow_mean"],
+            "cifar_shadow_std": cifar_result["shadow_std"],
+            "cifar_delta": cifar_result["delta"],
+            "cifar_z_per_class": cifar_result["z_per_class"],
+        }
+        for role, result in watermark_results.items():
+            npz_payload[f"{role}_target_pred"] = result["target_pred"]
+            npz_payload[f"{role}_shadow_preds"] = result["shadow_preds"]
+            npz_payload[f"{role}_shadow_mean"] = result["shadow_mean"]
+            npz_payload[f"{role}_shadow_std"] = result["shadow_std"]
+            npz_payload[f"{role}_delta"] = result["delta"]
+            npz_payload[f"{role}_z_per_class"] = result["z_per_class"]
+
         np.savez_compressed(
             os.path.join(out_dir, "watermark_probe_artifacts.npz"),
-            variant=variant,
-            watermark_target_pred=watermark_result["target_pred"],
-            watermark_shadow_preds=watermark_result["shadow_preds"],
-            watermark_shadow_mean=watermark_result["shadow_mean"],
-            watermark_shadow_std=watermark_result["shadow_std"],
-            watermark_delta=watermark_result["delta"],
-            watermark_z_per_class=watermark_result["z_per_class"],
-            cifar_target_pred=cifar_result["target_pred"],
-            cifar_shadow_preds=cifar_result["shadow_preds"],
-            cifar_shadow_mean=cifar_result["shadow_mean"],
-            cifar_shadow_std=cifar_result["shadow_std"],
-            cifar_delta=cifar_result["delta"],
-            cifar_z_per_class=cifar_result["z_per_class"],
+            **npz_payload,
         )
 
         with open(

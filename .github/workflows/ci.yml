@@ -264,6 +264,30 @@ jobs:
           uv run --frozen openapi-python-client generate --meta none --output-path src/server_client --overwrite --path $GITHUB_WORKSPACE/schema/openapi.json
           git diff --exit-code || (echo "Error: Worker generated types are out of sync." && exit 1)
 
+  # run-onのイメージの空き容量が足りなくなったので分離
+  worker-prod-build:
+    name: Worker Prod Build
+    runs-on: ubuntu-latest
+    needs: paths
+    if: needs.paths.outputs.worker == 'true'
+    permissions:
+      contents: read
+      actions: write # docker/build-push-action の GHA キャッシュ書き込み用
+    defaults:
+      run:
+        working-directory: worker
+
+    steps:
+      - uses: actions/checkout@v4
+        
+      # クリーンアップ
+      - uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+        
       # docker buildx(高性能ビルド環境)初期化
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3

@@ -90,12 +90,7 @@ def run_experiment(
     # ----------------------------------
     logger.info("[Phase 1] Preparing data and selecting attack method...")
     p1_start_time = time.time()
-    if is_assigned_model_path:
-        dataset_instance = dataset(
-            work_dir, request, assigned_model_path=assigned_model_path
-        )
-    else:
-        dataset_instance = dataset(work_dir, request)
+    dataset_instance = dataset(work_dir, request)
 
     # 攻撃方法の選択
     mia_method = request.method
@@ -167,7 +162,7 @@ def run_experiment(
     # 透かし probe 解析（透かし有効時のみ）
     # ----------------------------------
     watermark_probe_metrics = None
-    if dataset_instance.watermark_config is not None:
+    if dataset_instance.decoration_config.has_watermark():
         logger.info("[Phase 4.5] Watermark probe analysis...")
         p45_start_time = time.time()
         probe = WatermarkProbeAnalysis(

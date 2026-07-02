@@ -35,15 +35,19 @@ def download_filter(filter_id: str) -> str:
     local_path = os.path.join(local_dir, f"{filter_id}.png")
 
     s3 = get_s3_client()
+    # isfile: パスが通常ファイルの時のみ実行
     if os.path.isfile(local_path):
         try:
+            # ファイルのサイズを取得
             head = s3.head_object(Bucket=cfg._MINIO_BUCKET_NAME, Key=remote_key)
+            # ローカルキャッシュのファイルサイズとリモートのファイルサイズが一致する場合はダウンロードをスキップ
             if os.path.getsize(local_path) == head["ContentLength"]:
                 print(f"[{cfg.PC_NAME}] Cached filter: {remote_key}")
                 return local_path
         except Exception:
             pass
 
+    # ダウンロード
     print(f"[{cfg.PC_NAME}] Downloading filter: {remote_key} -> {local_path}")
     s3.download_file(cfg._MINIO_BUCKET_NAME, remote_key, local_path)
     return local_path

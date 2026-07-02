@@ -1,77 +1,41 @@
 import logging
+import os
+
+import numpy as np
+import torch
 import torchvision
 import torchvision.transforms as transforms
-import torch
-from torch.utils.data import DataLoader, ConcatDataset, Dataset, TensorDataset
-import src.core.config as cfg
-from src.server_client.models import CreateExperimentRequest
-import src.utils.minio_utils as minio_utils
-from src.data.watermark import WatermarkConfig, FilterImage, ImageWatermark
-import numpy as np
-from sklearn.model_selection import train_test_split
-import json
-import os
 from PIL import Image
+from sklearn.model_selection import train_test_split
+from torch.utils.data import ConcatDataset, DataLoader, TensorDataset
 
+import src.core.config as cfg
+from src.data.decorations import (
+    DecorationConfig,
+    DecorationSpec,
+    SampleDecoratorBuilder,
+    TransformedSubset,
+)
+from src.data.decorations.watermark.loader import WatermarkLoader
+from src.data.decorations.watermark.probe import (
+    save_comparison_preview as save_watermark_preview,
+)
+from src.data.decorations.display_mask.preview import (
+    save_comparison_preview as save_display_mask_preview,
+)
+from src.server_client.models import CreateExperimentRequest
 
 logger = logging.getLogger(__name__)
 
 
-# 動的にTransformを適応するSubset
-class TransformedSubset(Dataset):
-    """
-    Transromを動的に適応したSubset
-    画像変形などを適応するトレーニングデータと、それらを適応しないテストデータで混在を防ぐ
-    Args:
-        dataset: データセット
-        indices: インデックス
-        transform: 変換
-        watermark_transform: 透かし合成（PIL in/out）
-        watermarked_global_indices: 透かしを適用する full_dataset 上のグローバルインデックス集合
-    """
-
-    def __init__(
-        self,
-        dataset,
-        indices,
-        transform=None,
-        watermark_transform=None,
-        watermarked_global_indices=None,
-    ):
-        self.dataset = dataset
-        self.indices = indices
-        self.transform = transform
-        self.watermark_transform = watermark_transform
-        self.watermarked_global_indices = watermarked_global_indices or set()
-
-    def __getitem__(self, idx):
-        global_idx = self.indices[idx]
-        x, y = self.dataset[global_idx]
-        if (
-            self.watermark_transform is not None
-            and global_idx in self.watermarked_global_indices
-        ):
-            x = self.watermark_transform(x)
-        if self.transform:
-            x = self.transform(x)
-        return x, y
-
-    def __len__(self):
-        return len(self.indices)
-
-
 class dataset:
-    DATASET_JSON_FILE_NAME = "dataset.json"
-
     def __init__(
         self,
         model_save_dir: str,
         settings: CreateExperimentRequest,
-        assigned_model_path: str = None,
     ):
         self.settings = settings
         self.model_save_dir = model_save_dir
-        self.assigned_model_path = assigned_model_path
         # 画像変換処理 (Data Augmentation & Preprocessing)記述
         self.transform_train = transforms.Compose(
             [
@@ -102,177 +66,103 @@ class dataset:
         )
         self.full_dataset = ConcatDataset([trainset, testset])
 
-        # 透かし設定の初期化
-        self.watermark_config: WatermarkConfig | None = None
-        self.watermark_transform: ImageWatermark | None = None
-        self.watermarked_indices: dict[str, set[int]] = {}
+        # 装飾設定の読み込み
+        self.decoration_config = DecorationConfig.from_request(settings)
 
-        # モデルの読み込み
-        if assigned_model_path is not None:
-            with open(
-                os.path.join(assigned_model_path, self.DATASET_JSON_FILE_NAME), "r"
-            ) as f:
-                specification = json.load(f)
-            self.target_train_idx = np.array(specification["target_train_idx"])
-            self.target_test_idx = np.array(specification["target_test_idx"])
-            self.shadow_pool_indices = np.array(specification["shadow_pool_indices"])
-            self._load_watermark_from_specification(specification)
-        else:
-            # データセットのインデックスを作成
-            indices = np.arange(len(self.full_dataset))
-            # データセットからターゲットモデルの学習用とテスト用のインデックスを分割
-            self.target_train_idx, remaining_idx = train_test_split(
-                indices,
-                train_size=settings.target_train_size,
-                random_state=settings.seed,
-            )
-            self.target_test_idx, self.shadow_pool_indices = train_test_split(
-                remaining_idx,
-                train_size=settings.target_test_size,
-                random_state=settings.seed,
-            )
-            self._initialize_watermark_for_new_experiment()
-            # 保存
-            specification = {
-                "target_train_idx": self.target_train_idx.tolist(),
-                "target_test_idx": self.target_test_idx.tolist(),
-                "shadow_pool_indices": self.shadow_pool_indices.tolist(),
-            }
-            if self.watermark_config is not None:
-                specification["watermark"] = {
-                    "config": self.watermark_config.to_dict(),
-                    "watermarked_indices": {
-                        split: sorted(indices)
-                        for split, indices in self.watermarked_indices.items()
-                    },
-                }
-            with open(
-                os.path.join(model_save_dir, self.DATASET_JSON_FILE_NAME), "w"
-            ) as f:
-                json.dump(specification, f)
+        # データセットのインデックスを作成（常に request の seed / sizes から計算）
+        indices = np.arange(len(self.full_dataset))
+        self.target_train_idx, remaining_idx = train_test_split(
+            indices,
+            train_size=settings.target_train_size,
+            random_state=settings.seed,
+        )
+        self.target_test_idx, self.shadow_pool_indices = train_test_split(
+            remaining_idx,
+            train_size=settings.target_test_size,
+            random_state=settings.seed,
+        )
 
-        if self.watermark_transform is not None:
+        # 装飾設定の読み込み
+        self._decoration_builder = SampleDecoratorBuilder(
+            experiment_seed=int(self.settings.seed),
+        )
+
+        # 装飾プレビューを保存
+        if self.decoration_config.has_watermark():
             self._save_watermark_preview()
+        if self.decoration_config.has_display_mask():
+            self._save_display_mask_preview()
 
-    def _load_watermark_from_specification(self, specification: dict) -> None:
-        watermark_spec = specification.get("watermark")
-        if watermark_spec is None:
-            return
+    def get_watermark_loader(self) -> WatermarkLoader:
+        """透かし装飾用 loader（builder 経由で lazy 初期化）"""
+        return self._decoration_builder.get_watermark_loader()
 
-        self.watermark_config = WatermarkConfig.from_dict(watermark_spec["config"])
-        saved_indices = watermark_spec.get("watermarked_indices", {})
-        self.watermarked_indices = {
-            split: set(indices) for split, indices in saved_indices.items()
-        }
-        self._setup_watermark_transform()
-        self._log_watermark_info()
-
-    def _initialize_watermark_for_new_experiment(self) -> None:
-        self.watermark_config = WatermarkConfig.from_request(self.settings)
-        if self.watermark_config is None:
-            return
-
-        split_pools = {
-            "target_train": self.target_train_idx,
-            "target_test": self.target_test_idx,
-            "shadow_train": self.shadow_pool_indices,
-            "shadow_test": self.shadow_pool_indices,
-        }
-        base_seed = self.settings.seed + self.watermark_config.seed_offset
-
-        for split_offset, (split_name, fraction) in enumerate(
-            self.watermark_config.active_splits()
-        ):
-            pool = split_pools[split_name]
-            self.watermarked_indices[split_name] = self._select_watermarked_indices(
-                pool,
-                fraction,
-                base_seed + split_offset,
-            )
-
-        self._setup_watermark_transform()
-        self._log_watermark_info()
-
-    def _setup_watermark_transform(self) -> None:
-        if self.watermark_config is None:
-            return
-
-        filter_path = minio_utils.download_filter(self.watermark_config.filter_id)
-        filter_image = FilterImage.load(filter_path)
-        self.watermark_transform = ImageWatermark(filter_image=filter_image)
-
-    def _select_watermarked_indices(
-        self, pool_indices: np.ndarray, fraction: float, random_state: int
-    ) -> set[int]:
-        if fraction <= 0.0 or len(pool_indices) == 0:
-            return set()
-        if fraction >= 1.0:
-            return set(int(idx) for idx in pool_indices)
-
-        selected, _ = train_test_split(
-            pool_indices,
-            train_size=fraction,
-            random_state=random_state,
-        )
-        return set(int(idx) for idx in selected)
-
-    def _log_watermark_info(self) -> None:
-        if self.watermark_config is None:
-            return
-
-        counts = {
-            split: len(indices) for split, indices in self.watermarked_indices.items()
-        }
-        logger.info(
-            "Watermark enabled: filter_id=%s, apply=%s, counts=%s",
-            self.watermark_config.filter_id,
-            self.watermark_config.apply,
-            counts,
-        )
-
+    # データセット作成(装飾適用)
     def _make_subset(
         self,
         indices: np.ndarray,
-        split_name: str,
         transform,
+        decoration_spec: DecorationSpec | None = None,
     ) -> TransformedSubset:
-        watermarked_global_indices = self.watermarked_indices.get(split_name, set())
-        if (
-            self.watermark_config is not None
-            and self.watermark_config.fraction_for(split_name) <= 0.0
-        ):
-            watermarked_global_indices = set()
+        # 装飾設定から装飾を確定
+        sample_decorator = self._decoration_builder.build(
+            spec=decoration_spec,
+            pool_indices=indices,
+        )
 
         return TransformedSubset(
             self.full_dataset,
             indices,
             transform=transform,
-            watermark_transform=self.watermark_transform,
-            watermarked_global_indices=watermarked_global_indices,
+            sample_decorator=sample_decorator,
         )
 
     def _save_watermark_preview(self) -> None:
-        """透かしあり/なしの代表サンプルを model_save_dir に保存する"""
-        preview_path = os.path.join(self.model_save_dir, "watermark_preview.png")
+        """透かしあり/なしの代表サンプルを role ごとに model_save_dir に保存する"""
+        roles = self.decoration_config.watermark_roles()
+        if not roles:
+            return
+
         sample_idx = int(self.target_train_idx[0])
         original, _ = self.full_dataset[sample_idx]
         if not isinstance(original, Image.Image):
             return
 
-        watermarked = self.watermark_transform(original)
-        width, height = original.size
-        combined = Image.new("RGB", (width * 2, height))
-        combined.paste(original, (0, 0))
-        combined.paste(watermarked, (width, 0))
-        combined.save(preview_path)
-        logger.info("Watermark preview saved: %s", preview_path)
+        loader = self._decoration_builder.get_watermark_loader()
+        for role, filter_id in roles:
+            preview_path = os.path.join(
+                self.model_save_dir, f"watermark_preview_{role}.png"
+            )
+            save_watermark_preview(loader, filter_id, original, preview_path)
 
+    def _save_display_mask_preview(self) -> None:
+        """表示マスク適用前後の代表サンプルを role ごとに model_save_dir に保存する"""
+        roles = self.decoration_config.display_mask_roles()
+        if not roles:
+            return
+
+        sample_idx = int(self.target_train_idx[0])
+        original, _ = self.full_dataset[sample_idx]
+        if not isinstance(original, Image.Image):
+            return
+
+        for role, spec in roles:
+            preview_path = os.path.join(
+                self.model_save_dir, f"display_mask_preview_{role}.png"
+            )
+            save_display_mask_preview(spec, original, preview_path)
+
+    # ターゲットモデル用データローダーを取得
     def get_target_dataloaders(self):
+        """ターゲットモデル用データローダーを取得"""
         target_train_dataset = self._make_subset(
-            self.target_train_idx, "target_train", self.transform_train
+            self.target_train_idx,
+            self.transform_train,
+            decoration_spec=self.decoration_config.target_train_decoration,
         )
         target_test_dataset = self._make_subset(
-            self.target_test_idx, "target_test", self.transform_test
+            self.target_test_idx,
+            self.transform_test,
         )
 
         # ターゲットモデルの学習用とテスト用のDataLoaderを作成
@@ -306,10 +196,14 @@ class dataset:
         # 修正箇所: 評価・特徴量抽出時は、学習データであっても transform_testを使う
         # 精度を正確に測定するためデータに対するランダムな摂動が許容されないため、テストデータと同じ変換処理を適用
         target_train_dataset = self._make_subset(
-            self.target_train_idx, "target_train", self.transform_test
+            self.target_train_idx,
+            self.transform_test,
+            decoration_spec=self.decoration_config.eval_decoration,
         )
         target_test_dataset = self._make_subset(
-            self.target_test_idx, "target_test", self.transform_test
+            self.target_test_idx,
+            self.transform_test,
+            decoration_spec=self.decoration_config.eval_decoration,
         )
 
         target_train_loader = DataLoader(
@@ -347,10 +241,12 @@ class dataset:
         )
         # 動的にTransformを適応したSubsetを作成
         shadow_train_dataset = self._make_subset(
-            shadow_train_idx, "shadow_train", self.transform_train
+            shadow_train_idx,
+            self.transform_train,
         )
         shadow_test_dataset = self._make_subset(
-            shadow_test_idx, "shadow_test", self.transform_test
+            shadow_test_idx,
+            self.transform_test,
         )
 
         # シャドーモデルの学習用とテスト用のDataLoaderを作成
@@ -390,10 +286,14 @@ class dataset:
         )
         # 精度を正確に測定するためデータに対するランダムな摂動が許容されないため、テストデータと同じ変換処理を適用
         shadow_train_dataset = self._make_subset(
-            shadow_train_idx, "shadow_train", self.transform_test
+            shadow_train_idx,
+            self.transform_test,
+            decoration_spec=self.decoration_config.eval_decoration,
         )
         shadow_test_dataset = self._make_subset(
-            shadow_test_idx, "shadow_test", self.transform_test
+            shadow_test_idx,
+            self.transform_test,
+            decoration_spec=self.decoration_config.eval_decoration,
         )
 
         shadow_train_loader = DataLoader(
@@ -416,39 +316,6 @@ class dataset:
             len(shadow_train_idx),
             len(shadow_test_idx),
         )
-
-    def _build_watermark_probe_pil(self, variant: str = "on_black") -> Image.Image:
-        """透かしフィルタ1枚を probe 用 PIL として返す"""
-        if self.watermark_transform is None or self.watermark_config is None:
-            raise ValueError("Watermark is not enabled for this experiment")
-
-        filter_path = minio_utils.download_filter(self.watermark_config.filter_id)
-        filter_image = FilterImage.load(filter_path)
-
-        if variant == "filter_rgb":
-            return filter_image.to_pil()
-        if variant == "on_black":
-            base = Image.new("RGB", (32, 32), (0, 0, 0))
-            return self.watermark_transform(base)
-        if variant == "on_gray":
-            base = Image.new("RGB", (32, 32), (128, 128, 128))
-            return self.watermark_transform(base)
-
-        raise ValueError(f"Unknown watermark probe variant: {variant}")
-
-    def get_watermark_probe_dataloader(self, variant: str = "on_black"):
-        """透かし probe 1枚用 DataLoader（評価と同じ transform_test）"""
-        probe_pil = self._build_watermark_probe_pil(variant)
-        tensor = self.transform_test(probe_pil).unsqueeze(0)
-        dummy_label = torch.tensor([0], dtype=torch.long)
-        loader = DataLoader(
-            TensorDataset(tensor, dummy_label),
-            batch_size=1,
-            shuffle=False,
-            num_workers=0,
-            pin_memory=True if cfg.DEVICE.type == "cuda" else False,
-        )
-        return loader, variant
 
     def get_cifar_probe_dataloader(self, global_idx: int | None = None):
         """対照用: 透かしなし CIFAR 1枚の probe DataLoader"""
