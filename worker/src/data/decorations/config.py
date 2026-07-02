@@ -39,7 +39,7 @@ DecorationSpec = WatermarkDecorationSpec | DisplayMaskDecorationSpec
 class DecorationConfig:
     """hyperparameters から読み取った装飾設定"""
 
-	# 評価用
+    # 評価用
     eval_decoration: DecorationSpec | None
     # ターゲット用
     target_train_decoration: DecorationSpec | None
@@ -115,7 +115,6 @@ class DecorationConfig:
         if not isinstance(raw, dict):
             raise ValueError("decoration must be an object")
         return cls._parse_spec(raw)
-
 
     # 適用ポリシーバリデーション 適合割合
     @classmethod

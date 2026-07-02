@@ -19,7 +19,7 @@ def select_indices_by_fraction(
     if fraction >= 1.0:
         return set(int(idx) for idx in pool_indices)
 
-	# train_size: floatを渡すと割合分割となる
+    # train_size: floatを渡すと割合分割となる
     selected, _ = train_test_split(
         pool_indices,
         train_size=fraction,

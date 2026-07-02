@@ -54,7 +54,7 @@ class SampleDecoratorBuilder:
         if not indices:
             return None
 
-		# 適用情報確定
+        # 適用情報確定
         if isinstance(spec, WatermarkDecorationSpec):
             inner = WatermarkDecorator(
                 # 透かし変換オブジェクト取得

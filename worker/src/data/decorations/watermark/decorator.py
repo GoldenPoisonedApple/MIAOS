@@ -11,7 +11,7 @@ class WatermarkDecorator:
     def __init__(self, watermark: ImageWatermark):
         self._watermark = watermark
 
-	# 透かし合成
+    # 透かし合成
     def apply(
         self, image: Image.Image, *, global_idx: int, local_idx: int
     ) -> Image.Image:

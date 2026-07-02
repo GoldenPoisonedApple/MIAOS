@@ -25,7 +25,7 @@ class TransformedSubset(Dataset):
         self.transform = transform
         self.sample_decorator = sample_decorator
 
-	# for文で回されたときに呼ばれる
+    # for文で回されたときに呼ばれる
     def __getitem__(self, idx):
         # インデックスを取得
         global_idx = self.indices[idx]

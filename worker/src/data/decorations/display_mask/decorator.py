@@ -12,9 +12,9 @@ class DisplayMaskDecorator:
     対象選定は FractionalDecorator が担当。
     """
 
-	# 初期化
+    # 初期化
     def __init__(self, width: int, height: int, x: int, y: int):
-        """ 表示領域の幅、高さ、x座標、y座標を指定 """
+        """表示領域の幅、高さ、x座標、y座標を指定"""
         if not 0 < width <= CIFAR_IMAGE_SIZE or not 0 < height <= CIFAR_IMAGE_SIZE:
             raise ValueError(
                 f"width and height must be in 1..{CIFAR_IMAGE_SIZE}, "

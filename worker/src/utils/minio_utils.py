@@ -47,7 +47,7 @@ def download_filter(filter_id: str) -> str:
         except Exception:
             pass
 
-	# ダウンロード
+    # ダウンロード
     print(f"[{cfg.PC_NAME}] Downloading filter: {remote_key} -> {local_path}")
     s3.download_file(cfg._MINIO_BUCKET_NAME, remote_key, local_path)
     return local_path

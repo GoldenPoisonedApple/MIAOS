@@ -17,8 +17,12 @@ from src.data.decorations import (
     TransformedSubset,
 )
 from src.data.decorations.watermark.loader import WatermarkLoader
-from src.data.decorations.watermark.probe import save_comparison_preview as save_watermark_preview
-from src.data.decorations.display_mask.preview import save_comparison_preview as save_display_mask_preview
+from src.data.decorations.watermark.probe import (
+    save_comparison_preview as save_watermark_preview,
+)
+from src.data.decorations.display_mask.preview import (
+    save_comparison_preview as save_display_mask_preview,
+)
 from src.server_client.models import CreateExperimentRequest
 
 logger = logging.getLogger(__name__)
@@ -93,7 +97,7 @@ class dataset:
         """透かし装飾用 loader（builder 経由で lazy 初期化）"""
         return self._decoration_builder.get_watermark_loader()
 
-	# データセット作成(装飾適用)
+    # データセット作成(装飾適用)
     def _make_subset(
         self,
         indices: np.ndarray,
@@ -148,7 +152,7 @@ class dataset:
             )
             save_display_mask_preview(spec, original, preview_path)
 
-	# ターゲットモデル用データローダーを取得
+    # ターゲットモデル用データローダーを取得
     def get_target_dataloaders(self):
         """ターゲットモデル用データローダーを取得"""
         target_train_dataset = self._make_subset(
