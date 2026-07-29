@@ -80,13 +80,9 @@ flowchart LR
     P2["Phase 2<br/>ターゲット学習/読込"]
     P3["Phase 3<br/>シャドウ学習/読込"]
     P4["Phase 4<br/>attack"]
-    P45["Phase 4.5<br/>watermark probe"]
     P5["Phase 5<br/>ROC / AUC"]
 
-    P1 --> P2 --> P3 --> P4
-    P4 --> P45
-    P4 --> P5
-    P45 --> P5
+    P1 --> P2 --> P3 --> P4 --> P5
 ```
 
 | Phase | 内容 |
@@ -95,7 +91,6 @@ flowchart LR
 | 2 | `TargetCNN` 学習、または `assigned_model_path` から `load_target_model` |
 | 3 | シャドウ複数学習、または `assigned_model_path` から `load_shadow_model` |
 | 4 | `attack()` → メンバーシップスコア・真値 |
-| 4.5 | `decoration_config.has_watermark()` 時のみ `WatermarkProbeAnalysis` |
 | 5 | `comprehensive_evaluate` → `roc_curve.png` 等 |
 
 `attack()` の戻り値は `(scores, trues)`。`comprehensive_evaluate(scores, trues)` の引数順と一致。
@@ -111,29 +106,24 @@ flowchart TB
     subgraph datasetLayer ["dataset.py"]
         split["インデックス分割"]
         dl["DataLoader 構築"]
-        cifarProbe["get_cifar_probe_dataloader"]
+        preview["decoration_preview.png"]
     end
     subgraph decorationsLayer ["decorations/"]
         builder["SampleDecoratorBuilder"]
         subset["TransformedSubset"]
-        wmProbe["watermark/probe.py"]
-    end
-    subgraph attacksLayer ["attacks/"]
-        wp["WatermarkProbeAnalysis"]
+        prevMod["preview.py"]
     end
 
   datasetLayer --> builder
   builder --> subset
   subset --> dl
-  wmProbe --> wp
-  datasetLayer --> wp
+  prevMod --> preview
 ```
 
 | モジュール | 責務 |
 |-----------|------|
-| `dataset.py` | CIFAR 分割、`get_*_dataloaders`、CIFAR 対照 probe |
+| `dataset.py` | CIFAR 分割、`get_*_dataloaders`、装飾プレビュー保存 |
 | `decorations/` | 装飾設定パース・適用・透かし I/O |
-| `watermark_probe.py` | 透かし probe 解析（`build_probe_dataloader` 利用） |
 
 `dataset` は透かしの MinIO 取得や probe PIL 生成を**持たない**。`SampleDecoratorBuilder.get_watermark_loader()` 経由で透かし層に委譲する。
 
@@ -203,7 +193,7 @@ flowchart LR
 
 ## `data/decorations/` — サンプル装飾
 
-設定の唯一の経路: `hyperparameters.eval_decoration` / `target_train_decoration`  
+設定の唯一の経路: `hyperparameters.eval_decoration` / `target_train_decoration` / `attack_decoration`  
 1 サンプルに同時適用する装飾は 1 種類。Normalize 前の PIL 段階で適用。
 
 ### モジュール構成
@@ -217,12 +207,12 @@ flowchart TB
         fractional["fractional.py<br/>FractionalDecorator"]
         builder["builder.py<br/>lazy WatermarkLoader"]
         subset["subset.py<br/>TransformedSubset"]
+        preview["preview.py<br/>4列プレビュー"]
         subgraph wm [watermark/]
             filter["filter.py"]
             transform["transform.py"]
             loader["loader.py<br/>MinIO + cache"]
             wdec["decorator.py"]
-            probe["probe.py<br/>preview / probe PIL"]
         end
         subgraph dm [display_mask/]
             ddec["decorator.py"]
@@ -234,7 +224,7 @@ flowchart TB
     builder --> fractional
     builder --> wm
     builder --> dm
-    loader --> probe
+    preview --> builder
     fractional --> subset
 ```
 
@@ -245,8 +235,7 @@ flowchart TD
     init["SampleDecoratorBuilder 生成"]
     dmOnly["display_mask のみ"]
     wmBuild["build WatermarkDecorationSpec"]
-    wmPreview["save_comparison_preview"]
-    wmProbe["build_probe_dataloader"]
+    wmPreview["save_decoration_preview"]
     lazy["get_watermark_loader 初回呼び出し"]
     minio["MinIO filters/id.png"]
 
@@ -255,7 +244,6 @@ flowchart TD
     init --> wmPreview
     wmBuild --> lazy
     wmPreview --> lazy
-    wmProbe --> lazy
     lazy --> minio
     dmOnly -.->|"loader 未生成"| skip["MinIO アクセスなし"]
 ```
@@ -299,6 +287,7 @@ flowchart LR
 |------|--------|
 | `eval_decoration` | `get_eval_target_dataloaders` / `get_eval_shadow_dataloader` |
 | `target_train_decoration` | `get_target_dataloaders` の train |
+| `attack_decoration` | 現行 pipeline では未使用（プレビューのみ） |
 
 | `type` | パラメータ |
 |--------|-----------|
@@ -310,28 +299,7 @@ flowchart LR
 - 選定シード: `experiment.seed + seed_offset`
 - 同じ `fraction` + `seed_offset` + 同じ pool → type が違っても同一サンプルに適用
 - 透かしフィルタ: `WatermarkLoader` が MinIO `filters/{filter_id}.png` を `./cache/filters/` に取得
-- デバッグ: 透かし有効時 `work_dir/watermark_preview_{eval|target_train}.png`（role ごとに `save_comparison_preview`）
-
-### 透かし probe フロー（Phase 4.5）
-
-```mermaid
-sequenceDiagram
-    participant Pipeline
-    participant Dataset as dataset
-    participant Config as DecorationConfig
-    participant ProbeMod as watermark/probe.py
-    participant WProbe as WatermarkProbeAnalysis
-
-    Pipeline->>Dataset: decoration_config.has_watermark
-    Pipeline->>WProbe: analyze
-    WProbe->>Config: watermark_roles
-    loop eval / target_train ごと
-        WProbe->>Dataset: get_watermark_loader
-        WProbe->>ProbeMod: build_probe_dataloader filter_id
-    end
-    WProbe->>Dataset: get_cifar_probe_dataloader
-    Note over WProbe: 各 role の透かし probe と CIFAR 対照を比較
-```
+- デバッグ: `work_dir/decoration_preview.png`（左から plain / target / eval / attack の4列。未設定列は plain と同一）
 
 `CreateExperimentRequest.watermark`（トップレベル）は**無視**。装飾は `hyperparameters` のみ。
 
@@ -360,10 +328,6 @@ classDiagram
         AttackNet 学習
         クラス別判定
     }
-    class WatermarkProbeAnalysis {
-        build_probe_dataloader 利用
-        CIFAR 対照 probe
-    }
     MIA_Attack <|-- MIA_OfflineLiRA
     MIA_Attack <|-- MIA_OnlineLiRA
     MIA_Attack <|-- MIA_Shokri
@@ -375,7 +339,6 @@ classDiagram
 | `MIA_OfflineLiRA` | シャドウ OUT 分布から z-score → CDF スコア（論文 Equation 4） |
 | `MIA_OnlineLiRA` | シャドウ IN/OUT 分布から対数尤度比スコア（論文 Algorithm 1） |
 | `MIA_Shokri` | ソフトマックス特徴 → `AttackNet` |
-| `WatermarkProbeAnalysis` | `watermark_roles` ごとに probe を実行し、CIFAR 対照と prediction 差を比較 |
 
 ### LiRA 共通モジュール（`mia_lira_common.py`）
 
@@ -476,12 +439,12 @@ data/
     ├── config.py
     ├── builder.py
     ├── subset.py
+    ├── preview.py
     ├── watermark/
     │   ├── filter.py
     │   ├── transform.py
     │   ├── loader.py
-    │   ├── decorator.py
-    │   └── probe.py
+    │   └── decorator.py
     └── display_mask/
         └── decorator.py
 ```

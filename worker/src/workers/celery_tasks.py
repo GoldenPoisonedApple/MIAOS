@@ -1,8 +1,10 @@
 # celery_tasks.py の推奨例
-from celery import Celery
+import logging
+import os
 import tempfile
 import time
-import os
+
+from celery import Celery
 
 import src.core.config as cfg
 from src.core.pipeline import run_experiment
@@ -21,6 +23,8 @@ from src.server_client.api.experiments import (
     reflect_experiment_results,
     claim_experiment,
 )
+
+logger = logging.getLogger(__name__)
 
 app = Celery("mia_tasks", broker=cfg._REDIS_URL)
 # 全タスクのデフォルト値設定
@@ -103,7 +107,7 @@ def main(id: int, params) -> UpdateResultsRequest:
             error_message=None,
         )
     except Exception as e:
-        print(f"Error: {e}")
+        logger.exception("Experiment failed: %s", e)
         # ペイロード作成
         payload = UpdateResultsRequest(
             experiment_id=id,

@@ -51,7 +51,7 @@ class MIA_OfflineLiRA(MIA_Attack):
 		# ------- ターゲットモデルから検証データ特徴量抽出 ---------------
 		# ターゲットモデルから、同じ検証したいデータのロジットを抽出
 		# -------------------------------------
-		target_logits, train_labels, test_labels = extract_correct_class_logits(
+		target_logits, _, _ = extract_correct_class_logits(
 			target_model, target_train_loader, target_test_loader
 		)
 

@@ -249,15 +249,16 @@ def plot_sample_shadow_dist_grid(
 
     member_indices = (0, 1)
     non_member_indices = (train_size, train_size + 1)
-    grid_indices = (
-        (0, member_indices[0]),
-        (0, member_indices[1]),
-        (1, non_member_indices[0]),
-        (1, non_member_indices[1]),
+    # row/col はサブプロット位置 (0 or 1)。sample_idx は member/non_member から別途解決する
+    grid_panels = (
+        (0, 0),
+        (0, 1),
+        (1, 0),
+        (1, 1),
     )
 
     fig, axes = plt.subplots(2, 2, figsize=(20, 12))
-    for row, col in grid_indices:
+    for row, col in grid_panels:
         sample_idx = member_indices[col] if row == 0 else non_member_indices[col]
         distributions = _build_sample_distributions(
             shadow_logits, sample_idx, keep_matrix

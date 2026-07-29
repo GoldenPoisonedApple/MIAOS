@@ -7,7 +7,7 @@ import torchvision
 import torchvision.transforms as transforms
 from PIL import Image
 from sklearn.model_selection import train_test_split
-from torch.utils.data import ConcatDataset, DataLoader, TensorDataset
+from torch.utils.data import ConcatDataset, DataLoader
 
 import src.core.config as cfg
 from src.data.decorations import (
@@ -16,13 +16,8 @@ from src.data.decorations import (
     SampleDecoratorBuilder,
     TransformedSubset,
 )
+from src.data.decorations.preview import save_decoration_preview
 from src.data.decorations.watermark.loader import WatermarkLoader
-from src.data.decorations.watermark.probe import (
-    save_comparison_preview as save_watermark_preview,
-)
-from src.data.decorations.display_mask.preview import (
-    save_comparison_preview as save_display_mask_preview,
-)
 from src.server_client.models import CreateExperimentRequest
 
 logger = logging.getLogger(__name__)
@@ -87,10 +82,7 @@ class dataset:
         )
 
         # 装飾プレビューを保存
-        if self.decoration_config.has_watermark():
-            self._save_watermark_preview()
-        if self.decoration_config.has_display_mask():
-            self._save_display_mask_preview()
+        self._save_decoration_preview()
 
     def get_watermark_loader(self) -> WatermarkLoader:
         """透かし装飾用 loader（builder 経由で lazy 初期化）"""
@@ -116,40 +108,20 @@ class dataset:
             sample_decorator=sample_decorator,
         )
 
-    def _save_watermark_preview(self) -> None:
-        """透かしあり/なしの代表サンプルを role ごとに model_save_dir に保存する"""
-        roles = self.decoration_config.watermark_roles()
-        if not roles:
-            return
-
+    def _save_decoration_preview(self) -> None:
+        """plain / target / eval / attack の4列プレビューを model_save_dir に保存する"""
         sample_idx = int(self.target_train_idx[0])
         original, _ = self.full_dataset[sample_idx]
         if not isinstance(original, Image.Image):
             return
 
-        loader = self._decoration_builder.get_watermark_loader()
-        for role, filter_id in roles:
-            preview_path = os.path.join(
-                self.model_save_dir, f"watermark_preview_{role}.png"
-            )
-            save_watermark_preview(loader, filter_id, original, preview_path)
-
-    def _save_display_mask_preview(self) -> None:
-        """表示マスク適用前後の代表サンプルを role ごとに model_save_dir に保存する"""
-        roles = self.decoration_config.display_mask_roles()
-        if not roles:
-            return
-
-        sample_idx = int(self.target_train_idx[0])
-        original, _ = self.full_dataset[sample_idx]
-        if not isinstance(original, Image.Image):
-            return
-
-        for role, spec in roles:
-            preview_path = os.path.join(
-                self.model_save_dir, f"display_mask_preview_{role}.png"
-            )
-            save_display_mask_preview(spec, original, preview_path)
+        preview_path = os.path.join(self.model_save_dir, "decoration_preview.png")
+        save_decoration_preview(
+            self._decoration_builder,
+            self.decoration_config,
+            original,
+            preview_path,
+        )
 
     # ターゲットモデル用データローダーを取得
     def get_target_dataloaders(self):
@@ -416,23 +388,3 @@ class dataset:
             len(shadow_train_idx),
             len(shadow_test_idx),
         )
-
-    def get_cifar_probe_dataloader(self, global_idx: int | None = None):
-        """対照用: 透かしなし CIFAR 1枚の probe DataLoader"""
-        if global_idx is None:
-            global_idx = int(self.target_train_idx[0])
-
-        x, y = self.full_dataset[global_idx]
-        if not isinstance(x, Image.Image):
-            raise TypeError("Expected PIL image from full_dataset")
-
-        tensor = self.transform_test(x).unsqueeze(0)
-        label = torch.tensor([int(y)], dtype=torch.long)
-        loader = DataLoader(
-            TensorDataset(tensor, label),
-            batch_size=1,
-            shuffle=False,
-            num_workers=0,
-            pin_memory=True if cfg.DEVICE.type == "cuda" else False,
-        )
-        return loader, global_idx, int(y)
