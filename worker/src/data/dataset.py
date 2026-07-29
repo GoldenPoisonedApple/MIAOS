@@ -227,6 +227,82 @@ class dataset:
             len(self.target_test_idx),
         )
 
+    def get_attack_query_indices(self) -> np.ndarray:
+        """Online LiRA の攻撃対象サンプル（target train + test）のグローバルインデックス"""
+        return np.concatenate([self.target_train_idx, self.target_test_idx])
+
+    def build_online_lira_keep_matrix(self, num_shadows: int, seed: int) -> np.ndarray:
+        """
+        Online LiRA 用 keep 行列を生成する。
+        各クエリサンプルがちょうど半数のシャドーモデルで IN になるよう割り当てる。
+        Returns:
+                shape (num_shadows, num_query_samples) の bool 配列
+        """
+        query_indices = self.get_attack_query_indices()
+        num_query = len(query_indices)
+        rng = np.random.RandomState(seed)
+        uniforms = rng.uniform(0, 1, size=(num_shadows, num_query))
+        order = uniforms.argsort(axis=0)
+        num_in = num_shadows // 2
+        return order < num_in
+
+    def get_online_lira_shadow_dataloader(
+        self,
+        seed: int,
+        query_indices: np.ndarray,
+        query_keep: np.ndarray,
+    ):
+        """
+        Online LiRA 用シャドーデータローダー。
+        shadow_pool からの分割に加え、query_keep が True のクエリサンプルを学習集合へ含める。
+        """
+        # 毎回新しくシャドーモデルの学習用とテスト用のインデックスを分割
+        shadow_train_idx, remaining_idx = train_test_split(
+            self.shadow_pool_indices,
+            train_size=self.settings.shadow_train_size,
+            random_state=self.settings.seed + seed,
+        )
+        shadow_test_idx, _ = train_test_split(
+            remaining_idx,
+            train_size=self.settings.shadow_test_size,
+            random_state=self.settings.seed + seed,
+        )
+        # クエリサンプルのうち IN と判定されたものを学習集合に追加
+        query_in_idx = query_indices[query_keep]
+        if len(query_in_idx) > 0:
+            shadow_train_idx = np.concatenate([shadow_train_idx, query_in_idx])
+            shadow_train_idx = np.unique(shadow_train_idx)
+
+        shadow_train_dataset = self._make_subset(
+            shadow_train_idx,
+            self.transform_train,
+        )
+        shadow_test_dataset = self._make_subset(
+            shadow_test_idx,
+            self.transform_test,
+        )
+
+        shadow_train_loader = DataLoader(
+            shadow_train_dataset,
+            batch_size=self.settings.batch_size,
+            shuffle=True,
+            num_workers=0,
+            pin_memory=True if cfg.DEVICE.type == "cuda" else False,
+        )
+        shadow_test_loader = DataLoader(
+            shadow_test_dataset,
+            batch_size=self.settings.batch_size,
+            shuffle=False,
+            num_workers=0,
+            pin_memory=True if cfg.DEVICE.type == "cuda" else False,
+        )
+        return (
+            shadow_train_loader,
+            shadow_test_loader,
+            len(shadow_train_idx),
+            len(shadow_test_idx),
+        )
+
     def get_shadow_dataloader(self, seed):
         # 毎回新しくシャドーモデルの学習用とテスト用のインデックスを分割
         shadow_train_idx, remaining_idx = train_test_split(

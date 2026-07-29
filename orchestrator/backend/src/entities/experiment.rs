@@ -49,6 +49,8 @@ impl ExperimentStatus {
 pub enum MiaMethod {
   #[sea_orm(string_value = "offline_lira")]
   OfflineLira,
+  #[sea_orm(string_value = "online_lira")]
+  OnlineLira,
   #[sea_orm(string_value = "shokri")]
   Shokri,
 }

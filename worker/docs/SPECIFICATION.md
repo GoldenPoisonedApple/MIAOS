@@ -40,7 +40,7 @@ flowchart TB
 | `core/` | 環境変数・定数・実験パイプライン |
 | `data/` | CIFAR-100 分割・装飾・DataLoader |
 | `models/` | TargetCNN / AttackNet |
-| `attacks/` | LiRA / Shokri MIA |
+| `attacks/` | Offline / Online LiRA / Shokri MIA |
 | `workers/` | Celery タスク |
 | `utils/` | MinIO アップロード・ダウンロード |
 | `server_client/` | 自動生成 API クライアント |
@@ -91,7 +91,7 @@ flowchart LR
 
 | Phase | 内容 |
 |-------|------|
-| 1 | `dataset(work_dir, request)` 構築（分割は request のみ参照）、`MIA_LIRA` / `MIA_Shokri` 選択 |
+| 1 | `dataset(work_dir, request)` 構築（分割は request のみ参照）、`MIA_OfflineLiRA` / `MIA_OnlineLiRA` / `MIA_Shokri` 選択 |
 | 2 | `TargetCNN` 学習、または `assigned_model_path` から `load_target_model` |
 | 3 | シャドウ複数学習、または `assigned_model_path` から `load_shadow_model` |
 | 4 | `attack()` → メンバーシップスコア・真値 |
@@ -347,9 +347,14 @@ classDiagram
         +attack()
         +comprehensive_evaluate()
     }
-    class MIA_LIRA {
+    class MIA_OfflineLiRA {
         Offline LiRA
-        z-score 攻撃
+        OUT 分布 z-score / CDF
+    }
+    class MIA_OnlineLiRA {
+        Online LiRA
+        IN/OUT 尤度比
+        keep 行列
     }
     class MIA_Shokri {
         AttackNet 学習
@@ -359,16 +364,40 @@ classDiagram
         build_probe_dataloader 利用
         CIFAR 対照 probe
     }
-    MIA_Attack <|-- MIA_LIRA
+    MIA_Attack <|-- MIA_OfflineLiRA
+    MIA_Attack <|-- MIA_OnlineLiRA
     MIA_Attack <|-- MIA_Shokri
 ```
 
 | クラス | 概要 |
 |--------|------|
 | `MIA_Attack` | 学習・予測・ROC 共通基底 |
-| `MIA_LIRA` | シャドウ分布から z-score、LiRA スコア |
+| `MIA_OfflineLiRA` | シャドウ OUT 分布から z-score → CDF スコア（論文 Equation 4） |
+| `MIA_OnlineLiRA` | シャドウ IN/OUT 分布から対数尤度比スコア（論文 Algorithm 1） |
 | `MIA_Shokri` | ソフトマックス特徴 → `AttackNet` |
 | `WatermarkProbeAnalysis` | `watermark_roles` ごとに probe を実行し、CIFAR 対照と prediction 差を比較 |
+
+### LiRA 共通モジュール（`mia_lira_common.py`）
+
+- `logit_scaling` — 正解クラス確率のロジット変換
+- `extract_shadow_logits_matrix` — 全シャドウモデルからロジット行列 `(num_shadows, num_samples)` を抽出
+- `save_lira_artifacts` / `plot_score_distributions` — アーティファクト保存・可視化
+
+手法別スコア計算は各モジュールに配置:
+
+- `mia_offline_lira.compute_offline_lira_scores` — OUT 分布 + CDF（Equation 4）
+- `mia_online_lira.compute_online_lira_scores` — IN/OUT 尤度比（Algorithm 1）
+
+### Offline vs Online LiRA
+
+| 項目 | Offline (`MIA_OfflineLiRA`) | Online (`MIA_OnlineLiRA`) |
+|------|----------------------------|---------------------------|
+| シャドウ学習 | `shadow_pool` のみ（攻撃対象は常に OUT） | `shadow_pool` + クエリサンプル（IN/OUT を keep 行列で制御） |
+| 分布推定 | OUT のみ (`μ_out`, `σ_out`) | IN / OUT 両方 |
+| スコア | `Φ((conf - μ_out) / σ_out)` | `logpdf(conf\|IN) - logpdf(conf\|OUT)` |
+| 追加成果物 | `lira_artifacts/` | 上記 + `online_lira_keep.npy`（keep 行列） |
+
+Online LiRA の keep 行列は `dataset.build_online_lira_keep_matrix` で生成し、各クエリサンプルが `num_shadow_models // 2` 個のシャドウで IN になるよう割り当てる。`load_shadow_model=True` で Online LiRA を実行する場合、`online_lira_keep.npy` が同ディレクトリに必須（Offline で学習したシャドウは流用不可）。
 
 ---
 

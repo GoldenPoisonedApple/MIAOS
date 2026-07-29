@@ -121,6 +121,7 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
           <label>手法 (Method)</label>
           <select name="method" value={formData.method} onChange={handleChange}>
             <option value="OfflineLira">OfflineLira</option>
+            <option value="OnlineLira">OnlineLira</option>
             <option value="Shokri">Shokri</option>
           </select>
         </div>

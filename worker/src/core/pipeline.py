@@ -15,7 +15,8 @@ matplotlib.use("Agg")  # GUIを持たないDocker環境での描画用バック�
 import src.core.config as cfg
 from src.data.dataset import dataset
 from src.models.target_model import TargetCNN
-from src.attacks.mia_lira import MIA_LIRA
+from src.attacks.mia_offline_lira import MIA_OfflineLiRA
+from src.attacks.mia_online_lira import MIA_OnlineLiRA
 from src.attacks.mia_shokri import MIA_Shokri
 from src.attacks.watermark_probe import WatermarkProbeAnalysis
 
@@ -96,7 +97,9 @@ def run_experiment(
     mia_method = request.method
     logger.info(f"Selected MIA method: {mia_method.value}")
     if mia_method == MiaMethod.OFFLINELIRA:
-        mia_class = MIA_LIRA(dataset_instance, work_dir, logger, request)
+        mia_class = MIA_OfflineLiRA(dataset_instance, work_dir, logger, request)
+    elif mia_method == MiaMethod.ONLINELIRA:
+        mia_class = MIA_OnlineLiRA(dataset_instance, work_dir, logger, request)
     elif mia_method == MiaMethod.SHOKRI:
         mia_class = MIA_Shokri(dataset_instance, work_dir, logger, request)
     else:
