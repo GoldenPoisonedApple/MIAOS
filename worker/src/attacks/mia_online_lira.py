@@ -41,6 +41,7 @@ class MIA_OnlineLiRA(MIA_Attack):
 		return self._keep_matrix
 	
 	def _compute_online_lira_scores(
+		self,
 		target_logits: np.ndarray,
 		shadow_logits: np.ndarray,
 		keep_matrix: np.ndarray,

@@ -88,6 +88,9 @@ def main(id: int, params) -> UpdateResultsRequest:
                 {
                     "tpr_at_001_fpr": metrics["tpr_at_001_fpr"],
                     "threshold_at_001_fpr": metrics["threshold_at_001_fpr"],
+                    "shadow_train_accs": metrics["shadow_train_accs"],
+                    "shadow_test_accs": metrics["shadow_test_accs"],
+                    "shadow_acc_gaps": metrics["shadow_acc_gaps"],
                 }
             ),
             status=ExperimentStatus.SUCCEEDED,

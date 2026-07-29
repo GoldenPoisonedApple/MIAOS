@@ -12,6 +12,7 @@ import torch.nn as nn
 from tqdm import trange
 
 from src.attacks.mia_attack import MIA_Attack
+from src.data.dataset import dataset
 
 LiraVariant = Literal["offline", "online"]
 
@@ -43,7 +44,7 @@ def extract_correct_class_logits(
     学習・テスト DataLoader から正解クラスのロジットを抽出する。
     Returns:
             logits: (train_size + test_size,)
-            labels_1, labels_2: 各ローダーのラベル
+            train_labels, test_labels: 各ローダーのラベル
     """
     preds_1, labels_1 = MIA_Attack.get_predictions(model, train_loader)
     preds_2, labels_2 = MIA_Attack.get_predictions(model, test_loader)
@@ -83,6 +84,72 @@ def extract_shadow_logits_matrix(
         shadow_models[i].to("cpu")  # GPUメモリ節約
         shadow_logits.append(logits)
     return np.array(shadow_logits)
+
+
+def plot_offline_sample_shadow_out_distribution(
+    model_save_dir: str,
+    logger: logging.Logger,
+    dataset_obj: dataset,
+    shadow_out_logits: np.ndarray,
+    target_logits: np.ndarray,
+    train_size: int,
+    sample_idx: int,
+) -> None:
+    """1サンプル分の shadow OUT ロジット分布と、eval 装飾後画像を可視化する。"""
+    sample_shadow_out_logits = shadow_out_logits[:, sample_idx] # サンプルのロジット群を取得
+    sample_target_logit = target_logits[sample_idx] # サンプルのロジットを取得
+    global_indices = np.concatenate(
+        [dataset_obj.target_train_idx, dataset_obj.target_test_idx]
+    )
+    sample_global_index = int(global_indices[sample_idx]) # サンプルのインデックス取得
+    sample_image, sample_label = dataset_obj.get_eval_decorated_sample(sample_idx)
+    is_member = sample_idx < train_size # サンプルがメンバーかどうかを取得
+
+    min_val = sample_shadow_out_logits.min()
+    max_val = sample_shadow_out_logits.max()
+    bins = np.linspace(min_val, max_val, 100)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.hist(
+        sample_shadow_out_logits,
+        bins=bins,
+        alpha=0.6,
+        color="royalblue",
+        label="Shadow Out Logits",
+        density=True,
+    )
+    ax.axvline(
+        sample_target_logit,
+        color="red",
+        linestyle="--",
+        linewidth=2,
+        label=f"Target Logit ({sample_target_logit:.3f})",
+    )
+    ax.set_xlabel("Logits")
+    ax.set_ylabel("Density")
+    ax.set_title(
+        f"Shadow OUT distribution (sample {sample_idx}, "
+        f"{'member' if is_member else 'non-member'})"
+    )
+    ax.legend(loc="upper left")
+    ax.grid(True, linestyle="--", alpha=0.5)
+
+    ax_ins = ax.inset_axes([0.68, 0.52, 0.28, 0.40])
+    ax_ins.imshow(sample_image, interpolation="nearest")
+    ax_ins.set_xticks([])
+    ax_ins.set_yticks([])
+    ax_ins.set_title(
+        f"idx={sample_global_index}\nlabel={sample_label}",
+        fontsize=8,
+        pad=2,
+    )
+
+    plot_path = os.path.join(
+        model_save_dir, f"sample_shadow_out_dist_{sample_idx}.png"
+    )
+    fig.savefig(plot_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    logger.info(f"Saved sample shadow OUT distribution plot to: {plot_path}")
 
 
 def plot_score_distributions(

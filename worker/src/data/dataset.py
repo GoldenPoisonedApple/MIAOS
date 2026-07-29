@@ -226,6 +226,24 @@ class dataset:
             len(self.target_test_idx),
         )
 
+    def get_eval_decorated_sample(self, sample_idx: int) -> tuple[Image.Image, int]:
+        """攻撃クエリ順（train→test）の sample_idx について、eval_decoration 適用後の PIL 画像を返す。"""
+        train_size = len(self.target_train_idx)
+        if sample_idx < train_size:
+            indices = self.target_train_idx
+            local_idx = sample_idx
+        else:
+            indices = self.target_test_idx
+            local_idx = sample_idx - train_size
+
+        eval_subset = self._make_subset(
+            indices,
+            transform=None,
+            decoration_spec=self.decoration_config.eval_decoration,
+        )
+        image, label = eval_subset[local_idx]
+        return image, int(label)
+
     def get_attack_query_indices(self) -> np.ndarray:
         """Online LiRA の攻撃対象サンプル（target train + test）のグローバルインデックス"""
         return np.concatenate([self.target_train_idx, self.target_test_idx])
