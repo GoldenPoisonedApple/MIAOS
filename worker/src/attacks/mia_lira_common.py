@@ -1,5 +1,6 @@
 import logging
 import os
+from dataclasses import dataclass
 from typing import Literal
 
 import matplotlib
@@ -16,6 +17,16 @@ from src.attacks.mia_attack import MIA_Attack
 from src.data.dataset import dataset
 
 LiraVariant = Literal["offline", "online"]
+
+
+@dataclass(frozen=True)
+class ShadowLogitDist:
+    """1本の shadow ロジット分布（ヒストグラム + 正規分布フィット）"""
+
+    label: str
+    logits: np.ndarray
+    hist_color: str
+    curve_color: str
 
 
 # 正規分布に変換
@@ -100,13 +111,56 @@ def split_online_lira_sample_logits(
     return in_logits, out_logits
 
 
+def _fit_normal(logits: np.ndarray) -> tuple[float, float]:
+    """ロジット列の平均・標準偏差を返す（LiRA 分布推定と同一）。"""
+    return float(np.mean(logits)), float(np.std(logits)) + 1e-8
+
+
+def _build_sample_distributions(
+    shadow_logits: np.ndarray,
+    sample_idx: int,
+    keep_matrix: np.ndarray | None,
+) -> list[ShadowLogitDist]:
+    """Offline は OUT のみ、Online は IN/OUT の分布リストを構築する。"""
+    if keep_matrix is None:
+        # Offline LiRA: shadow OUT ロジットの平均・標準偏差から正規分布を推定
+        out_logits = shadow_logits[:, sample_idx]  # サンプルのロジット群を取得
+        return [
+            ShadowLogitDist(
+                label="Shadow OUT Logits",
+                logits=out_logits,
+                hist_color="royalblue",
+                curve_color="darkorange",
+            )
+        ]
+
+    # IN/OUTのロジットを抽出
+    in_logits, out_logits = split_online_lira_sample_logits(
+        shadow_logits, keep_matrix, sample_idx
+    )
+    return [
+        ShadowLogitDist(
+            label="Shadow IN Logits",
+            logits=in_logits,
+            hist_color="royalblue",
+            curve_color="royalblue",
+        ),
+        ShadowLogitDist(
+            label="Shadow OUT Logits",
+            logits=out_logits,
+            hist_color="crimson",
+            curve_color="crimson",
+        ),
+    ]
+
+
 def _add_eval_sample_inset(
     ax,
     dataset_obj: dataset,
-    global_indices: np.ndarray,
     sample_idx: int,
 ) -> None:
     """サブプロット右上に eval 装飾済みサンプル画像を inset する。"""
+    global_indices = dataset_obj.get_attack_query_indices()
     sample_global_index = int(global_indices[sample_idx])  # サンプルのインデックス取得
     sample_image, sample_label = dataset_obj.get_eval_decorated_sample(sample_idx)  # サンプルのラベルを取得
     ax_ins = ax.inset_axes([0.68, 0.52, 0.28, 0.40])
@@ -120,44 +174,44 @@ def _add_eval_sample_inset(
     )
 
 
-def _plot_sample_shadow_out_panel(
+def _plot_sample_lira_panel(
     ax,
     dataset_obj: dataset,
-    shadow_out_logits: np.ndarray,
+    distributions: list[ShadowLogitDist],
     target_logits: np.ndarray,
-    global_indices: np.ndarray,
     sample_idx: int,
     train_size: int,
 ) -> None:
-    """1サブプロット分の shadow OUT 分布と装飾済み画像 inset を描画する。"""
-    sample_shadow_out_logits = shadow_out_logits[:, sample_idx]  # サンプルのロジット群を取得
+    """1サブプロット分の shadow 分布と装飾済み画像 inset を描画する。"""
     sample_target_logit = target_logits[sample_idx]  # サンプルのロジットを取得
     is_member = sample_idx < train_size  # サンプルがメンバーかどうかを取得
 
-    min_val = sample_shadow_out_logits.min()
-    max_val = sample_shadow_out_logits.max()
+    all_values = np.concatenate(
+        [dist.logits for dist in distributions] + [np.array([sample_target_logit])]
+    )
+    min_val = all_values.min()
+    max_val = all_values.max()
     bins = np.linspace(min_val, max_val, 100)
-
-    # Offline LiRA と同様、shadow OUT ロジットの平均・標準偏差から正規分布を推定
-    mu_out = np.mean(sample_shadow_out_logits)
-    std_out = np.std(sample_shadow_out_logits) + 1e-8
-
-    ax.hist(
-        sample_shadow_out_logits,
-        bins=bins,
-        alpha=0.6,
-        color="royalblue",
-        label="Shadow Out Logits",
-        density=True,
-    )
     x_curve = np.linspace(min_val, max_val, 200)
-    ax.plot(
-        x_curve,
-        norm.pdf(x_curve, mu_out, std_out),
-        color="darkorange",
-        linewidth=2,
-        label=f"Normal fit (μ={mu_out:.2f}, σ={std_out:.2f})",
-    )
+
+    for dist in distributions:
+        mu, std = _fit_normal(dist.logits)
+        ax.hist(
+            dist.logits,
+            bins=bins,
+            alpha=0.5 if len(distributions) > 1 else 0.6,
+            color=dist.hist_color,
+            label=dist.label,
+            density=True,
+        )
+        ax.plot(
+            x_curve,
+            norm.pdf(x_curve, mu, std),
+            color=dist.curve_color,
+            linewidth=2,
+            label=f"{dist.label} fit (μ={mu:.2f}, σ={std:.2f})",
+        )
+
     ax.axvline(
         sample_target_logit,
         color="red",
@@ -170,99 +224,22 @@ def _plot_sample_shadow_out_panel(
     ax.set_title(
         f"sample {sample_idx} ({'member' if is_member else 'non-member'})"
     )
-    ax.legend(loc="upper left", fontsize=8)
+    ax.legend(loc="upper left", fontsize=7 if len(distributions) > 1 else 8)
     ax.grid(True, linestyle="--", alpha=0.5)
 
-    _add_eval_sample_inset(ax, dataset_obj, global_indices, sample_idx)
+    _add_eval_sample_inset(ax, dataset_obj, sample_idx)
 
 
-def _plot_sample_online_in_out_panel(
-    ax,
-    dataset_obj: dataset,
-    shadow_logits: np.ndarray,
-    keep_matrix: np.ndarray,
-    target_logits: np.ndarray,
-    global_indices: np.ndarray,
-    sample_idx: int,
-    train_size: int,
-) -> None:
-    """1サブプロット分の shadow IN/OUT 分布と装飾済み画像 inset を描画する。"""
-    # IN/OUTのロジットを抽出
-    in_logits, out_logits = split_online_lira_sample_logits(
-        shadow_logits, keep_matrix, sample_idx
-    )
-    sample_target_logit = target_logits[sample_idx]  # サンプルのロジットを取得
-    is_member = sample_idx < train_size  # サンプルがメンバーかどうかを取得
-
-    # IN/OUTのロジットの平均と標準偏差を計算
-    mu_in = np.mean(in_logits)
-    std_in = np.std(in_logits) + 1e-8
-    mu_out = np.mean(out_logits)
-    std_out = np.std(out_logits) + 1e-8
-
-    all_values = np.concatenate([in_logits, out_logits, [sample_target_logit]])
-    min_val = all_values.min()
-    max_val = all_values.max()
-    bins = np.linspace(min_val, max_val, 100)
-    x_curve = np.linspace(min_val, max_val, 200)
-
-    ax.hist(
-        in_logits,
-        bins=bins,
-        alpha=0.5,
-        color="royalblue",
-        label="Shadow IN Logits",
-        density=True,
-    )
-    ax.hist(
-        out_logits,
-        bins=bins,
-        alpha=0.5,
-        color="crimson",
-        label="Shadow OUT Logits",
-        density=True,
-    )
-    ax.plot(
-        x_curve,
-        norm.pdf(x_curve, mu_in, std_in),
-        color="royalblue",
-        linewidth=2,
-        label=f"IN fit (μ={mu_in:.2f}, σ={std_in:.2f})",
-    )
-    ax.plot(
-        x_curve,
-        norm.pdf(x_curve, mu_out, std_out),
-        color="crimson",
-        linewidth=2,
-        label=f"OUT fit (μ={mu_out:.2f}, σ={std_out:.2f})",
-    )
-    ax.axvline(
-        sample_target_logit,
-        color="red",
-        linestyle="--",
-        linewidth=2,
-        label=f"Target ({sample_target_logit:.3f})",
-    )
-    ax.set_xlabel("Logits")
-    ax.set_ylabel("Density")
-    ax.set_title(
-        f"sample {sample_idx} ({'member' if is_member else 'non-member'})"
-    )
-    ax.legend(loc="upper left", fontsize=7)
-    ax.grid(True, linestyle="--", alpha=0.5)
-
-    _add_eval_sample_inset(ax, dataset_obj, global_indices, sample_idx)
-
-
-def plot_offline_sample_shadow_out_distribution(
+def plot_sample_shadow_dist_grid(
     model_save_dir: str,
     logger: logging.Logger,
     dataset_obj: dataset,
-    shadow_out_logits: np.ndarray,
+    shadow_logits: np.ndarray,
     target_logits: np.ndarray,
     train_size: int,
+    keep_matrix: np.ndarray | None = None,
 ) -> None:
-    """メンバー2件・非メンバー2件の shadow OUT 分布を 2x2 で可視化する。"""
+    """メンバー2件・非メンバー2件の shadow 分布を 2x2 で可視化する（Offline/Online 共通）。"""
     test_size = len(target_logits) - train_size
     if train_size < 2 or test_size < 2:
         raise ValueError(
@@ -270,97 +247,41 @@ def plot_offline_sample_shadow_out_distribution(
             f"(got train_size={train_size}, test_size={test_size})."
         )
 
-    global_indices = np.concatenate(
-        [dataset_obj.target_train_idx, dataset_obj.target_test_idx]
+    member_indices = (0, 1)
+    non_member_indices = (train_size, train_size + 1)
+    grid_indices = (
+        (0, member_indices[0]),
+        (0, member_indices[1]),
+        (1, non_member_indices[0]),
+        (1, non_member_indices[1]),
     )
-    member_indices = [0, 1]
-    non_member_indices = [train_size, train_size + 1]
 
     fig, axes = plt.subplots(2, 2, figsize=(20, 12))
-    for col, sample_idx in enumerate(member_indices):
-        _plot_sample_shadow_out_panel(
-            axes[0, col],
-            dataset_obj,
-            shadow_out_logits,
-            target_logits,
-            global_indices,
-            sample_idx,
-            train_size,
+    for row, col in grid_indices:
+        sample_idx = member_indices[col] if row == 0 else non_member_indices[col]
+        distributions = _build_sample_distributions(
+            shadow_logits, sample_idx, keep_matrix
         )
-    for col, sample_idx in enumerate(non_member_indices):
-        _plot_sample_shadow_out_panel(
-            axes[1, col],
+        _plot_sample_lira_panel(
+            axes[row, col],
             dataset_obj,
-            shadow_out_logits,
+            distributions,
             target_logits,
-            global_indices,
             sample_idx,
             train_size,
         )
 
-    fig.suptitle("Shadow OUT distributions (members / non-members)", fontsize=14)
-    fig.tight_layout()
-
-    plot_path = os.path.join(model_save_dir, "sample_shadow_out_dist_grid.png")
-    fig.savefig(plot_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    logger.info(f"Saved sample shadow OUT distribution plot to: {plot_path}")
-
-
-def plot_online_sample_in_out_distribution(
-    model_save_dir: str,
-    logger: logging.Logger,
-    dataset_obj: dataset,
-    shadow_logits: np.ndarray,
-    keep_matrix: np.ndarray,
-    target_logits: np.ndarray,
-    train_size: int,
-) -> None:
-    """メンバー2件・非メンバー2件の shadow IN/OUT 分布を 2x2 で可視化する。"""
-    test_size = len(target_logits) - train_size
-    if train_size < 2 or test_size < 2:
-        raise ValueError(
-            f"Need at least 2 members and 2 non-members for grid plot "
-            f"(got train_size={train_size}, test_size={test_size})."
-        )
-
-    global_indices = np.concatenate(
-        [dataset_obj.target_train_idx, dataset_obj.target_test_idx]
+    variant_label = "IN/OUT" if keep_matrix is not None else "OUT"
+    fig.suptitle(
+        f"Shadow {variant_label} distributions (members / non-members)",
+        fontsize=14,
     )
-    member_indices = [0, 1]
-    non_member_indices = [train_size, train_size + 1]
-
-    fig, axes = plt.subplots(2, 2, figsize=(20, 12))
-    for col, sample_idx in enumerate(member_indices):
-        _plot_sample_online_in_out_panel(
-            axes[0, col],
-            dataset_obj,
-            shadow_logits,
-            keep_matrix,
-            target_logits,
-            global_indices,
-            sample_idx,
-            train_size,
-        )
-    for col, sample_idx in enumerate(non_member_indices):
-        _plot_sample_online_in_out_panel(
-            axes[1, col],
-            dataset_obj,
-            shadow_logits,
-            keep_matrix,
-            target_logits,
-            global_indices,
-            sample_idx,
-            train_size,
-        )
-
-    fig.suptitle("Shadow IN/OUT distributions (members / non-members)", fontsize=14)
     fig.tight_layout()
 
-    plot_path = os.path.join(model_save_dir, "sample_in_out_dist_grid.png")
+    plot_path = os.path.join(model_save_dir, "sample_shadow_dist_grid.png")
     fig.savefig(plot_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
-    logger.info(f"Saved sample IN/OUT distribution plot to: {plot_path}")
+    logger.info(f"Saved sample shadow distribution plot to: {plot_path}")
 
 
 def plot_score_distributions(

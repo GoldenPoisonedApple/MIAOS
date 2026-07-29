@@ -9,7 +9,7 @@ from src.attacks.mia_attack import MIA_Attack
 from src.attacks.mia_lira_common import (
 	extract_correct_class_logits,
 	extract_shadow_logits_matrix,
-	plot_offline_sample_shadow_out_distribution,
+	plot_sample_shadow_dist_grid,
 	plot_score_distributions,
 )
 from src.data.dataset import dataset
@@ -73,11 +73,11 @@ class MIA_OfflineLiRA(MIA_Attack):
 		lira_trues = np.concatenate([np.ones(train_size), np.zeros(test_size)])
 
 		# サンプルデータの分布を保存
-		plot_offline_sample_shadow_out_distribution(
+		plot_sample_shadow_dist_grid(
 			model_save_dir=self.MODEL_SAVE_DIR,
 			logger=self.logger,
 			dataset_obj=self.dataset,
-			shadow_out_logits=shadow_out_logits,
+			shadow_logits=shadow_out_logits,
 			target_logits=target_logits,
 			train_size=train_size,
 		)

@@ -13,7 +13,7 @@ from src.attacks.mia_attack import MIA_Attack
 from src.attacks.mia_lira_common import (
 	extract_correct_class_logits,
 	extract_shadow_logits_matrix,
-	plot_online_sample_in_out_distribution,
+	plot_sample_shadow_dist_grid,
 	plot_score_distributions,
 	split_online_lira_sample_logits,
 )
@@ -185,14 +185,14 @@ class MIA_OnlineLiRA(MIA_Attack):
 		lira_trues = np.concatenate([np.ones(train_size), np.zeros(test_size)])
 
 		# サンプルデータの分布を保存
-		plot_online_sample_in_out_distribution(
+		plot_sample_shadow_dist_grid(
 			model_save_dir=self.MODEL_SAVE_DIR,
 			logger=self.logger,
 			dataset_obj=self.dataset,
 			shadow_logits=shadow_logits,
-			keep_matrix=keep_matrix,
 			target_logits=target_logits,
 			train_size=train_size,
+			keep_matrix=keep_matrix,
 		)
 
 		# スコア分布を保存
