@@ -13,7 +13,9 @@ from src.attacks.mia_attack import MIA_Attack
 from src.attacks.mia_lira_common import (
 	extract_correct_class_logits,
 	extract_shadow_logits_matrix,
+	plot_online_sample_in_out_distribution,
 	plot_score_distributions,
+	split_online_lira_sample_logits,
 )
 from src.data.dataset import dataset
 from src.server_client.models import CreateExperimentRequest
@@ -39,13 +41,13 @@ class MIA_OnlineLiRA(MIA_Attack):
 				self.settings.seed,
 			)
 		return self._keep_matrix
-	
+
 	def _compute_online_lira_scores(
 		self,
 		target_logits: np.ndarray,
 		shadow_logits: np.ndarray,
 		keep_matrix: np.ndarray,
-	) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+	) -> np.ndarray:
 		"""
 		Online LiRA スコア（Algorithm 1 行 15: 尤度比）を計算する。
 		Args:
@@ -70,10 +72,9 @@ class MIA_OnlineLiRA(MIA_Attack):
 
 		# 各サンプルにおいて、IN/OUTのロジットを計算
 		for j in range(num_samples):
-			in_mask = keep_matrix[:, j] # 列(サンプル)方向: シャドーモデルのIN/OUTのリスト取得
-			# IN/OUTのロジットを抽出
-			in_logits = shadow_logits[in_mask, j]
-			out_logits = shadow_logits[~in_mask, j]
+			in_logits, out_logits = split_online_lira_sample_logits(
+				shadow_logits, keep_matrix, j
+			)
 			if len(in_logits) == 0 or len(out_logits) == 0:
 				raise ValueError(
 					f"Sample {j}: need both IN and OUT shadow confidences "
@@ -84,15 +85,13 @@ class MIA_OnlineLiRA(MIA_Attack):
 			std_in = np.std(in_logits) + 1e-8
 			mu_out = np.mean(out_logits)
 			std_out = np.std(out_logits) + 1e-8
-
 			# pdf: 確率密度, logpdf: 確率密度の対数: 数値的に安定しているため使用
 			# 尤度比: データがINである確率 / データがOUTである確率
-			logpdf_in = norm.logpdf(target_logits[j], mu_in, std_in)	# INの分布における確率密度
-			logpdf_out = norm.logpdf(target_logits[j], mu_out, std_out)	# OUTの分布における確率密度
-			lira_scores[j] = logpdf_in - logpdf_out # 尤度比 logなので引き算 1に近いほどメンバーである可能性が高い
+			logpdf_in = norm.logpdf(target_logits[j], mu_in, std_in)  # INの分布における確率密度
+			logpdf_out = norm.logpdf(target_logits[j], mu_out, std_out)  # OUTの分布における確率密度
+			lira_scores[j] = logpdf_in - logpdf_out  # 尤度比 logなので引き算 1に近いほどメンバーである可能性が高い
 
 		return lira_scores
-
 
 	# シャドーモデルの訓練 オーバーライド（Online LiRA: クエリサンプルの IN/OUT を追跡）
 	def train_shadow_models(self, model_factory: Callable[[], nn.Module]):
@@ -182,8 +181,21 @@ class MIA_OnlineLiRA(MIA_Attack):
 			keep_matrix,
 		)
 
+		# ラベルを結合 メンバ、非メンバ
 		lira_trues = np.concatenate([np.ones(train_size), np.zeros(test_size)])
 
+		# サンプルデータの分布を保存
+		plot_online_sample_in_out_distribution(
+			model_save_dir=self.MODEL_SAVE_DIR,
+			logger=self.logger,
+			dataset_obj=self.dataset,
+			shadow_logits=shadow_logits,
+			keep_matrix=keep_matrix,
+			target_logits=target_logits,
+			train_size=train_size,
+		)
+
+		# スコア分布を保存
 		plot_score_distributions(
 			model_save_dir=self.MODEL_SAVE_DIR,
 			logger=self.logger,
