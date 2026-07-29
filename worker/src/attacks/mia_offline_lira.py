@@ -1,7 +1,6 @@
 import logging
 
 import numpy as np
-import torch
 import torch.nn as nn
 from scipy.stats import norm
 
@@ -10,7 +9,6 @@ from src.attacks.mia_lira_common import (
     extract_correct_class_logits,
     extract_shadow_logits_matrix,
     plot_score_distributions,
-    save_lira_artifacts,
 )
 from src.data.dataset import dataset
 from src.server_client.models import CreateExperimentRequest
@@ -51,7 +49,7 @@ class MIA_OfflineLiRA(MIA_Attack):
         # ------- ターゲットモデルから検証データ特徴量抽出 ---------------
         # ターゲットモデルから、同じ検証したいデータのロジットを抽出
         # -------------------------------------
-        target_logits, labels_1, labels_2 = extract_correct_class_logits(
+        target_logits, _, _ = extract_correct_class_logits(
             target_model, target_train_loader, target_test_loader
         )
 
@@ -71,28 +69,6 @@ class MIA_OfflineLiRA(MIA_Attack):
 
         # ラベルを結合 メンバ、非メンバ
         lira_trues = np.concatenate([np.ones(train_size), np.zeros(test_size)])
-        # クラスラベル
-        class_labels = torch.cat([labels_1, labels_2]).numpy()
-        # 画像データのインデックス
-        sample_global_indices = np.concatenate(
-            [self.dataset.target_train_idx, self.dataset.target_test_idx]
-        )
-
-        # アーティファクト保存
-        save_lira_artifacts(
-            model_save_dir=self.MODEL_SAVE_DIR,
-            logger=self.logger,
-            variant="offline",
-            shadow_out_logits=shadow_out_logits,
-            target_logits=target_logits,
-            z_scores=z_scores,
-            lira_scores=lira_scores,
-            lira_trues=lira_trues,
-            class_labels=class_labels,
-            sample_global_indices=sample_global_indices,
-            train_size=train_size,
-            test_size=test_size,
-        )
 
         # スコア分布を保存
         plot_score_distributions(

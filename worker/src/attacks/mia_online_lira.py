@@ -14,7 +14,6 @@ from src.attacks.mia_lira_common import (
 	extract_correct_class_logits,
 	extract_shadow_logits_matrix,
 	plot_score_distributions,
-	save_lira_artifacts,
 )
 from src.data.dataset import dataset
 from src.server_client.models import CreateExperimentRequest
@@ -171,10 +170,9 @@ class MIA_OnlineLiRA(MIA_Attack):
 
 		# ------- ターゲットモデルから検証データ特徴量抽出 ---------------
 		# (num_samples,) 正解ラベル確率のロジット 行列
-		target_logits, labels_1, labels_2 = extract_correct_class_logits(
+		target_logits, _, _ = extract_correct_class_logits(
 			target_model, target_train_loader, target_test_loader
 		)
-
 
 		# Online LiRA スコア(尤度比)を計算
 		lira_scores = self._compute_online_lira_scores(
@@ -184,25 +182,6 @@ class MIA_OnlineLiRA(MIA_Attack):
 		)
 
 		lira_trues = np.concatenate([np.ones(train_size), np.zeros(test_size)])
-  
-		class_labels = torch.cat([labels_1, labels_2]).numpy()
-		sample_global_indices = np.concatenate(
-			[self.dataset.target_train_idx, self.dataset.target_test_idx]
-		)
-		save_lira_artifacts(
-			model_save_dir=self.MODEL_SAVE_DIR,
-			logger=self.logger,
-			variant="online",
-			shadow_out_logits=shadow_logits,
-			keep_matrix=keep_matrix,
-			target_logits=target_logits,
-			lira_scores=lira_scores,
-			lira_trues=lira_trues,
-			class_labels=class_labels,
-			sample_global_indices=sample_global_indices,
-			train_size=train_size,
-			test_size=test_size,
-		)
 
 		plot_score_distributions(
 			model_save_dir=self.MODEL_SAVE_DIR,

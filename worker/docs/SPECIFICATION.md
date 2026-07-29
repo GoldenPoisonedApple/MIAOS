@@ -381,7 +381,7 @@ classDiagram
 
 - `logit_scaling` — 正解クラス確率のロジット変換
 - `extract_shadow_logits_matrix` — 全シャドウモデルからロジット行列 `(num_shadows, num_samples)` を抽出
-- `save_lira_artifacts` / `plot_score_distributions` — アーティファクト保存・可視化
+- `plot_score_distributions` — 攻撃スコア分布の可視化
 
 手法別スコア計算は各モジュールに配置:
 
@@ -395,9 +395,9 @@ classDiagram
 | シャドウ学習 | `shadow_pool` のみ（攻撃対象は常に OUT） | `shadow_pool` + クエリサンプル（IN/OUT を keep 行列で制御） |
 | 分布推定 | OUT のみ (`μ_out`, `σ_out`) | IN / OUT 両方 |
 | スコア | `Φ((conf - μ_out) / σ_out)` | `logpdf(conf\|IN) - logpdf(conf\|OUT)` |
-| 追加成果物 | `lira_artifacts/` | 上記（`keep_matrix` は npz 内） |
+| 追加成果物 | `score_distribution_lira*.png` | `score_distribution_lira.png` |
 
-Online LiRA の keep 行列は `dataset.build_online_lira_keep_matrix(seed, num_shadow_models)` で決定的に生成する。学習時・攻撃時・`load_shadow_model=True` 時いずれも同一の `seed` / sizes があれば同じ行列が得られる。`lira_artifacts.npz` にも `keep_matrix` を保存する。
+Online LiRA の keep 行列は `dataset.build_online_lira_keep_matrix(seed, num_shadow_models)` で決定的に生成する。学習時・攻撃時・`load_shadow_model=True` 時いずれも同一の `seed` / sizes があれば同じ行列が得られる。事後分析は保存済みモデル（`shadow_models.pth` 等）のロードと再計算で行う。
 
 ---
 
