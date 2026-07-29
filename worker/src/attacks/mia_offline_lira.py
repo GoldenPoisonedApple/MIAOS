@@ -80,7 +80,6 @@ class MIA_OfflineLiRA(MIA_Attack):
 			shadow_out_logits=shadow_out_logits,
 			target_logits=target_logits,
 			train_size=train_size,
-			sample_idx=0,
 		)
 
 		# スコア分布を保存
