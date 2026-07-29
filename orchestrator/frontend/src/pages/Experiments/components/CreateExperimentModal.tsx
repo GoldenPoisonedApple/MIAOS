@@ -110,6 +110,7 @@ const CreateExperimentForm = ({ initialState, onClose, onSubmit, isCreating }: F
             <option value="OfflineLira">OfflineLira</option>
             <option value="OnlineLira">OnlineLira</option>
             <option value="Shokri">Shokri</option>
+						<option value="LfMia">LfMia</option>
           </select>
         </div>
 

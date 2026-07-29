@@ -53,6 +53,8 @@ pub enum MiaMethod {
   OnlineLira,
   #[sea_orm(string_value = "shokri")]
   Shokri,
+  #[sea_orm(string_value = "lf_mia")]
+  LfMia,
 }
 
 // DBの1行と1対1で対応する構造体

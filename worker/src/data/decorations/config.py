@@ -43,6 +43,8 @@ class DecorationConfig:
     eval_decoration: DecorationSpec | None
     # ターゲット用
     target_train_decoration: DecorationSpec | None
+    # シャドー用
+    shadow_decoration: DecorationSpec | None
     # 攻撃用（将来対応。現行 pipeline では未使用）
     attack_decoration: DecorationSpec | None = None
 
@@ -56,6 +58,7 @@ class DecorationConfig:
             return cls(
                 eval_decoration=None,
                 target_train_decoration=None,
+                shadow_decoration=None,
                 attack_decoration=None,
             )
 
@@ -67,6 +70,8 @@ class DecorationConfig:
             target_train_decoration=cls._parse_decoration(
                 hp.get("target_train_decoration")
             ),
+            # シャドー用
+            shadow_decoration=cls._parse_decoration(hp.get("shadow_decoration")),
             # 攻撃用
             attack_decoration=cls._parse_decoration(hp.get("attack_decoration")),
         )

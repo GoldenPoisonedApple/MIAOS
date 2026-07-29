@@ -344,7 +344,7 @@ class dataset:
         )
 
     def get_eval_shadow_dataloader(self, seed):
-        """評価およびロジット抽出用のシャッフル無効化データローダー"""
+        """評価用のシャッフル無効化データローダー"""
         # 毎回新しくシャドーモデルの学習用とテスト用のインデックスを分割
         shadow_train_idx, remaining_idx = train_test_split(
             self.shadow_pool_indices,

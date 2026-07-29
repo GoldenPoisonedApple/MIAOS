@@ -171,6 +171,22 @@ def run_experiment(
         f"-> {time.time() - p5_start_time:.2f} sec: {((time.time() - p5_start_time) / 60):.2f} min"
     )
 
+    # ----------------------------------
+    # 攻撃用装飾を用いた追加解析（Online LiRA かつ attack_decoration 指定時のみ）
+    # Online 判定は mia_class の型に委ね、装飾の有無は decoration_config を参照する
+    # ----------------------------------
+    # if (
+    #     isinstance(mia_class, MIA_OnlineLiRA)
+    #     and dataset_instance.decoration_config.attack_decoration is not None
+    # ):
+    #     logger.info("[Phase 6] Attack-decoration analysis...")
+    #     p6_start_time = time.time()
+    #     # TODO: attack_decoration を用いた解析を実装する
+        
+    #     logger.info(
+    #         f"-> {time.time() - p6_start_time:.2f} sec: {((time.time() - p6_start_time) / 60):.2f} min"
+    #     )
+
     # 終了メッセージ
     logger.info("All phases completed successfully!")
     total_time = time.time() - p1_start_time

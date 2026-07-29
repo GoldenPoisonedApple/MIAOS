@@ -533,6 +533,6 @@ NASで共有しているのでgit checkoutが不安
 max-parallel: 1 にする方法もある
 
 
-
-フロントエンド、列タイトルはスクロールしても固定で見えるように
+普通に新しい攻撃手法が必要
+shadow用のdecorator必要
 onlineだとInとOutの図を2パターンだせるはず

@@ -567,7 +567,8 @@
         "enum": [
           "OfflineLira",
           "OnlineLira",
-          "Shokri"
+          "Shokri",
+          "LfMia"
         ]
       },
       "Model": {
