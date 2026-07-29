@@ -35,15 +35,19 @@ flowchart TB
     pipeline --> config
 ```
 
-| パス | 役割 |
-|------|------|
-| `core/` | 環境変数・定数・実験パイプライン |
-| `data/` | CIFAR-100 分割・装飾・DataLoader |
-| `models/` | TargetCNN / AttackNet |
-| `attacks/` | Offline / Online LiRA / Shokri MIA |
-| `workers/` | Celery タスク |
-| `utils/` | MinIO アップロード・ダウンロード |
-| `server_client/` | 自動生成 API クライアント |
+
+
+
+| パス               | 役割                                 |
+| ---------------- | ---------------------------------- |
+| `core/`          | 環境変数・定数・実験パイプライン                   |
+| `data/`          | CIFAR-100 分割・装飾・DataLoader         |
+| `models/`        | TargetCNN / AttackNet              |
+| `attacks/`       | Offline / Online LiRA / Shokri MIA |
+| `workers/`       | Celery タスク                         |
+| `utils/`         | MinIO アップロード・ダウンロード                |
+| `server_client/` | 自動生成 API クライアント                    |
+
 
 ---
 
@@ -70,6 +74,8 @@ sequenceDiagram
     Note over Celery,API: 失敗時は FAILED + error_message
 ```
 
+
+
 ---
 
 ## 実験パイプライン（`pipeline.py`）
@@ -85,13 +91,17 @@ flowchart LR
     P1 --> P2 --> P3 --> P4 --> P5
 ```
 
-| Phase | 内容 |
-|-------|------|
-| 1 | `dataset(work_dir, request)` 構築（分割は request のみ参照）、`MIA_OfflineLiRA` / `MIA_OnlineLiRA` / `MIA_Shokri` 選択 |
-| 2 | `TargetCNN` 学習、または `assigned_model_path` から `load_target_model` |
-| 3 | シャドウ複数学習、または `assigned_model_path` から `load_shadow_model` |
-| 4 | `attack()` → メンバーシップスコア・真値 |
-| 5 | `comprehensive_evaluate` → `roc_curve.png` 等 |
+
+
+
+| Phase | 内容                                                                                                       |
+| ----- | -------------------------------------------------------------------------------------------------------- |
+| 1     | `dataset(work_dir, request)` 構築（分割は request のみ参照）、`MIA_OfflineLiRA` / `MIA_OnlineLiRA` / `MIA_Shokri` 選択 |
+| 2     | `TargetCNN` 学習、または `assigned_model_path` から `load_target_model`                                          |
+| 3     | シャドウ複数学習、または `assigned_model_path` から `load_shadow_model`                                                |
+| 4     | `attack()` → メンバーシップスコア・真値                                                                               |
+| 5     | `comprehensive_evaluate` → `roc_curve.png` 等                                                             |
+
 
 `attack()` の戻り値は `(scores, trues)`。`comprehensive_evaluate(scores, trues)` の引数順と一致。
 
@@ -120,10 +130,14 @@ flowchart TB
   prevMod --> preview
 ```
 
-| モジュール | 責務 |
-|-----------|------|
-| `dataset.py` | CIFAR 分割、`get_*_dataloaders`、装飾プレビュー保存 |
-| `decorations/` | 装飾設定パース・適用・透かし I/O |
+
+
+
+| モジュール          | 責務                                     |
+| -------------- | -------------------------------------- |
+| `dataset.py`   | CIFAR 分割、`get_*_dataloaders`、装飾プレビュー保存 |
+| `decorations/` | 装飾設定パース・適用・透かし I/O                     |
+
 
 `dataset` は透かしの MinIO 取得や probe PIL 生成を**持たない**。`SampleDecoratorBuilder.get_watermark_loader()` 経由で透かし層に委譲する。
 
@@ -153,6 +167,8 @@ flowchart TD
     split2 --> shadow
 ```
 
+
+
 シャドウ分割は `shadow_pool_indices` から `seed + i` で毎シャドウ再計算（`dataset.json` に保存しない）。
 
 ### `base_experiment_id` の契約
@@ -173,6 +189,8 @@ flowchart LR
     baseId --> models
 ```
 
+
+
 親モデル流用時、呼び出し側が親と**同じ `seed` / `target_train_size` / `target_test_size`** を指定することで同一分割を再現する。Worker は親パラメータを API から取得しない。
 
 ### DataLoader 対応
@@ -188,6 +206,8 @@ flowchart LR
         e2["shuffle=False"]
     end
 ```
+
+
 
 ---
 
@@ -228,6 +248,8 @@ flowchart TB
     fractional --> subset
 ```
 
+
+
 ### `WatermarkLoader` の lazy 初期化
 
 ```mermaid
@@ -247,6 +269,8 @@ flowchart TD
     lazy --> minio
     dmOnly -.->|"loader 未生成"| skip["MinIO アクセスなし"]
 ```
+
+
 
 透かし装飾が不要な実験では `WatermarkLoader` は作られない。
 
@@ -270,6 +294,8 @@ flowchart LR
     PIL --> FRAC --> TT
 ```
 
+
+
 ### 設定例
 
 ```json
@@ -279,20 +305,25 @@ flowchart LR
     "type": "display_mask",
     "width": 16, "height": 16, "position": [0, 0],
     "fraction": 0.5, "seed_offset": 0
-  }
+  },
+  "attack_decoration": {"type": "watermark", "filter_id": "circle", "fraction": 1.0}
 }
 ```
 
-| キー | 適用先 |
-|------|--------|
-| `eval_decoration` | `get_eval_target_dataloaders` / `get_eval_shadow_dataloader` |
-| `target_train_decoration` | `get_target_dataloaders` の train |
-| `attack_decoration` | 現行 pipeline では未使用（プレビューのみ） |
 
-| `type` | パラメータ |
-|--------|-----------|
-| `watermark` | `filter_id`, `fraction`（省略時 1.0）, `seed_offset`（省略時 0） |
+| キー                        | 適用先                                                          |
+| ------------------------- | ------------------------------------------------------------ |
+| `eval_decoration`         | `get_eval_target_dataloaders` / `get_eval_shadow_dataloader` |
+| `target_train_decoration` | `get_target_dataloaders` の train                             |
+| `attack_decoration`       | 現行 pipeline では未使用（プレビューのみ）                                   |
+
+
+
+| `type`         | パラメータ                                                                         |
+| -------------- | ----------------------------------------------------------------------------- |
+| `watermark`    | `filter_id`, `fraction`（省略時 1.0）, `seed_offset`（省略時 0）                        |
 | `display_mask` | `width`, `height`, `position`（`[x,y]` または `x`/`y`）, `fraction`, `seed_offset` |
+
 
 **適用ポリシー（全装飾共通）**
 
@@ -333,12 +364,16 @@ classDiagram
     MIA_Attack <|-- MIA_Shokri
 ```
 
-| クラス | 概要 |
-|--------|------|
-| `MIA_Attack` | 学習・予測・ROC 共通基底 |
+
+
+
+| クラス               | 概要                                             |
+| ----------------- | ---------------------------------------------- |
+| `MIA_Attack`      | 学習・予測・ROC 共通基底                                 |
 | `MIA_OfflineLiRA` | シャドウ OUT 分布から z-score → CDF スコア（論文 Equation 4） |
-| `MIA_OnlineLiRA` | シャドウ IN/OUT 分布から対数尤度比スコア（論文 Algorithm 1） |
-| `MIA_Shokri` | ソフトマックス特徴 → `AttackNet` |
+| `MIA_OnlineLiRA`  | シャドウ IN/OUT 分布から対数尤度比スコア（論文 Algorithm 1）       |
+| `MIA_Shokri`      | ソフトマックス特徴 → `AttackNet`                        |
+
 
 ### LiRA 共通モジュール（`mia_lira_common.py`）
 
@@ -353,12 +388,14 @@ classDiagram
 
 ### Offline vs Online LiRA
 
-| 項目 | Offline (`MIA_OfflineLiRA`) | Online (`MIA_OnlineLiRA`) |
-|------|----------------------------|---------------------------|
-| シャドウ学習 | `shadow_pool` のみ（攻撃対象は常に OUT） | `shadow_pool` + クエリサンプル（IN/OUT を keep 行列で制御） |
-| 分布推定 | OUT のみ (`μ_out`, `σ_out`) | IN / OUT 両方 |
-| スコア | `Φ((conf - μ_out) / σ_out)` | `logpdf(conf\|IN) - logpdf(conf\|OUT)` |
-| 追加成果物 | `score_distribution_lira*.png` | `score_distribution_lira.png` |
+
+| 項目     | Offline (`MIA_OfflineLiRA`)    | Online (`MIA_OnlineLiRA`)                    |
+| ------ | ------------------------------ | -------------------------------------------- |
+| シャドウ学習 | `shadow_pool` のみ（攻撃対象は常に OUT）  | `shadow_pool` + クエリサンプル（IN/OUT を keep 行列で制御） |
+| 分布推定   | OUT のみ (`μ_out`, `σ_out`)      | IN / OUT 両方                                  |
+| スコア    | `Φ((conf - μ_out) / σ_out)`    | `logpdf(conf|IN) - logpdf(conf|OUT)`         |
+| 追加成果物  | `score_distribution_lira*.png` | `score_distribution_lira.png`                |
+
 
 Online LiRA の keep 行列は `dataset.build_online_lira_keep_matrix(seed, num_shadow_models)` で決定的に生成する。学習時・攻撃時・`load_shadow_model=True` 時いずれも同一の `seed` / sizes があれば同じ行列が得られる。事後分析は保存済みモデル（`shadow_models.pth` 等）のロードと再計算で行う。
 
@@ -366,10 +403,12 @@ Online LiRA の keep 行列は `dataset.build_online_lira_keep_matrix(seed, num_
 
 ## `models/`
 
-| モジュール | 用途 |
-|-----------|------|
+
+| モジュール       | 用途                                      |
+| ----------- | --------------------------------------- |
 | `TargetCNN` | CIFAR-100（3×32×32, 100 クラス）ターゲット・シャドウ共用 |
-| `AttackNet` | Shokri 用 2 クラス MLP |
+| `AttackNet` | Shokri 用 2 クラス MLP                      |
+
 
 ---
 
@@ -393,6 +432,8 @@ flowchart LR
     work --> ur --> MinIO
 ```
 
+
+
 ---
 
 ## `server_client/`
@@ -407,16 +448,20 @@ flowchart LR
     Client --> models["CreateExperimentRequest 等"]
 ```
 
+
+
 ---
 
 ## 環境変数
 
-| 変数 | 用途 |
-|------|------|
-| `PC_NAME` | ワーカー識別名 |
-| `REDIS_URL` | Celery ブローカー |
-| `MINIO_URL` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET_NAME` | オブジェクトストレージ |
-| `MIAOS_API_URL` | オーケストレータ API |
+
+| 変数                                                        | 用途           |
+| --------------------------------------------------------- | ------------ |
+| `PC_NAME`                                                 | ワーカー識別名      |
+| `REDIS_URL`                                               | Celery ブローカー |
+| `MINIO_URL` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET_NAME` | オブジェクトストレージ  |
+| `MIAOS_API_URL`                                           | オーケストレータ API |
+
 
 `core/config.py` 参照。`DEVICE` は CUDA 利用可能なら GPU。
 
@@ -448,3 +493,4 @@ data/
     └── display_mask/
         └── decorator.py
 ```
+
