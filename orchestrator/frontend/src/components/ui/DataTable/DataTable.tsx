@@ -67,11 +67,10 @@ function DraggableHeader<TData, TValue>({
 
   const style = {
     opacity: isDragging ? 0.8 : 1,
-    position: "relative" as const,
+    ...(isDragging ? { position: "relative" as const, zIndex: 3 } : {}),
     transform: CSS.Translate.toString(transform),
     transition,
     whiteSpace: "nowrap" as const,
-    zIndex: isDragging ? 2 : 1,
   };
 
   // Do not make the select column draggable
