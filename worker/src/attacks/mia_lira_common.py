@@ -15,9 +15,6 @@ from src.attacks.mia_attack import MIA_Attack
 
 LiraVariant = Literal["offline", "online"]
 
-# Online LiRA の keep 行列保存名
-ONLINE_LIRA_KEEP_NAME = "online_lira_keep.npy"
-
 
 # 正規分布に変換
 def logit_scaling(probs: torch.Tensor) -> torch.Tensor:
@@ -32,7 +29,7 @@ def logit_scaling(probs: torch.Tensor) -> torch.Tensor:
     probs = probs.to(torch.float64)
     # p=0 や p=1 による無限大を回避するための微小値クリッピング
     eps = 1e-10
-    probs = torch.clamp(probs, eps, 1.0 - eps)
+    probs = torch.clamp(probs, eps, 1.0 - eps) # 最小値: eps, 最大値: 1.0 - eps
     return torch.log(probs / (1.0 - probs))
 
 
@@ -101,11 +98,9 @@ def save_lira_artifacts(
     train_size: int,
     test_size: int,
     shadow_out_logits: np.ndarray | None = None,
-    shadow_out_means: np.ndarray | None = None,
     shadow_out_stds: np.ndarray | None = None,
     z_scores: np.ndarray | None = None,
     keep_matrix: np.ndarray | None = None,
-    shadow_in_means: np.ndarray | None = None,
     shadow_out_means_online: np.ndarray | None = None,
 ) -> str:
     """
@@ -134,7 +129,6 @@ def save_lira_artifacts(
         npz_kwargs.update(
             {
                 "shadow_out_logits": shadow_out_logits,
-                "shadow_out_means": shadow_out_means,
                 "shadow_out_stds": shadow_out_stds,
                 "z_scores": z_scores,
             }
@@ -144,7 +138,6 @@ def save_lira_artifacts(
             {
                 "shadow_out_logits": shadow_out_logits,
                 "keep_matrix": keep_matrix,
-                "shadow_in_means": shadow_in_means,
                 "shadow_out_means": shadow_out_means_online,
             }
         )

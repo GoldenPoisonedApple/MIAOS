@@ -68,6 +68,10 @@ class dataset:
 
         # 装飾設定の読み込み
         self.decoration_config = DecorationConfig.from_request(settings)
+        # 装飾設定の読み込み
+        self._decoration_builder = SampleDecoratorBuilder(
+            experiment_seed=int(self.settings.seed),
+        )
 
         # データセットのインデックスを作成（常に request の seed / sizes から計算）
         indices = np.arange(len(self.full_dataset))
@@ -80,11 +84,6 @@ class dataset:
             remaining_idx,
             train_size=settings.target_test_size,
             random_state=settings.seed,
-        )
-
-        # 装飾設定の読み込み
-        self._decoration_builder = SampleDecoratorBuilder(
-            experiment_seed=int(self.settings.seed),
         )
 
         # 装飾プレビューを保存
@@ -238,12 +237,18 @@ class dataset:
         Returns:
                 shape (num_shadows, num_query_samples) の bool 配列
         """
+        # 対象データ取得
         query_indices = self.get_attack_query_indices()
         num_query = len(query_indices)
-        rng = np.random.RandomState(seed)
+        # 一様分布からランダムな数値を生成
+        rng = np.random.RandomState(seed)	# 乱数生成器の作成
+        # [0, 1) で (行: num_shadows, 列: num_query) の形状の行列作成
         uniforms = rng.uniform(0, 1, size=(num_shadows, num_query))
+        # 列方向(num_query)にソート: shadowの順位を決定
         order = uniforms.argsort(axis=0)
+        # shadowの半数
         num_in = num_shadows // 2
+        # 要素 < num_in の条件を満たす要素を True にし、それ以外を False にする: 丁度半数のshadowがINになる
         return order < num_in
 
     def get_online_lira_shadow_dataloader(
@@ -256,7 +261,7 @@ class dataset:
         Online LiRA 用シャドーデータローダー。
         shadow_pool からの分割に加え、query_keep が True のクエリサンプルを学習集合へ含める。
         """
-        # 毎回新しくシャドーモデルの学習用とテスト用のインデックスを分割
+        # シャドーモデル用のデータセットから学習用とテスト用のインデックスを分割
         shadow_train_idx, remaining_idx = train_test_split(
             self.shadow_pool_indices,
             train_size=self.settings.shadow_train_size,
@@ -267,11 +272,12 @@ class dataset:
             train_size=self.settings.shadow_test_size,
             random_state=self.settings.seed + seed,
         )
-        # クエリサンプルのうち IN と判定されたものを学習集合に追加
-        query_in_idx = query_indices[query_keep]
+        # 対象データのうち IN と判定されたものを学習集合に追加
+        query_in_idx = query_indices[query_keep]	# 対象データのうち IN と判定されたもののインデックス
+        # 結合
         if len(query_in_idx) > 0:
             shadow_train_idx = np.concatenate([shadow_train_idx, query_in_idx])
-            shadow_train_idx = np.unique(shadow_train_idx)
+            shadow_train_idx = np.unique(shadow_train_idx)	# 重複を削除: 重複は存在しないが念のため
 
         shadow_train_dataset = self._make_subset(
             shadow_train_idx,

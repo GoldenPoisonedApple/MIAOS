@@ -395,9 +395,9 @@ classDiagram
 | シャドウ学習 | `shadow_pool` のみ（攻撃対象は常に OUT） | `shadow_pool` + クエリサンプル（IN/OUT を keep 行列で制御） |
 | 分布推定 | OUT のみ (`μ_out`, `σ_out`) | IN / OUT 両方 |
 | スコア | `Φ((conf - μ_out) / σ_out)` | `logpdf(conf\|IN) - logpdf(conf\|OUT)` |
-| 追加成果物 | `lira_artifacts/` | 上記 + `online_lira_keep.npy`（keep 行列） |
+| 追加成果物 | `lira_artifacts/` | 上記（`keep_matrix` は npz 内） |
 
-Online LiRA の keep 行列は `dataset.build_online_lira_keep_matrix` で生成し、各クエリサンプルが `num_shadow_models // 2` 個のシャドウで IN になるよう割り当てる。`load_shadow_model=True` で Online LiRA を実行する場合、`online_lira_keep.npy` が同ディレクトリに必須（Offline で学習したシャドウは流用不可）。
+Online LiRA の keep 行列は `dataset.build_online_lira_keep_matrix(seed, num_shadow_models)` で決定的に生成する。学習時・攻撃時・`load_shadow_model=True` 時いずれも同一の `seed` / sizes があれば同じ行列が得られる。`lira_artifacts.npz` にも `keep_matrix` を保存する。
 
 ---
 
