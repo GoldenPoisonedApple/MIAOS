@@ -566,7 +566,9 @@
         "type": "string",
         "enum": [
           "OfflineLira",
-          "Shokri"
+          "OnlineLira",
+          "Shokri",
+          "LfMia"
         ]
       },
       "Model": {

@@ -12,7 +12,8 @@
 }
 
 .tableWrapper {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: calc(100svh - 40px);
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--code-bg);
@@ -21,7 +22,8 @@
 
 .dataTable {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   /* 列ごとの text-align は resolveColumnAlign で td/th に指定 */
 }
 
@@ -34,9 +36,13 @@
 }
 
 .dataTable th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   font-weight: 600;
   color: var(--text-h);
-  background: var(--social-bg);
+  background: var(--code-bg);
+  box-shadow: 0 1px 0 var(--border);
 }
 
 .thRight .headerMain {

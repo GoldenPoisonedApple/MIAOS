@@ -33,6 +33,7 @@ class MIA_Attack(ABC):
         self.MODEL_SAVE_DIR = MODEL_SAVE_DIR
         self.logger = logger
         self.settings = settings
+        self.metrics = {}
 
     # ターゲットモデルの訓練、評価
     def train_target_model(self, target_model: nn.Module):
@@ -83,6 +84,8 @@ class MIA_Attack(ABC):
         # シャドーモデルの訓練
         shadow_models = []
         state_dicts = []
+        train_accs = []
+        test_accs = []
         for i in trange(self.settings.num_shadow_models, desc="Shadow Models"):
             shadow_train_loader, shadow_test_loader, _, _ = (
                 self.dataset.get_shadow_dataloader(seed=i)
@@ -93,12 +96,19 @@ class MIA_Attack(ABC):
             shadow_model = MIA_Attack.train_model(
                 shadow_model, shadow_train_loader, self.settings.max_epochs
             )
-            shadow_model.to("cpu")  # GPUメモリ節約
             # リストを追加
             shadow_models.append(shadow_model)
             state_dicts.append(shadow_model.state_dict())
             # 評価
-            # 未実装
+            train_acc = MIA_Attack.get_accuracy(shadow_model, shadow_train_loader)
+            test_acc = MIA_Attack.get_accuracy(shadow_model, shadow_test_loader)
+            self.logger.info(f"Shadow Model {i} -> Train: {train_acc:.4f}, Test: {test_acc:.4f} (Gap: {train_acc - test_acc:.4f})")
+            train_accs.append(train_acc)
+            test_accs.append(test_acc)
+            
+            shadow_model.to("cpu")  # GPUメモリ節約
+
+            
         # モデルの保存
         torch.save(
             state_dicts, os.path.join(self.MODEL_SAVE_DIR, cfg.SHADOW_MODEL_NAME)
@@ -106,6 +116,12 @@ class MIA_Attack(ABC):
         self.logger.info(
             f"Shadow Models saved -> {os.path.join(self.MODEL_SAVE_DIR, cfg.SHADOW_MODEL_NAME)}"
         )
+        # 指標の更新
+        self.metrics.update({
+            "shadow_train_accs": train_accs,
+            "shadow_test_accs": test_accs,
+            "shadow_acc_gaps": [train_acc - test_acc for train_acc, test_acc in zip(train_accs, test_accs)],
+        })
 
         return shadow_models
 
@@ -195,7 +211,7 @@ class MIA_Attack(ABC):
             f"TPR: {(tpr_at_001_fpr * 100):.4f}% at 0.01% FPR, Threshold: {threshold_at_001_fpr:.4f}"
         )
 
-        metrics = {
+        self.metrics.update({
             "global_auc": float(roc_auc),
             "tpr_at_1_fpr": float(tpr_at_1_fpr),
             "tpr_at_01_fpr": float(tpr_at_01_fpr),
@@ -203,8 +219,8 @@ class MIA_Attack(ABC):
             "threshold_at_1_fpr": float(threshold_at_1_fpr),
             "threshold_at_01_fpr": float(threshold_at_01_fpr),
             "threshold_at_001_fpr": float(threshold_at_001_fpr),
-        }
-        return metrics
+        })
+        return self.metrics
 
     # ==========================================
     # 以下、Utility関数

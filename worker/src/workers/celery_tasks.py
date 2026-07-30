@@ -1,8 +1,10 @@
 # celery_tasks.py の推奨例
-from celery import Celery
+import logging
+import os
 import tempfile
 import time
-import os
+
+from celery import Celery
 
 import src.core.config as cfg
 from src.core.pipeline import run_experiment
@@ -21,6 +23,43 @@ from src.server_client.api.experiments import (
     reflect_experiment_results,
     claim_experiment,
 )
+
+logger = logging.getLogger(__name__)
+
+# UpdateResultsRequest のトップレベルに載せる metrics キー（それ以外は other_metrics へ）
+TOP_LEVEL_METRIC_KEYS = frozenset({
+    "global_auc",
+    "tpr_at_01_fpr",
+    "tpr_at_1_fpr",
+    "threshold_at_01_fpr",
+    "threshold_at_1_fpr",
+    "total_time_sec",
+})
+
+
+def _json_safe_metric_value(value):
+    """API 送信用に metrics 値を JSON 直列化可能な型へ変換する。"""
+    if value is None:
+        return None
+    if hasattr(value, "item") and callable(value.item):
+        return value.item()
+    if hasattr(value, "tolist") and callable(value.tolist):
+        return value.tolist()
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_metric_value(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _json_safe_metric_value(v) for k, v in value.items()}
+    return value
+
+
+def build_other_metrics(metrics: dict) -> UpdateResultsRequestOtherMetrics:
+    """トップレベル以外の metrics を other_metrics として構築する。"""
+    return UpdateResultsRequestOtherMetrics.from_dict({
+        k: _json_safe_metric_value(v)
+        for k, v in metrics.items()
+        if k not in TOP_LEVEL_METRIC_KEYS and v is not None
+    })
+
 
 app = Celery("mia_tasks", broker=cfg._REDIS_URL)
 # 全タスクのデフォルト値設定
@@ -83,24 +122,19 @@ def main(id: int, params) -> UpdateResultsRequest:
         payload = UpdateResultsRequest(
             experiment_id=id,
             files=UpdateResultsRequestFiles.from_dict(files_dict),
-            global_auc=metrics["global_auc"],
-            other_metrics=UpdateResultsRequestOtherMetrics.from_dict(
-                {
-                    "tpr_at_001_fpr": metrics["tpr_at_001_fpr"],
-                    "threshold_at_001_fpr": metrics["threshold_at_001_fpr"],
-                }
-            ),
+            global_auc=metrics.get("global_auc"),
+            other_metrics=build_other_metrics(metrics),
             status=ExperimentStatus.SUCCEEDED,
-            threshold_at_01_fpr=metrics["threshold_at_01_fpr"],
-            threshold_at_1_fpr=metrics["threshold_at_1_fpr"],
-            total_time=metrics["total_time_sec"],
-            tpr_at_01_fpr=metrics["tpr_at_01_fpr"],
-            tpr_at_1_fpr=metrics["tpr_at_1_fpr"],
+            threshold_at_01_fpr=metrics.get("threshold_at_01_fpr"),
+            threshold_at_1_fpr=metrics.get("threshold_at_1_fpr"),
+            total_time=metrics.get("total_time_sec"),
+            tpr_at_01_fpr=metrics.get("tpr_at_01_fpr"),
+            tpr_at_1_fpr=metrics.get("tpr_at_1_fpr"),
             worker_name=cfg.PC_NAME,
             error_message=None,
         )
     except Exception as e:
-        print(f"Error: {e}")
+        logger.exception("Experiment failed: %s", e)
         # ペイロード作成
         payload = UpdateResultsRequest(
             experiment_id=id,

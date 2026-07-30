@@ -5,6 +5,13 @@ import { useFilters } from "../../../hooks/useFilters";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Button } from "../../../components/ui/Button/Button";
 import { KeyValueEditor } from "../../../components/ui/KeyValueEditor/KeyValueEditor";
+import {
+  type ApplySplit,
+  type ExperimentFormData,
+  type ExperimentFormState,
+  getDefaultFormState,
+  getFormStateFromExperiment,
+} from "../../../utils/experimentForm";
 import styles from "./CreateExperimentModal.module.css";
 
 const WATERMARK_SPLITS = [
@@ -14,53 +21,34 @@ const WATERMARK_SPLITS = [
   { key: "shadow_test", label: "Shadow Test" },
 ] as const;
 
-type ApplySplit = (typeof WATERMARK_SPLITS)[number]["key"];
 type WatermarkConfig = components["schemas"]["WatermarkConfig"];
-type ExperimentFormData = Omit<CreateExperimentRequest, "watermark">;
+type Experiment = components["schemas"]["Model"];
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (req: CreateExperimentRequest) => Promise<void>;
   isCreating: boolean;
+  sourceExperiment?: Experiment | null;
 }
 
-export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }: Props) => {
+interface FormProps {
+  initialState: ExperimentFormState;
+  onClose: () => void;
+  onSubmit: (req: CreateExperimentRequest) => Promise<void>;
+  isCreating: boolean;
+}
+
+const CreateExperimentForm = ({ initialState, onClose, onSubmit, isCreating }: FormProps) => {
   const { filters, loading: filtersLoading } = useFilters();
 
-  const getDefaultDateName = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}_${String(d.getHours()).padStart(2, "0")}-${String(d.getMinutes()).padStart(2, "0")}-${String(d.getSeconds()).padStart(2, "0")}`;
-  };
-
-  const [formData, setFormData] = useState<ExperimentFormData>({
-    name: getDefaultDateName(),
-    method: "OfflineLira",
-    base_experiment_id: null,
-    notes: null,
-    seed: 42,
-    batch_size: 256,
-    max_epochs: 200,
-    num_shadow_models: 100,
-    shadow_train_size: 10520,
-    shadow_test_size: 10520,
-    target_train_size: 10520,
-    target_test_size: 10520,
-    load_attack_model: false,
-    load_shadow_model: false,
-    load_target_model: false,
-    hyperparameters: {} as Record<string, never>,
-  });
-
-  const [filterId, setFilterId] = useState("");
-  const [seedOffset, setSeedOffset] = useState(0);
-  const [applyFractions, setApplyFractions] = useState<Record<ApplySplit, string>>({
-    target_train: "1",
-    target_test: "",
-    shadow_train: "",
-    shadow_test: "",
-  });
-  const [showTestSplits, setShowTestSplits] = useState(false);
+  const [formData, setFormData] = useState<ExperimentFormData>(initialState.formData);
+  const [filterId, setFilterId] = useState(initialState.watermark.filterId);
+  const [seedOffset, setSeedOffset] = useState(initialState.watermark.seedOffset);
+  const [applyFractions, setApplyFractions] = useState<Record<ApplySplit, string>>(
+    initialState.watermark.applyFractions
+  );
+  const [showTestSplits, setShowTestSplits] = useState(initialState.watermark.showTestSplits);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -110,8 +98,7 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="新しい実験を作成">
-      <form onSubmit={handleSubmit} className={styles.modalForm}>
+    <form onSubmit={handleSubmit} className={styles.modalForm}>
         <div className={styles.formGroup}>
           <label>実験名</label>
           <input type="text" name="name" value={formData.name} onChange={handleChange} required />
@@ -121,7 +108,9 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
           <label>手法 (Method)</label>
           <select name="method" value={formData.method} onChange={handleChange}>
             <option value="OfflineLira">OfflineLira</option>
+            <option value="OnlineLira">OnlineLira</option>
             <option value="Shokri">Shokri</option>
+						<option value="LfMia">LfMia</option>
           </select>
         </div>
 
@@ -313,6 +302,37 @@ export const CreateExperimentModal = ({ isOpen, onClose, onSubmit, isCreating }:
           </Button>
         </div>
       </form>
+  );
+};
+
+export const CreateExperimentModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  isCreating,
+  sourceExperiment = null,
+}: Props) => {
+  if (!isOpen) {
+    return null;
+  }
+
+  const initialState = sourceExperiment
+    ? getFormStateFromExperiment(sourceExperiment)
+    : getDefaultFormState();
+
+  const modalTitle = sourceExperiment
+    ? `実験を作成（#${sourceExperiment.id} から流用）`
+    : "新しい実験を作成";
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={modalTitle}>
+      <CreateExperimentForm
+        key={sourceExperiment?.id ?? "new"}
+        initialState={initialState}
+        onClose={onClose}
+        onSubmit={onSubmit}
+        isCreating={isCreating}
+      />
     </Modal>
   );
 };

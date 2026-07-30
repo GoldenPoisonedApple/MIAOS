@@ -18,6 +18,7 @@ const EXPERIMENT_DEFAULT_SORTING = [{ id: "id", desc: false }] as const;
 export const ExperimentList = () => {
   const { experiments, loading, error, deleteExperiments, createExperiment, isCreating, isDeleting } = useExperiments();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [copySource, setCopySource] = useState<Experiment | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState({});
 
@@ -80,6 +81,16 @@ export const ExperimentList = () => {
     () => ({ ...defaultHiddenColumns }),
     [defaultHiddenColumns]
   );
+
+  const handleOpenCreateModal = (source: Experiment | null = null) => {
+    setCopySource(source);
+    setIsCreateModalOpen(true);
+  };
+
+  const handleCloseCreateModal = () => {
+    setIsCreateModalOpen(false);
+    setCopySource(null);
+  };
 
   const columns = useMemo<ColumnDef<Experiment>[]>(
     () => [
@@ -176,6 +187,22 @@ export const ExperimentList = () => {
         cell: ({ row }) => (row.original.load_target_model ? "○" : ""),
       },
       { accessorKey: "notes", header: "備考" },
+      {
+        id: "actions",
+        header: "操作",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <Button
+            variant="outline"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenCreateModal(row.original);
+            }}
+          >
+            複製
+          </Button>
+        ),
+      },
       ...dynamicColumns,
     ],
     [dynamicColumns]
@@ -209,7 +236,7 @@ export const ExperimentList = () => {
               選択した項目を削除 ({selectedCount})
             </Button>
           )}
-          <Button variant="primary" onClick={() => setIsCreateModalOpen(true)}>
+          <Button variant="primary" onClick={() => handleOpenCreateModal()}>
             新しい実験を作成
           </Button>
         </div>
@@ -228,9 +255,10 @@ export const ExperimentList = () => {
 
       <CreateExperimentModal
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        onClose={handleCloseCreateModal}
         onSubmit={createExperiment}
         isCreating={isCreating}
+        sourceExperiment={copySource}
       />
 
       <ConfirmModal

@@ -15,9 +15,10 @@ matplotlib.use("Agg")  # GUIを持たないDocker環境での描画用バック�
 import src.core.config as cfg
 from src.data.dataset import dataset
 from src.models.target_model import TargetCNN
-from src.attacks.mia_lira import MIA_LIRA
+from src.attacks.mia_offline_lira import MIA_OfflineLiRA
+from src.attacks.mia_online_lira import MIA_OnlineLiRA
 from src.attacks.mia_shokri import MIA_Shokri
-from src.attacks.watermark_probe import WatermarkProbeAnalysis
+from src.attacks.lf_mia import LF_MIA
 
 
 def run_experiment(
@@ -96,9 +97,22 @@ def run_experiment(
     mia_method = request.method
     logger.info(f"Selected MIA method: {mia_method.value}")
     if mia_method == MiaMethod.OFFLINELIRA:
-        mia_class = MIA_LIRA(dataset_instance, work_dir, logger, request)
+        mia_class = MIA_OfflineLiRA(dataset_instance, work_dir, logger, request)
+    elif mia_method == MiaMethod.ONLINELIRA:
+        mia_class = MIA_OnlineLiRA(dataset_instance, work_dir, logger, request)
     elif mia_method == MiaMethod.SHOKRI:
         mia_class = MIA_Shokri(dataset_instance, work_dir, logger, request)
+    elif mia_method == MiaMethod.LFMIA:
+        if dataset_instance.decoration_config.attack_decoration is None:
+            logger.error("Error: Attack decoration is not specified. Please specify the attack decoration.")
+            raise ValueError("Error: Attack decoration is not specified. Please specify the attack decoration.")
+        if dataset_instance.decoration_config.target_train_decoration is None:
+            logger.error("Error: Target train decoration is not specified. Please specify the target train decoration.")
+            raise ValueError("Error: Target train decoration is not specified. Please specify the target train decoration.")
+        if dataset_instance.decoration_config.shadow_decoration is None:
+            logger.error("Error: Shadow decoration is not specified. Please specify the shadow decoration.")
+            raise ValueError("Error: Shadow decoration is not specified. Please specify the shadow decoration.")
+        mia_class = LF_MIA(dataset_instance, work_dir, logger, request)
     else:
         logger.error(f"Invalid MIA method: {mia_method}")
         raise ValueError(f"Invalid MIA method: {mia_method}")
@@ -159,39 +173,11 @@ def run_experiment(
     )
 
     # ----------------------------------
-    # 透かし probe 解析（透かし有効時のみ）
-    # ----------------------------------
-    watermark_probe_metrics = None
-    if dataset_instance.decoration_config.has_watermark():
-        logger.info("[Phase 4.5] Watermark probe analysis...")
-        p45_start_time = time.time()
-        probe = WatermarkProbeAnalysis(
-            dataset_instance, work_dir, logger, request, variant="on_black"
-        )
-        watermark_probe_metrics = probe.analyze(shadow_models, target_model)
-        logger.info(
-            f"-> {time.time() - p45_start_time:.2f} sec: {((time.time() - p45_start_time) / 60):.2f} min"
-        )
-
-    # ----------------------------------
     # 総合評価
     # ----------------------------------
     logger.info("[Phase 5] Comprehensive evaluation...")
     p5_start_time = time.time()
     metrics = mia_class.comprehensive_evaluate(scores, trues)
-
-    # 透かし probe 解析結果を追加
-    if watermark_probe_metrics is not None:
-        for key, value in watermark_probe_metrics.items():
-            if isinstance(value, dict):
-                for sub_key, sub_value in value.items():
-                    if isinstance(sub_value, bool):
-                        sub_value = float(sub_value)
-                    elif isinstance(sub_value, (int, float)):
-                        sub_value = float(sub_value)
-                    metrics[f"watermark_probe_{key}_{sub_key}"] = sub_value
-            elif isinstance(value, (bool, int, float)):
-                metrics[f"watermark_probe_{key}"] = float(value)
 
     logger.info(
         f"-> {time.time() - p5_start_time:.2f} sec: {((time.time() - p5_start_time) / 60):.2f} min"

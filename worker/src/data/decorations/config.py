@@ -43,45 +43,10 @@ class DecorationConfig:
     eval_decoration: DecorationSpec | None
     # ターゲット用
     target_train_decoration: DecorationSpec | None
-
-    def eval_watermark_filter_id(self) -> str | None:
-        if isinstance(self.eval_decoration, WatermarkDecorationSpec):
-            return self.eval_decoration.filter_id
-        return None
-
-    def target_train_watermark_filter_id(self) -> str | None:
-        if isinstance(self.target_train_decoration, WatermarkDecorationSpec):
-            return self.target_train_decoration.filter_id
-        return None
-
-    def has_watermark(self) -> bool:
-        return (
-            self.eval_watermark_filter_id() is not None
-            or self.target_train_watermark_filter_id() is not None
-        )
-
-    def watermark_roles(self) -> list[tuple[str, str]]:
-        """透かしが設定されている (役割名, filter_id) の一覧"""
-        roles: list[tuple[str, str]] = []
-        eval_id = self.eval_watermark_filter_id()
-        if eval_id is not None:
-            roles.append(("eval", eval_id))
-        train_id = self.target_train_watermark_filter_id()
-        if train_id is not None:
-            roles.append(("target_train", train_id))
-        return roles
-
-    def has_display_mask(self) -> bool:
-        return len(self.display_mask_roles()) > 0
-
-    def display_mask_roles(self) -> list[tuple[str, DisplayMaskDecorationSpec]]:
-        """表示マスクが設定されている (役割名, spec) の一覧"""
-        roles: list[tuple[str, DisplayMaskDecorationSpec]] = []
-        if isinstance(self.eval_decoration, DisplayMaskDecorationSpec):
-            roles.append(("eval", self.eval_decoration))
-        if isinstance(self.target_train_decoration, DisplayMaskDecorationSpec):
-            roles.append(("target_train", self.target_train_decoration))
-        return roles
+    # シャドー用
+    shadow_decoration: DecorationSpec | None
+    # 攻撃用（将来対応。現行 pipeline では未使用）
+    attack_decoration: DecorationSpec | None = None
 
     # 設定のパース
     # cls: selfのClass版
@@ -90,7 +55,12 @@ class DecorationConfig:
     def from_request(cls, settings: CreateExperimentRequest) -> DecorationConfig:
         hyperparameters = settings.hyperparameters
         if hyperparameters is UNSET or hyperparameters is None:
-            return cls(eval_decoration=None, target_train_decoration=None)
+            return cls(
+                eval_decoration=None,
+                target_train_decoration=None,
+                shadow_decoration=None,
+                attack_decoration=None,
+            )
 
         hp = hyperparameters.to_dict()
         return cls(
@@ -100,6 +70,10 @@ class DecorationConfig:
             target_train_decoration=cls._parse_decoration(
                 hp.get("target_train_decoration")
             ),
+            # シャドー用
+            shadow_decoration=cls._parse_decoration(hp.get("shadow_decoration")),
+            # 攻撃用
+            attack_decoration=cls._parse_decoration(hp.get("attack_decoration")),
         )
 
     # デコレーションの型バリデーション

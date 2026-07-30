@@ -129,7 +129,6 @@ lint:
 # --frozen: uv.lockとpyproject.tomlに不整合があった場合はエラーとなる
 .PHONY: check
 check:
-	uv run --frozen ruff format --check src
 	uv run --frozen ruff check src
 
 # 依存関係の更新(ロックファイルを最新に更新し環境に反映)

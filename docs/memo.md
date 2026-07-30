@@ -531,3 +531,10 @@ tmux: ターミナルの分割、ウィンドウの分割を行うことがで�
 
 NASで共有しているのでgit checkoutが不安
 max-parallel: 1 にする方法もある
+
+
+普通に新しい攻撃手法が必要
+shadow用のdecorator必要
+onlineだとInとOutの図を2パターンだせるはず
+
+attack_modelは過学習防止の方針を入れた方が良い(ターゲットデータにも対応できるように)

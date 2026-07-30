@@ -260,7 +260,7 @@ export interface components {
             id: string;
         };
         /** @enum {string} */
-        MiaMethod: "OfflineLira" | "Shokri";
+        MiaMethod: "OfflineLira" | "OnlineLira" | "Shokri" | "LfMia";
         Model: {
             /**
              * Format: int64
