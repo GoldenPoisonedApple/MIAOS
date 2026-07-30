@@ -32,8 +32,12 @@ ATTACK_MODEL_NAME: str = "attack_models.pth"
 
 # クラスの数
 NUM_CLASSES: int = 100
+
+# データ数が少ないので
+# 攻撃モデルのバッチサイズ
+ATTACK_MODEL_BATCH_SIZE: int = 16
 # 攻撃モデルのエポック数
-ATTACK_MODEL_EPOCHS: int = 10
+ATTACK_MODEL_EPOCHS: int = 100
 
 # workerタイムアウト時間(秒) 1時間
 CELERY_VISIBILITY_TIMEOUT: int = 60 * 60 * 1

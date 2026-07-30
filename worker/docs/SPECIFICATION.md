@@ -135,11 +135,11 @@ flowchart TB
 
 | モジュール          | 責務                                     |
 | -------------- | -------------------------------------- |
-| `dataset.py`   | CIFAR 分割、`get_*_dataloaders`、装飾プレビュー保存 |
-| `decorations/` | 装飾設定パース・適用・透かし I/O                     |
+| `dataset.py`   | CIFAR 分割、`get_*_dataloaders`、装飾プレビュー保存、`get_attack_watermark_dataloader`（薄いファサード） |
+| `decorations/` | 装飾設定パース・適用・透かし I/O・黒背景透かし画像生成               |
 
 
-`dataset` は透かしの MinIO 取得や probe PIL 生成を**持たない**。`SampleDecoratorBuilder.get_watermark_loader()` 経由で透かし層に委譲する。
+`dataset` は透かしの MinIO 取得や黒背景合成を**持たない**。`watermark/watermark_on_black.py` に委譲する。DataLoader の組み立ては `dataset` が担当する。
 
 ---
 
@@ -213,7 +213,7 @@ flowchart LR
 
 ## `data/decorations/` — サンプル装飾
 
-設定の唯一の経路: `hyperparameters.eval_decoration` / `target_train_decoration` / `attack_decoration`  
+設定の唯一の経路: `hyperparameters.eval_decoration` / `target_train_decoration` / `shadow_decoration` / `attack_decoration`  
 1 サンプルに同時適用する装飾は 1 種類。Normalize 前の PIL 段階で適用。
 
 ### モジュール構成
@@ -227,12 +227,13 @@ flowchart TB
         fractional["fractional.py<br/>FractionalDecorator"]
         builder["builder.py<br/>lazy WatermarkLoader"]
         subset["subset.py<br/>TransformedSubset"]
-        preview["preview.py<br/>4列プレビュー"]
+        preview["preview.py<br/>5列プレビュー"]
         subgraph wm [watermark/]
             filter["filter.py"]
             transform["transform.py"]
             loader["loader.py<br/>MinIO + cache"]
             wdec["decorator.py"]
+            onBlack["watermark_on_black.py<br/>黒背景透かし PIL"]
         end
         subgraph dm [display_mask/]
             ddec["decorator.py"]
@@ -245,6 +246,7 @@ flowchart TB
     builder --> wm
     builder --> dm
     preview --> builder
+    onBlack --> loader
     fractional --> subset
 ```
 
@@ -315,7 +317,8 @@ flowchart LR
 | ------------------------- | ------------------------------------------------------------ |
 | `eval_decoration`         | `get_eval_target_dataloaders` / `get_eval_shadow_dataloader` |
 | `target_train_decoration` | `get_target_dataloaders` の train                             |
-| `attack_decoration`       | 現行 pipeline では未使用（プレビューのみ）                                   |
+| `shadow_decoration`       | 現行 pipeline では未使用（プレビューのみ）                                   |
+| `attack_decoration`       | `get_attack_watermark_dataloader`（LF_MIA Phase 6）              |
 
 
 
@@ -330,7 +333,7 @@ flowchart LR
 - 選定シード: `experiment.seed + seed_offset`
 - 同じ `fraction` + `seed_offset` + 同じ pool → type が違っても同一サンプルに適用
 - 透かしフィルタ: `WatermarkLoader` が MinIO `filters/{filter_id}.png` を `./cache/filters/` に取得
-- デバッグ: `work_dir/decoration_preview.png`（左から plain / target / eval / attack の4列。未設定列は plain と同一）
+- デバッグ: `work_dir/decoration_preview.png`（左から plain / target / eval / shadow / attack の5列。未設定列は plain と同一）
 
 `CreateExperimentRequest.watermark`（トップレベル）は**無視**。装飾は `hyperparameters` のみ。
 
@@ -489,7 +492,8 @@ data/
     │   ├── filter.py
     │   ├── transform.py
     │   ├── loader.py
-    │   └── decorator.py
+    │   ├── decorator.py
+    │   └── watermark_on_black.py
     └── display_mask/
         └── decorator.py
 ```

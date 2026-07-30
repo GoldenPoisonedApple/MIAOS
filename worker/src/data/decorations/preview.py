@@ -51,11 +51,12 @@ def save_decoration_preview(
     original: Image.Image,
     output_path: str,
 ) -> None:
-    """plain / target / eval / attack の4列横並びプレビューを保存する。"""
+    """plain / target / eval / shadow / attack の5列横並びプレビューを保存する。"""
     columns: list[tuple[str, DecorationSpec | None]] = [
         ("plain", None),
         ("target", config.target_train_decoration),
         ("eval", config.eval_decoration),
+        ("shadow", config.shadow_decoration),
         ("attack", config.attack_decoration),
     ]
 

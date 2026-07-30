@@ -18,6 +18,7 @@ from src.models.target_model import TargetCNN
 from src.attacks.mia_offline_lira import MIA_OfflineLiRA
 from src.attacks.mia_online_lira import MIA_OnlineLiRA
 from src.attacks.mia_shokri import MIA_Shokri
+from src.attacks.lf_mia import LF_MIA
 
 
 def run_experiment(
@@ -101,6 +102,17 @@ def run_experiment(
         mia_class = MIA_OnlineLiRA(dataset_instance, work_dir, logger, request)
     elif mia_method == MiaMethod.SHOKRI:
         mia_class = MIA_Shokri(dataset_instance, work_dir, logger, request)
+    elif mia_method == MiaMethod.LFMIA:
+        if dataset_instance.decoration_config.attack_decoration is None:
+            logger.error("Error: Attack decoration is not specified. Please specify the attack decoration.")
+            raise ValueError("Error: Attack decoration is not specified. Please specify the attack decoration.")
+        if dataset_instance.decoration_config.target_train_decoration is None:
+            logger.error("Error: Target train decoration is not specified. Please specify the target train decoration.")
+            raise ValueError("Error: Target train decoration is not specified. Please specify the target train decoration.")
+        if dataset_instance.decoration_config.shadow_decoration is None:
+            logger.error("Error: Shadow decoration is not specified. Please specify the shadow decoration.")
+            raise ValueError("Error: Shadow decoration is not specified. Please specify the shadow decoration.")
+        mia_class = LF_MIA(dataset_instance, work_dir, logger, request)
     else:
         logger.error(f"Invalid MIA method: {mia_method}")
         raise ValueError(f"Invalid MIA method: {mia_method}")
@@ -170,22 +182,6 @@ def run_experiment(
     logger.info(
         f"-> {time.time() - p5_start_time:.2f} sec: {((time.time() - p5_start_time) / 60):.2f} min"
     )
-
-    # ----------------------------------
-    # 攻撃用装飾を用いた追加解析（Online LiRA かつ attack_decoration 指定時のみ）
-    # Online 判定は mia_class の型に委ね、装飾の有無は decoration_config を参照する
-    # ----------------------------------
-    # if (
-    #     isinstance(mia_class, MIA_OnlineLiRA)
-    #     and dataset_instance.decoration_config.attack_decoration is not None
-    # ):
-    #     logger.info("[Phase 6] Attack-decoration analysis...")
-    #     p6_start_time = time.time()
-    #     # TODO: attack_decoration を用いた解析を実装する
-        
-    #     logger.info(
-    #         f"-> {time.time() - p6_start_time:.2f} sec: {((time.time() - p6_start_time) / 60):.2f} min"
-    #     )
 
     # 終了メッセージ
     logger.info("All phases completed successfully!")
