@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.5.2...v0.6.0) (2026-07-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* online lira実装
+
+### Features
+
+* decoration大規模改修 ([5409c68](https://github.com/GoldenPoisonedApple/MIAOS/commit/5409c6882f718c4238006d643c40d455970c1ff8))
+* LF_MIA実装完了 ([920dabe](https://github.com/GoldenPoisonedApple/MIAOS/commit/920dabe03067dee5c16de0fa5a98b26e4e58dba4))
+* Local Feature MIAを追加 ([8645fe7](https://github.com/GoldenPoisonedApple/MIAOS/commit/8645fe7161ad296a654445eb6df3379287b5acbf))
+* online lira実装 ([baa8fcb](https://github.com/GoldenPoisonedApple/MIAOS/commit/baa8fcb1c57ad8681622fd9f86e23c95f24ea358))
+* OnlineLiRAの実装理解 ([f33a07f](https://github.com/GoldenPoisonedApple/MIAOS/commit/f33a07f323224c2e99a6e9877cd66cc077bb7e9b))
+* onlineもsample表示対応 ([b6faad7](https://github.com/GoldenPoisonedApple/MIAOS/commit/b6faad7a0bab1d45bba5f270e44d6de03bbb584e))
+* save_lira_artifacts 削除 ([0763502](https://github.com/GoldenPoisonedApple/MIAOS/commit/076350275f8d4a43aa6639a0c7545d119ed25840))
+* サンプル画像における結果を出力するようにした ([da295b2](https://github.com/GoldenPoisonedApple/MIAOS/commit/da295b2071a8de3f6db9596d89beb3eaf4f63d3a))
+* サンプル画像を4つ同時描画 ([55422f3](https://github.com/GoldenPoisonedApple/MIAOS/commit/55422f39f13f9aff3c40f01cf229af53b00984c9))
+* テーブル内スクロール実装 ([66c9cc0](https://github.com/GoldenPoisonedApple/MIAOS/commit/66c9cc0ff31ffacd961f40785d3680a6be1da39e))
+* 既存実験からのパラメータ複製作成を実現 ([d0f7dba](https://github.com/GoldenPoisonedApple/MIAOS/commit/d0f7dbad65095b0f88c2d1c114519c7cbb867d49))
+
 ## [0.5.2](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.5.1...v0.5.2) (2026-07-02)
 
 
