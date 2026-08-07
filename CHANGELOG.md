@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.6.0...v0.6.1) (2026-08-07)
+
+
+### Bug Fixes
+
+* lf_miaのバグ修正 ([c80d2f2](https://github.com/GoldenPoisonedApple/MIAOS/commit/c80d2f225ffc79fc3a7c59423c90f95604de46db))
+
 ## [0.6.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.5.2...v0.6.0) (2026-07-30)
 
 
