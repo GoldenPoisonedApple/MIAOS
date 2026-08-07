@@ -110,9 +110,10 @@ class LF_MIA(MIA_Attack):
 		hyperparameters = settings.hyperparameters
 		if hyperparameters is UNSET or hyperparameters is None:
 			return (cfg.ATTACK_MODEL_BATCH_SIZE, cfg.ATTACK_MODEL_EPOCHS)
+		hp = hyperparameters.to_dict()
 		return (
-			hyperparameters.get("attack_model_batch_size", cfg.ATTACK_MODEL_BATCH_SIZE),
-			hyperparameters.get("attack_model_epochs", cfg.ATTACK_MODEL_EPOCHS),
+			hp.get("attack_model_batch_size", cfg.ATTACK_MODEL_BATCH_SIZE),
+			hp.get("attack_model_epochs", cfg.ATTACK_MODEL_EPOCHS),
 		)
 
 	# LF_MIA Attack
@@ -127,14 +128,14 @@ class LF_MIA(MIA_Attack):
 		for i in range(int(self.settings.num_shadow_models / 2)):
 			shadow_model = shadow_models[i]
 			preds, _ = MIA_Attack.get_predictions(shadow_model, attack_watermark_loader)
-			preds = logit_scaling(preds)	# なんとなくロジット変換 機械学習の時の前処理として変化は大きい方がいいかなと思って
+			preds = logit_scaling(preds).float()	# なんとなくロジット変換 機械学習の時の前処理として変化は大きい方がいいかなと思って
 			in_preds.append(preds)
 			
 		out_preds = []
 		for i in range(int(self.settings.num_shadow_models / 2)):
 			shadow_model = shadow_models[i + int(self.settings.num_shadow_models / 2)]
 			preds, _ = MIA_Attack.get_predictions(shadow_model, attack_watermark_loader)
-			preds = logit_scaling(preds)	# なんとなくロジット変換 機械学習の時の前処理として変化は大きい方がいいかなと思って
+			preds = logit_scaling(preds).float()	# なんとなくロジット変換 機械学習の時の前処理として変化は大きい方がいいかなと思って
 			out_preds.append(preds)
 			
 		# ラベル作成
@@ -142,7 +143,7 @@ class LF_MIA(MIA_Attack):
 		out_labels = torch.zeros(len(out_preds), dtype=torch.long)
 
 		# 結合
-		attack_x = torch.cat([in_preds, out_preds])
+		attack_x = torch.cat(in_preds + out_preds)
 		attack_y = torch.cat([in_labels, out_labels])
   
 		# 攻撃モデルのバッチサイズとエポック数の取得
@@ -173,7 +174,7 @@ class LF_MIA(MIA_Attack):
 		# ------------- 攻撃 -------------
 		# ターゲットモデルの予測結果
 		target_preds, _ = MIA_Attack.get_predictions(target_model, attack_watermark_loader)
-		target_preds = logit_scaling(target_preds)	# データセットと同じ前処理
+		target_preds = logit_scaling(target_preds).float()	# データセットと同じ前処理
 		
 		# 攻撃モデルで予測
 		with torch.no_grad():
