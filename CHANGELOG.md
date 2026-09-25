@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.6.1...v0.6.2) (2026-09-25)
+
+
+### Features
+
+* ターゲットモデルを複数にした ([eeb01ee](https://github.com/GoldenPoisonedApple/MIAOS/commit/eeb01eecf3c4d55a45c6ed1b0d985a8d8783acb2))
+
 ## [0.6.1](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.6.0...v0.6.1) (2026-08-07)
 
 
