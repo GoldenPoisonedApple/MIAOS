@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from src.server_client.models import CreateExperimentRequest
@@ -33,6 +33,11 @@ class DisplayMaskDecorationSpec:
 
 
 DecorationSpec = WatermarkDecorationSpec | DisplayMaskDecorationSpec
+
+
+def with_fraction(spec: DecorationSpec, fraction: float) -> DecorationSpec:
+	"""DecorationSpec の apply.fraction だけを上書きして新しい spec を返す。"""
+	return replace(spec, apply=replace(spec.apply, fraction=fraction))
 
 
 @dataclass(frozen=True)

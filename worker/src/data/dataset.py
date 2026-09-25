@@ -150,12 +150,17 @@ class dataset:
 		)
 
 	# ターゲットモデル用データローダーを取得
-	def get_target_dataloaders(self):
+	def get_target_dataloaders(self, decoration_spec: DecorationSpec | None = None):
 		"""ターゲットモデル用データローダーを取得"""
+		train_decoration_spec = (
+			decoration_spec
+			if decoration_spec is not None
+			else self.decoration_config.target_train_decoration
+		)
 		target_train_dataset = self._make_subset(
 			self.target_train_idx,
 			self.transform_train,
-			decoration_spec=self.decoration_config.target_train_decoration,
+			decoration_spec=train_decoration_spec,
 		)
 		target_test_dataset = self._make_subset(
 			self.target_test_idx,

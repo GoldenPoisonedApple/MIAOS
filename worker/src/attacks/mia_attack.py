@@ -36,16 +36,16 @@ class MIA_Attack(ABC):
         self.metrics = {}
 
     # ターゲットモデルの訓練、評価
-    def train_target_model(self, target_model: nn.Module):
+    def train_target_model(self, model_factory: Callable[[], nn.Module]):
         """
         ターゲットモデルの訓練
         Args:
-                target_model: ターゲットモデル
+                model_factory: ターゲットモデル生成関数
         Returns:
                 target_model: 訓練後のターゲットモデル
         """
-        # モデルをデバイスに転送
-        target_model = target_model.to(cfg.DEVICE)
+        # モデルを作成しデバイスに転送
+        target_model = model_factory().to(cfg.DEVICE)
         # 訓練
         trainloader, testloader, num_train, num_test = (
             self.dataset.get_target_dataloaders()

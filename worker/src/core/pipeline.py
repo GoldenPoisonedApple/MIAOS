@@ -103,15 +103,6 @@ def run_experiment(
     elif mia_method == MiaMethod.SHOKRI:
         mia_class = MIA_Shokri(dataset_instance, work_dir, logger, request)
     elif mia_method == MiaMethod.LFMIA:
-        if dataset_instance.decoration_config.attack_decoration is None:
-            logger.error("Error: Attack decoration is not specified. Please specify the attack decoration.")
-            raise ValueError("Error: Attack decoration is not specified. Please specify the attack decoration.")
-        if dataset_instance.decoration_config.target_train_decoration is None:
-            logger.error("Error: Target train decoration is not specified. Please specify the target train decoration.")
-            raise ValueError("Error: Target train decoration is not specified. Please specify the target train decoration.")
-        if dataset_instance.decoration_config.shadow_decoration is None:
-            logger.error("Error: Shadow decoration is not specified. Please specify the shadow decoration.")
-            raise ValueError("Error: Shadow decoration is not specified. Please specify the shadow decoration.")
         mia_class = LF_MIA(dataset_instance, work_dir, logger, request)
     else:
         logger.error(f"Invalid MIA method: {mia_method}")
@@ -125,10 +116,23 @@ def run_experiment(
     # ----------------------------------
     logger.info("[Phase 2] Training target model...")
     p2_start_time = time.time()
-    target_model = TargetCNN().to(cfg.DEVICE)
     if not request.load_target_model:
-        target_model = mia_class.train_target_model(target_model)
+        target_model = mia_class.train_target_model(lambda: TargetCNN())
+    # LF_MIAの場合はモデルを複数個読み込む
+    elif mia_method == MiaMethod.LFMIA:
+        state_dicts = torch.load(
+            os.path.join(assigned_model_path, cfg.TARGET_MODEL_NAME),
+            map_location=cfg.DEVICE,
+        )
+        target_model = []
+        for state_dict in state_dicts:
+            model = TargetCNN().to(cfg.DEVICE)
+            model.load_state_dict(state_dict)
+            target_model.append(model)
+        logger.info("Loading complete")
+    # それ以外の場合は1つのモデルを読み込む
     else:
+        target_model = TargetCNN().to(cfg.DEVICE)
         target_model.load_state_dict(
             torch.load(
                 os.path.join(assigned_model_path, cfg.TARGET_MODEL_NAME),
