@@ -91,7 +91,7 @@ flowchart LR
     P1 --> P2 --> P3 --> P4 --> P5
 ```
 
-Phase 5 は LiRA / Shokri では ROC / AUC、LF_MIA では `attack_score` 等の metrics 集約。
+Phase 5 は LiRA / Shokri では ROC / AUC、LF_MIA では `attack_score` / `attack_fraction`（各 13 要素リスト）等の metrics 集約。
 
 
 
@@ -99,10 +99,20 @@ Phase 5 は LiRA / Shokri では ROC / AUC、LF_MIA では `attack_score` 等の
 | Phase | 内容                                                                                                       |
 | ----- | -------------------------------------------------------------------------------------------------------- |
 | 1     | `dataset(work_dir, request)` 構築（分割は request のみ参照）、MIA 手法選択（下表）                                      |
-| 2     | `TargetCNN` 学習、または `assigned_model_path` から `load_target_model`                                          |
+| 2     | `train_target_model(model_factory)` で学習、または `load_target_model=True` 時に `assigned_model_path` から読込（LF_MIA は複数体） |
 | 3     | シャドウ複数学習、または `assigned_model_path` から `load_shadow_model`                                                |
-| 4     | `attack()` → スコア・参照値                                                                                    |
+| 4     | `attack(shadow_models, target_model)` → スコア・参照値（`target_model` の型は手法により単一 / リスト）                    |
 | 5     | `comprehensive_evaluate` → metrics 辞書（手法により内容が異なる）                                                      |
+
+### Phase 2: ターゲットモデル
+
+訓練時は全手法で同じ呼び出しを用い、サブクラスの `train_target_model` に委譲する。
+
+```python
+target_model = mia_class.train_target_model(lambda: TargetCNN())
+```
+
+読込時のみ LF_MIA と他手法で分岐する。LF_MIA の `target_model.pth` は `list[state_dict]`（13 体）、他手法は単一 `state_dict`。
 
 
 ### MIA 手法選択（Phase 1）
@@ -112,15 +122,15 @@ Phase 5 は LiRA / Shokri では ROC / AUC、LF_MIA では `attack_score` 等の
 | `OfflineLira`         | `MIA_OfflineLiRA` | —                                                                  |
 | `OnlineLira`          | `MIA_OnlineLiRA`  | —                                                                  |
 | `Shokri`              | `MIA_Shokri`      | —                                                                  |
-| `LfMia`               | `LF_MIA`          | `attack_decoration` / `target_train_decoration` / `shadow_decoration` の 3 つが必須。未指定時は `ValueError` |
+| `LfMia`               | `LF_MIA`          | `attack_decoration` / `target_train_decoration` / `shadow_decoration` が実行時に参照される（未指定時は該当 Phase でエラー） |
 
 
 `attack()` の戻り値は `(scores, trues)`。`comprehensive_evaluate(scores, trues)` の引数順と一致する。
 
-| 手法            | `attack()` 戻り値                         | Phase 5 の主な成果物                                      |
-| ------------- | -------------------------------------- | --------------------------------------------------- |
-| LiRA / Shokri | `(np.ndarray, np.ndarray)` スコア配列・真値ラベル | `roc_curve.png`、`global_auc`、TPR@FPR 等               |
-| LF_MIA        | `(float, float)` メンバー確率スコア・ターゲット装飾率   | `attack_score` / `attack_fraction`（ROC は描画しない）      |
+| 手法            | `attack()` 第2引数 `target_model` | `attack()` 戻り値                         | Phase 5 の主な成果物                                      |
+| ------------- | ------------------------------- | -------------------------------------- | --------------------------------------------------- |
+| LiRA / Shokri | `nn.Module`（単一）                 | `(np.ndarray, np.ndarray)` スコア配列・真値ラベル | `roc_curve.png`、`global_auc`、TPR@FPR 等               |
+| LF_MIA        | `list[nn.Module]`（13 体）          | `(list[float], list[float])` スコア・装飾適用率（各 13 要素） | `attack_score` / `attack_fraction`（ROC は描画しない）      |
 
 
 ログ: `work_dir/execution.log` + stdout
@@ -215,7 +225,7 @@ flowchart LR
 
 | メソッド | 用途 | transform | shuffle |
 | -------- | ---- | --------- | ------- |
-| `get_target_dataloaders` | ターゲット学習 | `transform_train` / `transform_test` | train のみ `True` |
+| `get_target_dataloaders(decoration_spec=None)` | ターゲット学習。`decoration_spec` 省略時は `target_train_decoration` | `transform_train` / `transform_test` | train のみ `True` |
 | `get_shadow_dataloader(seed, is_decoration)` | シャドー学習。`is_decoration` で `shadow_decoration` 適用可否（LF_MIA の IN/OUT 分岐） | 同上 | train のみ `True` |
 | `get_eval_target_dataloaders` / `get_eval_shadow_dataloader` | 攻撃評価（Shokri / LiRA） | `transform_test` | `False` |
 | `get_attack_watermark_dataloader` | LF_MIA 攻撃用透かし 1 枚 | `transform_test` | `False`（`batch_size=1`） |
@@ -247,7 +257,7 @@ flowchart LR
 flowchart TB
     subgraph decorations [decorations/]
         protocol["protocol.py<br/>SampleDecorator"]
-        config["config.py<br/>DecorationConfig"]
+        config["config.py<br/>DecorationConfig / with_fraction"]
         apply["apply_policy.py<br/>fraction / seed"]
         fractional["fractional.py<br/>FractionalDecorator"]
         builder["builder.py<br/>lazy WatermarkLoader"]
@@ -342,7 +352,7 @@ flowchart LR
 | キー                        | 適用先                                                          |
 | ------------------------- | ------------------------------------------------------------ |
 | `eval_decoration`         | `get_eval_target_dataloaders` / `get_eval_shadow_dataloader` |
-| `target_train_decoration` | `get_target_dataloaders` の train。LF_MIA では `attack_fraction`（参照値）の取得元 |
+| `target_train_decoration` | `get_target_dataloaders` の train。LF_MIA では装飾種別（`filter_id` 等）のベース spec。`apply.fraction` は固定リストで上書き（下記 LF_MIA） |
 | `shadow_decoration`       | LF_MIA: `get_shadow_dataloader(..., is_decoration=True)` の IN シャドー学習データ |
 | `attack_decoration`       | `get_attack_watermark_dataloader`（LF_MIA の攻撃用透かし 1 枚。`watermark` のみ） |
 
@@ -371,6 +381,7 @@ flowchart LR
 
 **適用ポリシー（全装飾共通）**
 
+- `with_fraction(spec, fraction)` — `DecorationSpec` の `apply.fraction` だけを上書き（LF_MIA のターゲット学習スイープで使用）
 - 選定シード: `experiment.seed + seed_offset`
 - 同じ `fraction` + `seed_offset` + 同じ pool → type が違っても同一サンプルに適用
 - 透かしフィルタ: `WatermarkLoader` が MinIO `filters/{filter_id}.png` を `./cache/filters/` に取得
@@ -385,9 +396,9 @@ flowchart LR
 ```mermaid
 classDiagram
     class MIA_Attack {
-        +train_target_model()
-        +train_shadow_models()
-        +attack()
+        +train_target_model(model_factory)
+        +train_shadow_models(model_factory)
+        +attack(shadow_models, target_model)
         +comprehensive_evaluate()
     }
     class MIA_OfflineLiRA {
@@ -422,13 +433,31 @@ classDiagram
 | `MIA_OfflineLiRA` | シャドウ OUT 分布から z-score → CDF スコア（論文 Equation 4） |
 | `MIA_OnlineLiRA`  | シャドウ IN/OUT 分布から対数尤度比スコア（論文 Algorithm 1）       |
 | `MIA_Shokri`      | ソフトマックス特徴 → `AttackNet`（クラス別）                  |
-| `LF_MIA`          | 装飾あり/なしシャドー + 攻撃用透かし → `AttackNet`（単一スコア）     |
+| `LF_MIA`          | 装飾あり/なしシャドー + 攻撃用透かし → `AttackNet`。ターゲットは装飾適用率 13 段階で学習・攻撃     |
 
 
 ### LF_MIA（`lf_mia.py`）
 
+#### ターゲットモデル（Phase 2）
+
+LF_MIA は `target_train_decoration.apply.fraction` を無視し、固定の装飾適用率リストでターゲットモデルを 13 体学習する。装飾種別（`filter_id`, `seed_offset` 等）は `target_train_decoration` をベースに、`config.with_fraction` で fraction だけ上書きする。
+
+```python
+LF_MIA_TARGET_FRACTIONS = [
+    1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.01, 0.001, 0.0,
+]
+```
+
+`LF_MIA.train_target_model(model_factory)` が基底 `MIA_Attack.train_target_model` をオーバーライドし、各 fraction で `get_target_dataloaders(decoration_spec=...)` を呼んで学習する。戻り値は `list[nn.Module]`（13 体）。`target_model.pth` には `list[state_dict]` を保存する。
+
+#### 攻撃（Phase 4）
+
 ```mermaid
 flowchart LR
+    subgraph phase2 [Phase 2: ターゲット]
+        F1["fraction=1.0"] --> M1[TargetCNN_1]
+        FN["fraction=0"] --> M13[TargetCNN_13]
+    end
     subgraph shadow ["Phase 3: シャドー"]
         IN["IN モデル群<br/>shadow_decoration あり"]
         OUT["OUT モデル群<br/>装飾なし"]
@@ -438,22 +467,24 @@ flowchart LR
     end
     subgraph feat ["Phase 4: 特徴・攻撃"]
         PRED["各シャドーの softmax → logit_scaling"]
-        ATK["AttackNet 学習<br/>IN=1 / OUT=0"]
-        TGT["ターゲット推論 → attack_score"]
+        ATK["AttackNet 学習 1回<br/>IN=1 / OUT=0"]
+        TGT["13 体のターゲット推論 → attack_score[]"]
     end
 
     IN --> PRED
     OUT --> PRED
     WM --> PRED
     PRED --> ATK
+    M1 --> TGT
+    M13 --> TGT
     WM --> TGT
     ATK --> TGT
 ```
 
 1. IN / OUT シャドーそれぞれが `attack_watermark_loader` 上で `(1, NUM_CLASSES)` の softmax 出力を出す。
-2. 全クラスに `logit_scaling` を適用し、シャドー 1 体あたり 1 サンプルとして `AttackNet`（`input_dim=NUM_CLASSES`）を訓練。
-3. ターゲットモデルに同じ透かしを入力し、攻撃モデルでメンバー確率 `attack_score`（`softmax[:, 1]` のスカラー）を得る。
-4. `attack_fraction` は `target_train_decoration.apply.fraction`（装飾適用率。MIA の真値ラベルではない）。
+2. 全クラスに `logit_scaling` を適用し、シャドー 1 体あたり 1 サンプルとして `AttackNet`（`input_dim=NUM_CLASSES`）を **1 回** 訓練。
+3. 13 体のターゲットモデルそれぞれに同じ透かしを入力し、攻撃モデルでメンバー確率 `attack_score`（`softmax[:, 1]`）を得る。結果は長さ 13 のリスト。
+4. `attack_fraction` は `LF_MIA_TARGET_FRACTIONS` の対応値（装飾適用率。MIA の真値ラベルではない）。
 
 ハイパーパラメータ（`hyperparameters`、省略時は `config.py` のデフォルト）:
 
@@ -462,9 +493,15 @@ flowchart LR
 | `attack_model_batch_size` | 攻撃モデル `DataLoader` |
 | `attack_model_epochs`     | 攻撃モデル学習エポック数      |
 
-保存物: `shadow_models.pth`（全シャドー）、`attack_models.pth`（攻撃モデル 1 体の `state_dict`）。
+保存物:
 
-`comprehensive_evaluate` は ROC を描画せず、`global_auc` / TPR@FPR 系を `None` で埋めたうえで `attack_score` / `attack_fraction` を `metrics` に追加する。
+| ファイル | 内容 |
+| -------- | ---- |
+| `target_model.pth` | LF_MIA: `list[state_dict]`（13 体）。他手法: 単一 `state_dict` |
+| `shadow_models.pth` | 全シャドーの `list[state_dict]` |
+| `attack_models.pth` | 攻撃モデル 1 体の `state_dict` |
+
+`comprehensive_evaluate` は ROC を描画せず、`global_auc` / TPR@FPR 系を `None` で埋めたうえで `attack_score` / `attack_fraction`（各 13 要素のリスト）を `metrics` に追加する。加えて `target_train_accs` / `target_test_accs` / `target_acc_gaps` を格納する。
 
 
 ### LiRA 共通モジュール（`mia_lira_common.py`）
@@ -542,7 +579,7 @@ flowchart LR
 `build_other_metrics(metrics)` が残りのキーを自動収集する。例:
 
 - LiRA / Shokri: `tpr_at_001_fpr`, `threshold_at_001_fpr`, `shadow_train_accs` 等
-- LF_MIA: `attack_score`, `attack_fraction`, `shadow_*` 等
+- LF_MIA: `attack_score`（13 要素リスト）, `attack_fraction`（13 要素リスト）, `target_*`, `shadow_*` 等
 
 `_json_safe_metric_value` で numpy スカラー・配列を JSON 直列化可能な型に変換してから送る。トップレベル取得には `metrics.get(...)` を使用し、LF_MIA のように一部キーが `None` でも KeyError にならない。
 
