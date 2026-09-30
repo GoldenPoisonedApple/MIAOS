@@ -43,7 +43,7 @@ flowchart TB
 | `core/`          | 環境変数・定数・実験パイプライン                   |
 | `data/`          | CIFAR-100 分割・装飾・DataLoader         |
 | `models/`        | TargetCNN / AttackNet              |
-| `attacks/`       | Offline / Online LiRA / Shokri / LF_MIA |
+| `attacks/`       | Offline / Online LiRA / Shokri / LF_MIA / LF_Mult_MIA / LF_Mult_Diff_MIA |
 | `workers/`       | Celery タスク                         |
 | `utils/`         | MinIO アップロード・ダウンロード                |
 | `server_client/` | 自動生成 API クライアント                    |
@@ -91,7 +91,7 @@ flowchart LR
     P1 --> P2 --> P3 --> P4 --> P5
 ```
 
-Phase 5 は LiRA / Shokri では ROC / AUC、LF_MIA では `attack_score` / `attack_fraction`（各 13 要素リスト）等の metrics 集約。
+Phase 5 は LiRA / Shokri では ROC / AUC、LF_MIA 系では `attack_score` / `attack_fraction`（各 13 要素リスト）等の metrics 集約。
 
 
 
@@ -99,7 +99,7 @@ Phase 5 は LiRA / Shokri では ROC / AUC、LF_MIA では `attack_score` / `att
 | Phase | 内容                                                                                                       |
 | ----- | -------------------------------------------------------------------------------------------------------- |
 | 1     | `dataset(work_dir, request)` 構築（分割は request のみ参照）、MIA 手法選択（下表）                                      |
-| 2     | `train_target_model(model_factory)` で学習、または `load_target_model=True` 時に `assigned_model_path` から読込（LF_MIA は複数体） |
+| 2     | `train_target_model(model_factory)` で学習、または `load_target_model=True` 時に `assigned_model_path` から読込（LF_MIA 系は 13 体） |
 | 3     | シャドウ複数学習、または `assigned_model_path` から `load_shadow_model`                                                |
 | 4     | `attack(shadow_models, target_model)` → スコア・参照値（`target_model` の型は手法により単一 / リスト）                    |
 | 5     | `comprehensive_evaluate` → metrics 辞書（手法により内容が異なる）                                                      |
@@ -112,7 +112,7 @@ Phase 5 は LiRA / Shokri では ROC / AUC、LF_MIA では `attack_score` / `att
 target_model = mia_class.train_target_model(lambda: TargetCNN())
 ```
 
-読込時のみ LF_MIA と他手法で分岐する。LF_MIA の `target_model.pth` は `list[state_dict]`（13 体）、他手法は単一 `state_dict`。
+読込時のみ LF_MIA 系（`LfMia` / `LfMultMia` / `LfMultDiffMia`）と他手法で分岐する。LF_MIA 系の `target_model.pth` は `list[state_dict]`（13 体）、他手法は単一 `state_dict`。
 
 
 ### MIA 手法選択（Phase 1）
@@ -123,7 +123,7 @@ target_model = mia_class.train_target_model(lambda: TargetCNN())
 | `OnlineLira`          | `MIA_OnlineLiRA`  | —                                                                  |
 | `Shokri`              | `MIA_Shokri`      | —                                                                  |
 | `LfMia`               | `LF_MIA`          | `attack_decoration` / `target_train_decoration` / `shadow_decoration` が実行時に参照される（未指定時は該当 Phase でエラー） |
-| `LfMultMia`           | `LF_Mult_MIA`     | `LfMia` と同じ。加えて `attack_decoration` の透かしを target test 画像 K 枚に合成して攻撃（K は `hyperparameters.attack_num_images`） |
+| `LfMultMia`           | `LF_Mult_MIA`     | `LfMia` と同じ。加えて `attack_decoration` の透かしを target test 画像 K 枚に合成して攻撃。**`hyperparameters.attack_num_images`（K）の指定が必須** |
 | `LfMultDiffMia`       | `LF_Mult_Diff_MIA` | `LfMultMia` と同じ。特徴量を「透かしあり − 透かしなし」の logit 差分にする |
 
 `LfMultMia` / `LfMultDiffMia` は `MiaMethod`（OpenAPI 生成ファイル）に手編集で追加している。`make openapi` で再生成すると消えるため、サーバ側スキーマにも同値を追加する必要がある。
@@ -168,11 +168,11 @@ flowchart TB
 
 | モジュール          | 責務                                     |
 | -------------- | -------------------------------------- |
-| `dataset.py`   | CIFAR 分割、`get_*_dataloaders`、装飾プレビュー保存、`get_attack_watermark_dataloader`（薄いファサード） |
-| `decorations/` | 装飾設定パース・適用・透かし I/O・黒背景透かし画像生成               |
+| `dataset.py`   | CIFAR 分割、`get_*_dataloaders`、装飾プレビュー保存、`get_attack_watermark_dataloader` / `get_attack_composite_dataloaders`（薄いファサード） |
+| `decorations/` | 装飾設定パース・適用・透かし I/O・黒背景透かし画像生成・K 枚合成テンソル生成 |
 
 
-`dataset` は透かしの MinIO 取得や黒背景合成を**持たない**。`watermark/watermark_on_black.py` に委譲する。DataLoader の組み立ては `dataset` が担当する。
+`dataset` は透かしの MinIO 取得や PIL 合成を**持たない**。黒背景 1 枚は `watermark/watermark_on_black.py`、K 枚合成は `watermark/composite.py` に委譲する。インデックス選定と DataLoader の組み立ては `dataset` が担当する。
 
 ---
 
@@ -275,6 +275,7 @@ flowchart TB
             loader["loader.py<br/>MinIO + cache"]
             wdec["decorator.py"]
             onBlack["watermark_on_black.py<br/>黒背景透かし PIL"]
+            composite["composite.py<br/>K 枚 decorated/plain テンソル"]
         end
         subgraph dm [display_mask/]
             ddec["decorator.py"]
@@ -288,6 +289,8 @@ flowchart TB
     builder --> dm
     preview --> builder
     onBlack --> loader
+    composite --> wdec
+    composite --> loader
     fractional --> subset
 ```
 
@@ -368,7 +371,12 @@ flowchart LR
 
 ### `get_attack_composite_dataloaders(num_images)`（`dataset.py`）
 
-`target_test_idx` から `RandomState(seed)` で K 枚を非復元抽出し、各画像に `attack_decoration` の透かしを alpha ブレンド合成したテンソル `(K, 3, H, W)` と、素の画像のテンソル `(K, 3, H, W)` をそれぞれ `DataLoader`（`batch_size=K`, `shuffle=False`）で返す。両 loader の順序は一致する。target test はターゲット・シャドー双方の訓練データと重複しないため、合成のベース画像として用いてもメンバーシップ情報を持ち込まない。`num_images` が target test サイズを超える場合はエラー。
+`target_test_idx` から `RandomState(seed)` で K 枚を非復元抽出し、取得した PIL 画像リストを `watermark/composite.py` の `build_decorated_plain_tensors` に渡す。透かし合成（`WatermarkDecorator` 経由の alpha ブレンド）と `transform_test` 適用は `composite` 側で行い、`dataset` は返却テンソルを `DataLoader`（`batch_size=K`, `shuffle=False`）に載せるだけである。
+
+- decorated: 透かし合成済み `(K, 3, H, W)`
+- plain: 素の画像 `(K, 3, H, W)`（順序は decorated と同一）
+
+target test はターゲット・シャドー双方の訓練データと重複しないため、合成のベース画像として用いてもメンバーシップ情報を持ち込まない。`num_images` が target test サイズを超える場合はエラー。`attack_decoration` は `watermark` 型のみ。
 
 ### LF_MIA における `shadow_decoration`
 
@@ -528,11 +536,11 @@ flowchart LR
 
 `LF_MIA` を継承し、Phase 2 / 3 はそのまま再利用する。Phase 4 のみ以下に置き換える。
 
-1. `get_attack_composite_dataloaders(K)` で透かし合成済み / 素の画像 K 枚の loader を取得（K は `hyperparameters.attack_num_images`、省略時 `cfg.ATTACK_NUM_IMAGES = 20`）。
+1. `get_attack_composite_dataloaders(K)` で透かし合成済み / 素の画像 K 枚の loader を取得（K は `hyperparameters.attack_num_images`。**必須**。未指定時は `ValueError`）。
 2. `_extract_features(model, decorated_loader, plain_loader)` でモデル 1 体から `(K, NUM_CLASSES)` の特徴を得る。
-   - `LF_Mult_MIA`: `logit_scaling(softmax(透かしあり))`
+   - `LF_Mult_MIA`: `logit_scaling(softmax(透かしあり))`（`plain_loader` は未使用）
    - `LF_Mult_Diff_MIA`: `logit_scaling(softmax(透かしあり)) − logit_scaling(softmax(透かしなし))`
-3. IN / OUT シャドーの特徴を結合して `(K × N, NUM_CLASSES)`、ラベルはモデルのラベルを K 回繰り返す。`AttackNet`（`input_dim=NUM_CLASSES`）を 1 回学習。
+3. IN / OUT シャドーの特徴を結合して `(K × num_shadow_models, NUM_CLASSES)`、ラベルは IN=1 / OUT=0 をモデルごとに K 回繰り返す。`AttackNet`（`input_dim=NUM_CLASSES`）を 1 回学習。
 4. 13 体のターゲットそれぞれで K 個の IN 確率 `softmax[:, 1]` を得て集約する。
    - `attack_score`: K 個の平均（LF_MIA の `attack_score` と同じ確率スケール。比較用）
    - `attack_scores_vars`: K 個の標本分散（K=1 のときは 0.0）
@@ -540,11 +548,13 @@ flowchart LR
 
 同じ K 枚が IN / OUT 両群に現れるため画像内容はラベルに対して無情報であり、攻撃モデルは透かしが出力に与える差分を学習せざるを得ない。ただし K 本の出力は同一モデル由来で相関するため、有効標本数は K 倍にはならない（シャドー数が実質的なボトルネック）。
 
-追加ハイパーパラメータ:
+追加ハイパーパラメータ（`LfMultMia` / `LfMultDiffMia` 共通）:
 
 | キー                  | 用途                                   |
 | ------------------- | ------------------------------------ |
-| `attack_num_images` | 透かしを合成する target test 画像枚数 K（既定 20） |
+| `attack_num_images` | 透かしを合成する target test 画像枚数 K（**必須**。`hyperparameters` 未設定時は `ValueError`、`config.py` にデフォルトはない） |
+
+`attack_model_batch_size` / `attack_model_epochs` は LF_MIA と同様、省略時は `config.py` の `ATTACK_MODEL_BATCH_SIZE` / `ATTACK_MODEL_EPOCHS` を使用する。
 
 
 ### LiRA 共通モジュール（`mia_lira_common.py`）
@@ -579,7 +589,7 @@ Online LiRA の keep 行列は `dataset.build_online_lira_keep_matrix(seed, num_
 | モジュール       | 用途                                      |
 | ----------- | --------------------------------------- |
 | `TargetCNN` | CIFAR-100（3×32×32, 100 クラス）ターゲット・シャドウ共用 |
-| `AttackNet` | Shokri / LF_MIA 用 2 クラス MLP（入力: `NUM_CLASSES` 次元特徴） |
+| `AttackNet` | Shokri / LF_MIA 系用 2 クラス MLP（入力: `NUM_CLASSES` 次元特徴） |
 
 
 ---
@@ -683,7 +693,8 @@ data/
     │   ├── transform.py
     │   ├── loader.py
     │   ├── decorator.py
-    │   └── watermark_on_black.py
+    │   ├── watermark_on_black.py
+    │   └── composite.py
     └── display_mask/
         └── decorator.py
 
@@ -693,6 +704,8 @@ attacks/
 ├── mia_offline_lira.py
 ├── mia_online_lira.py
 ├── mia_shokri.py
-└── lf_mia.py
+├── lf_mia.py
+├── lf_mult_mia.py
+└── lf_mult_diff_mia.py
 ```
 
