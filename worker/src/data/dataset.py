@@ -18,6 +18,7 @@ from src.data.decorations import (
 )
 from src.data.decorations.preview import save_decoration_preview
 from src.data.decorations.watermark.loader import WatermarkLoader
+from src.data.decorations.watermark.composite import build_decorated_plain_tensors
 from src.data.decorations.watermark.watermark_on_black import build_watermark_on_black_pil
 from src.data.decorations.config import WatermarkDecorationSpec
 from src.server_client.models import CreateExperimentRequest
@@ -113,6 +114,63 @@ class dataset:
 			num_workers=0,
 			pin_memory=cfg.DEVICE.type == "cuda",
 		)
+
+	# 攻撃用透かし合成画像のデータローダー取得（LF_Mult_MIA 系）
+	def get_attack_composite_dataloaders(
+		self, num_images: int
+	) -> tuple[DataLoader, DataLoader]:
+		"""
+		attack_decoration の透かしを target test 画像 K 枚に合成した DataLoader と、
+		同じ K 枚の素の画像の DataLoader を返す（LF_Mult_MIA / LF_Mult_Diff_MIA 用）。
+
+		target test はターゲット・シャドー双方の訓練データと重複しないため、
+		合成のベース画像として用いてもメンバーシップ情報を持ち込まない。
+
+		Args:
+				num_images: 合成する画像枚数 K
+		Returns:
+				decorated_loader: 透かし合成済み画像 (K, 3, H, W) を 1 バッチで返す DataLoader
+				plain_loader: 素の画像 (K, 3, H, W) を 1 バッチで返す DataLoader（順序は decorated と同一）
+		"""
+		attack_spec = self.decoration_config.attack_decoration
+		if not isinstance(attack_spec, WatermarkDecorationSpec):
+			raise ValueError(
+				f"attack_decoration must be watermark, got: {attack_spec!r}"
+			)
+		if num_images < 1:
+			raise ValueError(f"num_images must be >= 1, got: {num_images}")
+		if num_images > len(self.target_test_idx):
+			raise ValueError(
+				f"num_images ({num_images}) exceeds target test size ({len(self.target_test_idx)})"
+			)
+
+		# 実験シードで決定的に K 枚を非復元抽出（攻撃モデル学習とターゲット推論で同じ K 枚を使う）
+		rng = np.random.RandomState(self.settings.seed)
+		# replace=False: 重複を許可しない
+		selected_idx = rng.choice(self.target_test_idx, size=num_images, replace=False)
+
+		# 透かし合成済み / 素の画像テンソル作成
+		images = [self.full_dataset[int(idx)][0] for idx in selected_idx]
+		decorated, plain = build_decorated_plain_tensors(
+			images,
+			self.get_watermark_loader(),
+			attack_spec.filter_id,
+			self.transform_test,
+		)  # (K, 3, H, W)
+		# 正解ラベルは攻撃で使わないためダミー
+		dummy_labels = torch.zeros(num_images, dtype=torch.long)
+
+		def _make_loader(tensor: torch.Tensor) -> DataLoader:
+			# K 枚を 1 バッチで返す。shuffle=False で decorated / plain の順序を一致させる
+			return DataLoader(
+				TensorDataset(tensor, dummy_labels),
+				batch_size=num_images,
+				shuffle=False,
+				num_workers=0,
+				pin_memory=cfg.DEVICE.type == "cuda",
+			)
+
+		return _make_loader(decorated), _make_loader(plain)
 
 	# データセット作成(装飾適用)
 	def _make_subset(

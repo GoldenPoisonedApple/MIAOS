@@ -123,6 +123,10 @@ target_model = mia_class.train_target_model(lambda: TargetCNN())
 | `OnlineLira`          | `MIA_OnlineLiRA`  | —                                                                  |
 | `Shokri`              | `MIA_Shokri`      | —                                                                  |
 | `LfMia`               | `LF_MIA`          | `attack_decoration` / `target_train_decoration` / `shadow_decoration` が実行時に参照される（未指定時は該当 Phase でエラー） |
+| `LfMultMia`           | `LF_Mult_MIA`     | `LfMia` と同じ。加えて `attack_decoration` の透かしを target test 画像 K 枚に合成して攻撃（K は `hyperparameters.attack_num_images`） |
+| `LfMultDiffMia`       | `LF_Mult_Diff_MIA` | `LfMultMia` と同じ。特徴量を「透かしあり − 透かしなし」の logit 差分にする |
+
+`LfMultMia` / `LfMultDiffMia` は `MiaMethod`（OpenAPI 生成ファイル）に手編集で追加している。`make openapi` で再生成すると消えるため、サーバ側スキーマにも同値を追加する必要がある。
 
 
 `attack()` の戻り値は `(scores, trues)`。`comprehensive_evaluate(scores, trues)` の引数順と一致する。
@@ -131,6 +135,7 @@ target_model = mia_class.train_target_model(lambda: TargetCNN())
 | ------------- | ------------------------------- | -------------------------------------- | --------------------------------------------------- |
 | LiRA / Shokri | `nn.Module`（単一）                 | `(np.ndarray, np.ndarray)` スコア配列・真値ラベル | `roc_curve.png`、`global_auc`、TPR@FPR 等               |
 | LF_MIA        | `list[nn.Module]`（13 体）          | `(list[float], list[float])` スコア・装飾適用率（各 13 要素） | `attack_score` / `attack_fraction`（ROC は描画しない）      |
+| LF_Mult_MIA / LF_Mult_Diff_MIA | 同上 | 同上（`attack_score` は K 枚の IN 確率の平均） | 上記に加え `attack_scores_vars`（13 要素）/ `attack_all_scores`（13 × K）/ `attack_num_images` |
 
 
 ログ: `work_dir/execution.log` + stdout
@@ -229,6 +234,7 @@ flowchart LR
 | `get_shadow_dataloader(seed, is_decoration)` | シャドー学習。`is_decoration` で `shadow_decoration` 適用可否（LF_MIA の IN/OUT 分岐） | 同上 | train のみ `True` |
 | `get_eval_target_dataloaders` / `get_eval_shadow_dataloader` | 攻撃評価（Shokri / LiRA） | `transform_test` | `False` |
 | `get_attack_watermark_dataloader` | LF_MIA 攻撃用透かし 1 枚 | `transform_test` | `False`（`batch_size=1`） |
+| `get_attack_composite_dataloaders(num_images)` | LF_Mult_MIA 系。target test から K 枚を選び、透かし合成済み / 素の画像の 2 loader を返す | `transform_test` | `False`（`batch_size=K`） |
 
 ```mermaid
 flowchart LR
@@ -354,11 +360,15 @@ flowchart LR
 | `eval_decoration`         | `get_eval_target_dataloaders` / `get_eval_shadow_dataloader` |
 | `target_train_decoration` | `get_target_dataloaders` の train。LF_MIA では装飾種別（`filter_id` 等）のベース spec。`apply.fraction` は固定リストで上書き（下記 LF_MIA） |
 | `shadow_decoration`       | LF_MIA: `get_shadow_dataloader(..., is_decoration=True)` の IN シャドー学習データ |
-| `attack_decoration`       | `get_attack_watermark_dataloader`（LF_MIA の攻撃用透かし 1 枚。`watermark` のみ） |
+| `attack_decoration`       | `get_attack_watermark_dataloader`（LF_MIA の攻撃用透かし 1 枚。`watermark` のみ）/ `get_attack_composite_dataloaders`（LF_Mult_MIA 系の合成透かし。`watermark` のみ） |
 
 ### `get_attack_watermark_dataloader`（`dataset.py`）
 
 `attack_decoration` の `filter_id` で黒背景透かし PIL を 1 枚生成し、`transform_test` 適用後 `(1, 3, H, W)` の `DataLoader`（`batch_size=1`）として返す。`MIA_Attack.get_predictions` と組み合わせて LF_MIA の特徴抽出・ターゲット推論に使う。正解ラベルは持たないためダミー `0` を付与。
+
+### `get_attack_composite_dataloaders(num_images)`（`dataset.py`）
+
+`target_test_idx` から `RandomState(seed)` で K 枚を非復元抽出し、各画像に `attack_decoration` の透かしを alpha ブレンド合成したテンソル `(K, 3, H, W)` と、素の画像のテンソル `(K, 3, H, W)` をそれぞれ `DataLoader`（`batch_size=K`, `shuffle=False`）で返す。両 loader の順序は一致する。target test はターゲット・シャドー双方の訓練データと重複しないため、合成のベース画像として用いてもメンバーシップ情報を持ち込まない。`num_images` が target test サイズを超える場合はエラー。
 
 ### LF_MIA における `shadow_decoration`
 
@@ -421,7 +431,16 @@ classDiagram
     MIA_Attack <|-- MIA_OfflineLiRA
     MIA_Attack <|-- MIA_OnlineLiRA
     MIA_Attack <|-- MIA_Shokri
+    class LF_Mult_MIA {
+        透かし K 枚合成
+        _extract_features フック
+    }
+    class LF_Mult_Diff_MIA {
+        差分 logit 特徴
+    }
     MIA_Attack <|-- LF_MIA
+    LF_MIA <|-- LF_Mult_MIA
+    LF_Mult_MIA <|-- LF_Mult_Diff_MIA
 ```
 
 
@@ -434,6 +453,8 @@ classDiagram
 | `MIA_OnlineLiRA`  | シャドウ IN/OUT 分布から対数尤度比スコア（論文 Algorithm 1）       |
 | `MIA_Shokri`      | ソフトマックス特徴 → `AttackNet`（クラス別）                  |
 | `LF_MIA`          | 装飾あり/なしシャドー + 攻撃用透かし → `AttackNet`。ターゲットは装飾適用率 13 段階で学習・攻撃     |
+| `LF_Mult_MIA`     | `LF_MIA` 派生。透かしを target test 画像 K 枚に合成し、モデル 1 体あたり K サンプルで `AttackNet` を学習。ターゲットごとに K 個の IN 確率を平均・分散・全値で集約 |
+| `LF_Mult_Diff_MIA` | `LF_Mult_MIA` 派生。特徴量を `logit(透かしあり) − logit(透かしなし)` の差分にして画像固有成分を打ち消す |
 
 
 ### LF_MIA（`lf_mia.py`）
@@ -502,6 +523,28 @@ flowchart LR
 | `attack_models.pth` | 攻撃モデル 1 体の `state_dict` |
 
 `comprehensive_evaluate` は ROC を描画せず、`global_auc` / TPR@FPR 系を `None` で埋めたうえで `attack_score` / `attack_fraction`（各 13 要素のリスト）を `metrics` に追加する。加えて `target_train_accs` / `target_test_accs` / `target_acc_gaps` を格納する。
+
+### LF_Mult_MIA / LF_Mult_Diff_MIA（`lf_mult_mia.py` / `lf_mult_diff_mia.py`）
+
+`LF_MIA` を継承し、Phase 2 / 3 はそのまま再利用する。Phase 4 のみ以下に置き換える。
+
+1. `get_attack_composite_dataloaders(K)` で透かし合成済み / 素の画像 K 枚の loader を取得（K は `hyperparameters.attack_num_images`、省略時 `cfg.ATTACK_NUM_IMAGES = 20`）。
+2. `_extract_features(model, decorated_loader, plain_loader)` でモデル 1 体から `(K, NUM_CLASSES)` の特徴を得る。
+   - `LF_Mult_MIA`: `logit_scaling(softmax(透かしあり))`
+   - `LF_Mult_Diff_MIA`: `logit_scaling(softmax(透かしあり)) − logit_scaling(softmax(透かしなし))`
+3. IN / OUT シャドーの特徴を結合して `(K × N, NUM_CLASSES)`、ラベルはモデルのラベルを K 回繰り返す。`AttackNet`（`input_dim=NUM_CLASSES`）を 1 回学習。
+4. 13 体のターゲットそれぞれで K 個の IN 確率 `softmax[:, 1]` を得て集約する。
+   - `attack_score`: K 個の平均（LF_MIA の `attack_score` と同じ確率スケール。比較用）
+   - `attack_scores_vars`: K 個の標本分散（K=1 のときは 0.0）
+   - `attack_all_scores`: K 個の全値（13 × K の二重リスト。log-odds 平均など別の集約は事後計算する）
+
+同じ K 枚が IN / OUT 両群に現れるため画像内容はラベルに対して無情報であり、攻撃モデルは透かしが出力に与える差分を学習せざるを得ない。ただし K 本の出力は同一モデル由来で相関するため、有効標本数は K 倍にはならない（シャドー数が実質的なボトルネック）。
+
+追加ハイパーパラメータ:
+
+| キー                  | 用途                                   |
+| ------------------- | ------------------------------------ |
+| `attack_num_images` | 透かしを合成する target test 画像枚数 K（既定 20） |
 
 
 ### LiRA 共通モジュール（`mia_lira_common.py`）
@@ -580,6 +623,7 @@ flowchart LR
 
 - LiRA / Shokri: `tpr_at_001_fpr`, `threshold_at_001_fpr`, `shadow_train_accs` 等
 - LF_MIA: `attack_score`（13 要素リスト）, `attack_fraction`（13 要素リスト）, `target_*`, `shadow_*` 等
+- LF_Mult_MIA / LF_Mult_Diff_MIA: 上記に加え `attack_scores_vars`（13 要素リスト）, `attack_all_scores`（13 × K の二重リスト）, `attack_num_images`
 
 `_json_safe_metric_value` で numpy スカラー・配列を JSON 直列化可能な型に変換してから送る。トップレベル取得には `metrics.get(...)` を使用し、LF_MIA のように一部キーが `None` でも KeyError にならない。
 
