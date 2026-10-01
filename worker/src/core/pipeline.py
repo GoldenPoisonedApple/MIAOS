@@ -19,6 +19,15 @@ from src.attacks.mia_offline_lira import MIA_OfflineLiRA
 from src.attacks.mia_online_lira import MIA_OnlineLiRA
 from src.attacks.mia_shokri import MIA_Shokri
 from src.attacks.lf_mia import LF_MIA
+from src.attacks.lf_mult_mia import LF_Mult_MIA
+from src.attacks.lf_mult_diff_mia import LF_Mult_Diff_MIA
+
+# LF_MIA 系手法（ターゲットモデルを装飾適用率ごとに複数体持つ手法）
+LF_MIA_METHODS = frozenset({
+    MiaMethod.LFMIA,
+    MiaMethod.LFMULTMIA,
+    MiaMethod.LFMULTDIFFMIA,
+})
 
 
 def run_experiment(
@@ -104,6 +113,10 @@ def run_experiment(
         mia_class = MIA_Shokri(dataset_instance, work_dir, logger, request)
     elif mia_method == MiaMethod.LFMIA:
         mia_class = LF_MIA(dataset_instance, work_dir, logger, request)
+    elif mia_method == MiaMethod.LFMULTMIA:
+        mia_class = LF_Mult_MIA(dataset_instance, work_dir, logger, request)
+    elif mia_method == MiaMethod.LFMULTDIFFMIA:
+        mia_class = LF_Mult_Diff_MIA(dataset_instance, work_dir, logger, request)
     else:
         logger.error(f"Invalid MIA method: {mia_method}")
         raise ValueError(f"Invalid MIA method: {mia_method}")
@@ -118,8 +131,8 @@ def run_experiment(
     p2_start_time = time.time()
     if not request.load_target_model:
         target_model = mia_class.train_target_model(lambda: TargetCNN())
-    # LF_MIAの場合はモデルを複数個読み込む
-    elif mia_method == MiaMethod.LFMIA:
+    # LF_MIA系の場合はモデルを複数個読み込む
+    elif mia_method in LF_MIA_METHODS:
         state_dicts = torch.load(
             os.path.join(assigned_model_path, cfg.TARGET_MODEL_NAME),
             map_location=cfg.DEVICE,

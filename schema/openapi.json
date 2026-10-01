@@ -568,7 +568,9 @@
           "OfflineLira",
           "OnlineLira",
           "Shokri",
-          "LfMia"
+          "LfMia",
+          "LfMultMia",
+          "LfMultDiffMia"
         ]
       },
       "Model": {

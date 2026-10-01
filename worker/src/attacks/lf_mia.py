@@ -44,7 +44,7 @@ class LF_MIA(MIA_Attack):
 		Args:
 				shadow_model: シャドーモデル
 		Returns:
-				shadow_models: 訓練後のシャドーモデル
+				shadow_models: 訓練後のシャドーモデル IN, OUTの順、半々
 		"""
 		# シャドーモデルの訓練
 		shadow_models = []

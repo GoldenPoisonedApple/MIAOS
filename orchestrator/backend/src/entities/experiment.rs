@@ -55,6 +55,10 @@ pub enum MiaMethod {
   Shokri,
   #[sea_orm(string_value = "lf_mia")]
   LfMia,
+  #[sea_orm(string_value = "lf_mult_mia")]
+  LfMultMia,
+  #[sea_orm(string_value = "lf_mult_diff_mia")]
+  LfMultDiffMia,
 }
 
 // DBの1行と1対1で対応する構造体
@@ -112,7 +116,7 @@ pub struct Model {
   /// 作業PC名
   pub worker_name: Option<String>,
   /// 完了日時
-  #[serde(with = "time::serde::iso8601::option")]
+  #[serde(with = "time::serde::rfc3339::option")]
   #[schema(value_type = Option<String>, format = DateTime)]
   pub completed_at: Option<TimeDateTimeWithTimeZone>, // SeaORMのTime型
   /// エラーメッセージ
@@ -141,8 +145,8 @@ pub struct Model {
 
   // メタ情報
   /// 作成日時
-  // OffsetDateTimeをISO8601形式でシリアライズ
-  #[serde(with = "time::serde::iso8601")]
+  // OffsetDateTimeをRFC3339形式でシリアライズ
+  #[serde(with = "time::serde::rfc3339")]
   #[schema(value_type = String, format = DateTime)]
   pub created_at: TimeDateTimeWithTimeZone,
 }
