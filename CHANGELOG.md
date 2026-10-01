@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.3](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.6.2...v0.6.3) (2026-10-01)
+
+
+### Features
+
+* lf_mult系の手法を試用できるようにした ([401d6eb](https://github.com/GoldenPoisonedApple/MIAOS/commit/401d6ebf37096c4c4f7a105fbf0483ec2031a6b9))
+* mult-lf-miaの実装 ([146d304](https://github.com/GoldenPoisonedApple/MIAOS/commit/146d304db637a244c68c875de2f8d63d1f6eb9e8))
+* 攻撃モデル内部表現解析の試作 ([e91dedd](https://github.com/GoldenPoisonedApple/MIAOS/commit/e91deddeb04f771ec5b7ba8fcf4fffb978bc80c9))
+
+
+### Bug Fixes
+
+* タイムゾーン表記の互換性修正 ([984177d](https://github.com/GoldenPoisonedApple/MIAOS/commit/984177d2bc7eb460676148ae431fbaef23a0c2d2))
+* 同じ実験をループしてしまう問題を修正 ([abe519f](https://github.com/GoldenPoisonedApple/MIAOS/commit/abe519fe4dd04c535651cdb9f5e938526173ac1e))
+
 ## [0.6.2](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.6.1...v0.6.2) (2026-09-25)
 
 
