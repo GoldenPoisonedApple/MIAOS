@@ -55,6 +55,10 @@ pub enum MiaMethod {
   Shokri,
   #[sea_orm(string_value = "lf_mia")]
   LfMia,
+  #[sea_orm(string_value = "lf_mult_mia")]
+  LfMultMia,
+  #[sea_orm(string_value = "lf_mult_diff_mia")]
+  LfMultDiffMia,
 }
 
 // DBの1行と1対1で対応する構造体
