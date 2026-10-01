@@ -41,5 +41,5 @@ ATTACK_MODEL_EPOCHS: int = 100
 
 # attack_num_images
 
-# workerタイムアウト時間(秒) 1時間
-CELERY_VISIBILITY_TIMEOUT: int = 60 * 60 * 1
+# workerタイムアウト時間(秒) 16時間
+CELERY_VISIBILITY_TIMEOUT: int = 60 * 60 * 16

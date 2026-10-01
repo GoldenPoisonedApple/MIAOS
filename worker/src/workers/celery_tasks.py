@@ -3,7 +3,9 @@ import logging
 import os
 import tempfile
 import time
+from http import HTTPStatus
 
+import torch
 from celery import Celery
 
 import src.core.config as cfg
@@ -59,6 +61,59 @@ def build_other_metrics(metrics: dict) -> UpdateResultsRequestOtherMetrics:
         for k, v in metrics.items()
         if k not in TOP_LEVEL_METRIC_KEYS and v is not None
     })
+
+
+def _try_claim_experiment(client: Client, experiment_id: int) -> bool:
+    """
+    実験の claim を試みる。
+    実行すべき場合は True、完了済み・他ワーカー実行中などでスキップすべき場合は False を返す。
+    """
+    payload = ClaimExperimentRequest(
+        id=experiment_id,
+        worker_name=cfg.PC_NAME,
+    )
+    response = claim_experiment.sync_detailed(client=client, body=payload)
+    if response.status_code == HTTPStatus.OK:
+        logger.info("Experiment %s claimed successfully", experiment_id)
+        return True
+    if response.status_code == HTTPStatus.CONFLICT:
+        logger.warning("Experiment %s claim rejected (409), skipping", experiment_id)
+        return False
+    if response.status_code == HTTPStatus.NOT_FOUND:
+        logger.error("Experiment %s not found", experiment_id)
+        return False
+    raise RuntimeError(
+        f"claim failed for experiment {experiment_id}: HTTP {response.status_code}"
+    )
+
+
+def _try_reflect_results(client: Client, payload: UpdateResultsRequest) -> None:
+    """実験結果を API に反映する。409 は既に反映済みとして正常終了する。"""
+    response = reflect_experiment_results.sync_detailed(client=client, body=payload)
+    if response.status_code == HTTPStatus.OK:
+        logger.info(
+            "Experiment %s results reflected successfully", payload.experiment_id
+        )
+        return
+    if response.status_code == HTTPStatus.CONFLICT:
+        logger.warning(
+            "Experiment %s reflect rejected (409): results already applied, skipping",
+            payload.experiment_id,
+        )
+        return
+    if response.status_code == HTTPStatus.NOT_FOUND:
+        logger.error("Experiment %s not found during reflect", payload.experiment_id)
+        return
+    raise RuntimeError(
+        f"reflect failed for experiment {payload.experiment_id}: "
+        f"HTTP {response.status_code}"
+    )
+
+
+def _release_gpu_memory() -> None:
+    """長時間実行後の GPU メモリを解放する（ACK 前クラッシュのリスク低減）。"""
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 app = Celery("mia_tasks", broker=cfg._REDIS_URL)
@@ -169,22 +224,13 @@ def execute_attack_task(_params):
     # idを取得、削除
     id: int = _params.pop("experiment_id")
 
-    # タスク取得報告
-    payload = ClaimExperimentRequest(
-        id=id,
-        worker_name=cfg.PC_NAME,
-    )
-    try:
-        response = claim_experiment.sync(client=client, body=payload)
-        print(f"MIAOS APIへの送信成功: {response}")
-    except Exception as e:
-        print(f"MIAOS APIへの送信失敗: {e}")
-
-    # メイン処理
-    payload = main(id, _params)
+    # タスク取得報告（WAITING 以外は main をスキップして冪等に ACK）
+    if not _try_claim_experiment(client, id):
+        return
 
     try:
-        response = reflect_experiment_results.sync(client=client, body=payload)
-        print(f"MIAOS APIへの送信成功: {response}")
-    except Exception as e:
-        print(f"MIAOS APIへの送信失敗: {e}")
+        # メイン処理
+        payload = main(id, _params)
+        _try_reflect_results(client, payload)
+    finally:
+        _release_gpu_memory()
