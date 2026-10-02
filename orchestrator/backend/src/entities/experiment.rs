@@ -219,6 +219,22 @@ impl Model {
     Ok(())
   }
 
+  /// 再実行のために状態と結果をリセットする
+  pub fn reset_for_rerun(&mut self) {
+    self.status = ExperimentStatus::Waiting;
+    self.worker_name = None;
+    self.completed_at = None;
+    self.error_message = None;
+    self.global_auc = None;
+    self.tpr_at_1_fpr = None;
+    self.threshold_at_1_fpr = None;
+    self.tpr_at_01_fpr = None;
+    self.threshold_at_01_fpr = None;
+    self.other_metrics = None;
+    self.total_time = None;
+    self.files = None;
+  }
+
   // SeaORMの仕様のせいでつくってる変換 Updateを通知してあげる
   pub fn into_active_model_for_update(self) -> ActiveModel {
     ActiveModel {
@@ -344,6 +360,42 @@ mod tests {
     // Assert
     assert_eq!(experiment.status, ExperimentStatus::Running); // ステータスが実行中となっていること
     assert_eq!(experiment.worker_name, Some("test_worker".to_string())); // ワーカーがセットされていること
+  }
+
+  /// 再実行リセット: SUCCEEDED から
+  #[test]
+  fn test_reset_for_rerun_from_succeeded() {
+    // Arrange
+    let mut experiment = create_model();
+    experiment.status = ExperimentStatus::Succeeded;
+    experiment.worker_name = Some("test_worker".to_string());
+    experiment.completed_at = Some(OffsetDateTime::now_utc());
+    experiment.global_auc = Some(0.95);
+    experiment.files = Some(serde_json::json!({"roc": "results/1/roc.png"}));
+    // Act
+    experiment.reset_for_rerun();
+    // Assert
+    assert_eq!(experiment.status, ExperimentStatus::Waiting);
+    assert!(experiment.worker_name.is_none());
+    assert!(experiment.completed_at.is_none());
+    assert!(experiment.global_auc.is_none());
+    assert!(experiment.files.is_none());
+  }
+
+  /// 再実行リセット: RUNNING から
+  #[test]
+  fn test_reset_for_rerun_from_running() {
+    // Arrange
+    let mut experiment = create_model();
+    experiment.status = ExperimentStatus::Running;
+    experiment.worker_name = Some("test_worker".to_string());
+    experiment.error_message = Some("partial error".to_string());
+    // Act
+    experiment.reset_for_rerun();
+    // Assert
+    assert_eq!(experiment.status, ExperimentStatus::Waiting);
+    assert!(experiment.worker_name.is_none());
+    assert!(experiment.error_message.is_none());
   }
 
   /// 報告失敗

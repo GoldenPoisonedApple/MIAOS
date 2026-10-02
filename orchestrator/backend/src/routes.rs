@@ -1,5 +1,5 @@
 use axum::{
-  routing::{delete, get, put},
+  routing::{delete, get, post, put},
   Router,
 };
 use utoipa::OpenApi;
@@ -9,7 +9,7 @@ use crate::state::{AppState, HealthState};
 
 use crate::handlers::experiment::{
   claim_experiment, create_experiment, delete_experiment, delete_task, get_all_experiments,
-  get_all_tasks, reflect_experiment_results,
+  get_all_tasks, reflect_experiment_results, rerun_experiment,
 };
 use crate::handlers::file::get_file;
 use crate::handlers::filter::{delete_filter, list_filters, upload_filter};
@@ -25,6 +25,7 @@ use crate::handlers::health::{liveness, readiness};
 		crate::handlers::experiment::get_all_tasks,
 		crate::handlers::experiment::delete_task,
 		crate::handlers::experiment::claim_experiment,
+		crate::handlers::experiment::rerun_experiment,
 		crate::handlers::file::get_file,
 		crate::handlers::filter::list_filters,
 		crate::handlers::filter::upload_filter,
@@ -66,6 +67,7 @@ pub fn app_routes(app_state: AppState, health_state: HealthState) -> Router {
         .put(reflect_experiment_results),
     )
     .route("/api/experiments/claim", put(claim_experiment))
+    .route("/api/experiments/{id}/rerun", post(rerun_experiment))
     .route("/api/experiments/{id}", delete(delete_experiment))
     .route("/api/tasks", get(get_all_tasks))
     .route("/api/tasks/{id}", delete(delete_task))

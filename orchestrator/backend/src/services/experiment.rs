@@ -98,18 +98,39 @@ impl<E: ExperimentRepositoryTrait, T: TaskRepositoryTrait> ExperimentService<E, 
     self.task_repository.find_all_tasks().await
   }
 
-  /// 指定IDの実験を削除 タスクも一緒に削除する
-  /// * id: i64 - 削除する実験のID
-  /// * 戻り値: Result<u64, ServerError> - 実験の削除結果
-  pub async fn delete_experiment_by_id(&self, id: i64) -> Result<u64, ServerError> {
-    let result = self.experiment_repository.delete_from_id(id).await?;
-    // タスクも削除
+  /// 実験の再実行
+  /// * id: i64 - 再実行する実験のID
+  /// * 戻り値: Result<Model, ServerError> - リセット後の実験
+  pub async fn rerun_experiment(&self, id: i64) -> Result<Model, ServerError> {
+    let mut model = self.experiment_repository.find_by_id(id).await?;
+    // タスク削除
+    self.delete_tasks_for_experiment(id).await?;
+    // 実験リセット
+    model.reset_for_rerun();
+    let model = self.experiment_repository.update(model).await?;
+    // タスク作成
+    let task_request = CreateTaskRequest::from(&model);
+    self.task_repository.create_task(task_request).await?;
+    Ok(model)
+  }
+
+  /// 指定 experiment_id に紐づく Redis タスクを削除する
+  async fn delete_tasks_for_experiment(&self, id: i64) -> Result<(), ServerError> {
     let tasks = self.task_repository.find_all_tasks().await?;
     for task in tasks {
       if task.experiment_id == id {
         self.task_repository.delete_by_id(task.id).await?;
       }
     }
+    Ok(())
+  }
+  /// 指定IDの実験を削除 タスクも一緒に削除する
+  /// * id: i64 - 削除する実験のID
+  /// * 戻り値: Result<u64, ServerError> - 実験の削除結果
+  pub async fn delete_experiment_by_id(&self, id: i64) -> Result<u64, ServerError> {
+    let result = self.experiment_repository.delete_from_id(id).await?;
+    // タスクも一緒に削除する
+    self.delete_tasks_for_experiment(id).await?;
     Ok(result)
   }
 
@@ -331,5 +352,83 @@ mod tests {
       .iter()
       .any(|task| task.experiment_id == created_experiment.id)); // 指定IDの実験タスクが存在しない事
     remove_test_tasks(&service.task_repository).await;
+  }
+
+  /// 完了済み実験の再実行テスト
+  #[sqlx::test]
+  async fn test_rerun_from_succeeded(pool: sqlx::PgPool) {
+    // Arrange
+    let service = setup(pool).await;
+    let experiment = service
+      .create_experiment(create_experiment_request_factory("test_experiment"))
+      .await
+      .unwrap();
+    service
+      .claim_experiment(ClaimExperimentRequest {
+        id: experiment.id,
+        worker_name: "test_worker".to_string(),
+      })
+      .await
+      .unwrap();
+    service
+      .reflect_experiment_results(update_experiment_request_factory(
+        experiment.id,
+        ExperimentStatus::Succeeded,
+      ))
+      .await
+      .unwrap();
+    // Act
+    let result = service.rerun_experiment(experiment.id).await.unwrap();
+    // Assert
+    assert_eq!(result.status, ExperimentStatus::Waiting);
+    assert!(result.completed_at.is_none());
+    assert!(result.global_auc.is_none());
+    let tasks = service.task_repository.find_all_tasks().await.unwrap();
+    let experiment_tasks = tasks
+      .iter()
+      .filter(|task| task.experiment_id == experiment.id)
+      .count();
+    assert_eq!(experiment_tasks, 1);
+    remove_test_tasks(&service.task_repository).await;
+  }
+
+  /// 待機中実験の再実行テスト
+  #[sqlx::test]
+  async fn test_rerun_from_waiting(pool: sqlx::PgPool) {
+    // Arrange
+    let service = setup(pool).await;
+    let experiment = service
+      .create_experiment(create_experiment_request_factory("test_experiment"))
+      .await
+      .unwrap();
+    let tasks_before = service.task_repository.find_all_tasks().await.unwrap();
+    let task_id_before = tasks_before
+      .iter()
+      .find(|task| task.experiment_id == experiment.id)
+      .unwrap()
+      .id;
+    // Act
+    let result = service.rerun_experiment(experiment.id).await.unwrap();
+    // Assert
+    assert_eq!(result.status, ExperimentStatus::Waiting);
+    let tasks_after = service.task_repository.find_all_tasks().await.unwrap();
+    let experiment_tasks = tasks_after
+      .iter()
+      .filter(|task| task.experiment_id == experiment.id)
+      .collect::<Vec<_>>();
+    assert_eq!(experiment_tasks.len(), 1);
+    assert_ne!(experiment_tasks[0].id, task_id_before);
+    remove_test_tasks(&service.task_repository).await;
+  }
+
+  /// 存在しない実験の再実行テスト
+  #[sqlx::test]
+  async fn test_rerun_not_found(pool: sqlx::PgPool) {
+    // Arrange
+    let service = setup(pool).await;
+    // Act
+    let result = service.rerun_experiment(999_999).await;
+    // Assert
+    assert!(matches!(result, Err(ServerError::NotFound(_))));
   }
 }
