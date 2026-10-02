@@ -26,6 +26,13 @@ LF_MIA_TARGET_FRACTIONS = [
 ]
 
 
+def _reset_target_model_init_rng(seed: int) -> None:
+	"""装飾適用率スイープの各ターゲットモデルが同一初期重みから学習を始めるよう RNG を固定する。"""
+	torch.manual_seed(seed)
+	if torch.cuda.is_available():
+		torch.cuda.manual_seed_all(seed)
+
+
 # Local Feature MIA
 class LF_MIA(MIA_Attack):
 	def __init__(
@@ -141,6 +148,8 @@ class LF_MIA(MIA_Attack):
 				f"Target Model fraction={fraction_value} -> Train: {num_train}, Test: {num_test}"
 			)
 
+			# fraction 間で初期重みを揃え、装飾サブセットの効果だけを比較可能にする
+			_reset_target_model_init_rng(int(self.settings.seed))
 			target_model = model_factory().to(cfg.DEVICE)
 			target_model = MIA_Attack.train_model(
 				target_model, trainloader, self.settings.max_epochs
