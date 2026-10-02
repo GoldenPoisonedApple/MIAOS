@@ -65,6 +65,30 @@ export const useExperiments = () => {
     },
   });
 
+  const rerunMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      await Promise.all(
+        ids.map(async (id) => {
+          const { error, response } = await apiClient.POST("/api/experiments/{id}/rerun", {
+            params: { path: { id } },
+          });
+          if (error !== undefined) {
+            const serverError = error as { message?: string; detail?: string };
+            const errorMessage = serverError?.message || serverError?.detail || `再実行エラー (${response.status} ${response.statusText})`;
+            throw new Error(errorMessage);
+          }
+        })
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["experiments"] });
+    },
+    onError: (err) => {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Failed to rerun experiment");
+    },
+  });
+
   return {
     experiments,
     loading: isLoading,
@@ -75,6 +99,8 @@ export const useExperiments = () => {
     isCreating: createMutation.isPending,
     deleteExperiments: (ids: number[], options?: Parameters<typeof deleteMutation.mutate>[1]) => deleteMutation.mutate(ids, options),
     isDeleting: deleteMutation.isPending,
+    rerunExperiments: (ids: number[], options?: Parameters<typeof rerunMutation.mutate>[1]) => rerunMutation.mutate(ids, options),
+    isRerunning: rerunMutation.isPending,
     refetch: () => queryClient.invalidateQueries({ queryKey: ["experiments"] }),
   };
 };

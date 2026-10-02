@@ -7,14 +7,15 @@
 ## 1. カスタムフック (データアクセス・ビジネスロジック)
 
 ### 1.1 `useExperiments`
-実験データの取得、作成、削除を行うためのフック。内部で `useQuery`, `useMutation` を使用。
+実験データの取得、作成、削除、再実行を行うためのフック。内部で `useQuery`, `useMutation` を使用。
 
 - **取得データ:** `experiments` (`components["schemas"]["Model"][]`)
 - **提供メソッド:**
   - `createExperiment(req: CreateExperimentRequest): Promise<void>`: 新しい実験を作成
   - `deleteExperiments(ids: number[], options?: object): void`: 複数の実験を並列で削除
+  - `rerunExperiments(ids: number[], options?: object): void`: 複数の実験を並列で再実行キューに投入
   - `refetch()`: データを再取得
-- **状態:** `loading` (boolean), `error` (Error | null), `isCreating` (boolean), `isDeleting` (boolean)
+- **状態:** `loading` (boolean), `error` (Error | null), `isCreating` (boolean), `isDeleting` (boolean), `isRerunning` (boolean)
 
 ### 1.2 `useTasks`
 タスクデータの取得、削除を行うためのフック。
