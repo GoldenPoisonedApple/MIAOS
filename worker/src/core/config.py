@@ -29,6 +29,8 @@ TARGET_MODEL_NAME: str = "target_model.pth"
 SHADOW_MODEL_NAME: str = "shadow_models.pth"
 # 攻撃モデルの保存名
 ATTACK_MODEL_NAME: str = "attack_models.pth"
+# 攻撃モデル解析結果の出力ディレクトリ名
+ATTACK_MODEL_ANALYSIS_DIR: str = "analyze_attack_model"
 
 # クラスの数
 NUM_CLASSES: int = 100

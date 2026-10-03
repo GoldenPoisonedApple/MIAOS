@@ -14,6 +14,3 @@ cache/
 # OpenAPI
 openapi.json
 
-# scripts
-analysis_data/
-analysis_output/

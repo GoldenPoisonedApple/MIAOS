@@ -11,6 +11,7 @@ from src.attacks.mia_attack import MIA_Attack
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
 from src.models.attack_model import AttackNet
+from src.attacks.attack_model_analysis import analyze_attack_model
 from src.attacks.mia_lira_common import (
 	logit_scaling,
 )
@@ -193,6 +194,53 @@ class LF_MIA(MIA_Attack):
 			hp.get("attack_model_epochs", cfg.ATTACK_MODEL_EPOCHS),
 		)
 
+	def _train_attack_model(
+		self, attack_x: torch.Tensor, attack_y: torch.Tensor
+	) -> AttackNet:
+		"""攻撃モデルを訓練・保存し、重み解析結果を出力する。"""
+		attack_model_batch_size, attack_model_epochs = self.from_request(self.settings)
+
+		# 攻撃モデルのデータセット作成
+		attack_dataset = TensorDataset(attack_x, attack_y)
+		attack_loader = DataLoader(
+			attack_dataset,
+			batch_size=attack_model_batch_size,
+			shuffle=True,
+			num_workers=0,
+			pin_memory=cfg.DEVICE.type == "cuda",
+		)
+
+		# 訓練前の初期重みを保持（学習後は同一インスタンスが更新されるため別途保存）
+		attack_model = AttackNet(input_dim=cfg.NUM_CLASSES).to(cfg.DEVICE)
+		init_attack_model = AttackNet(input_dim=cfg.NUM_CLASSES)
+		init_attack_model.load_state_dict(attack_model.state_dict()) # attack_modelの初期重みをinit_attack_modelにコピー
+
+		# 攻撃モデルの訓練
+		attack_model = MIA_Attack.train_model(
+			attack_model, attack_loader, attack_model_epochs
+		)
+
+		# 攻撃モデルの保存
+		torch.save(
+			attack_model.state_dict(),
+			os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_NAME),
+		)
+		self.logger.info(
+			f"Attack Model saved -> {os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_NAME)}"
+		)
+
+		analysis_dir = os.path.join(
+			self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_ANALYSIS_DIR
+		)
+		# 攻撃モデルの内部表現解析
+		w1_relative_change = analyze_attack_model(
+			attack_model, analysis_dir, init_model=init_attack_model
+		)
+		self.logger.info(f"Attack Model analysis saved -> {analysis_dir}")
+		self.metrics["w1_relative_change"] = w1_relative_change
+
+		return attack_model
+
 	# LF_MIA Attack
 	def attack(
 		self, shadow_models: list[nn.Module], target_model: list[nn.Module]
@@ -223,31 +271,9 @@ class LF_MIA(MIA_Attack):
 		attack_x = torch.cat(in_preds + out_preds)
 		attack_y = torch.cat([in_labels, out_labels])
   
-		# 攻撃モデルのバッチサイズとエポック数の取得
-		attack_model_batch_size, attack_model_epochs = self.from_request(self.settings)
-  
-		# データセットの作成
-		attack_dataset = TensorDataset(attack_x, attack_y)
-		attack_loader = DataLoader(
-      		attack_dataset,
-      		batch_size=attack_model_batch_size,
-      		shuffle=True,
-      		num_workers=0,
-      		pin_memory=cfg.DEVICE.type == "cuda",
-    	)
 		# 攻撃モデルの訓練
-		attack_model = AttackNet(input_dim=cfg.NUM_CLASSES).to(cfg.DEVICE)
-		attack_model = MIA_Attack.train_model(
-			attack_model, attack_loader, attack_model_epochs
-		)
-		# 攻撃モデルの保存
-		torch.save(
-			attack_model.state_dict(), os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_NAME)
-		)
-		self.logger.info(
-			f"Attack Model saved -> {os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_NAME)}"
-		)
-  
+		attack_model = self._train_attack_model(attack_x, attack_y)
+
 		# ------------- 攻撃 -------------
 		attack_scores: list[float] = []
 		attack_fractions: list[float] = []

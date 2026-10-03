@@ -1,14 +1,11 @@
-import os
-
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 
 import src.core.config as cfg
 from src.attacks.lf_mia import LF_MIA, LF_MIA_TARGET_FRACTIONS
 from src.attacks.mia_attack import MIA_Attack
 from src.attacks.mia_lira_common import logit_scaling
-from src.models.attack_model import AttackNet
 from src.server_client.types import UNSET
 
 
@@ -95,30 +92,8 @@ class LF_Mult_MIA(LF_MIA):
 		out_labels = torch.zeros(num_images * len(out_feats), dtype=torch.long)
 		attack_y = torch.cat([in_labels, out_labels])
 
-		# 攻撃モデルのバッチサイズとエポック数の取得
-		attack_model_batch_size, attack_model_epochs = self.from_request(self.settings)
-
-		# データセットの作成
-		attack_dataset = TensorDataset(attack_x, attack_y)
-		attack_loader = DataLoader(
-			attack_dataset,
-			batch_size=attack_model_batch_size,
-			shuffle=True,
-			num_workers=0,
-			pin_memory=cfg.DEVICE.type == "cuda",
-		)
-		# 攻撃モデルの訓練（入力次元は LF_MIA と同じ NUM_CLASSES）
-		attack_model = AttackNet(input_dim=cfg.NUM_CLASSES).to(cfg.DEVICE)
-		attack_model = MIA_Attack.train_model(
-			attack_model, attack_loader, attack_model_epochs
-		)
-		# 攻撃モデルの保存
-		torch.save(
-			attack_model.state_dict(), os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_NAME)
-		)
-		self.logger.info(
-			f"Attack Model saved -> {os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_NAME)}"
-		)
+		# 攻撃モデルの訓練
+		attack_model = self._train_attack_model(attack_x, attack_y)
 
 		# ------------- 攻撃 -------------
 		attack_scores: list[float] = []  # K 枚の IN 確率の平均（LF_MIA の attack_score と同スケール）
