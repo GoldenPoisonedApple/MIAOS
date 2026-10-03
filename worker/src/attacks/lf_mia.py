@@ -210,10 +210,14 @@ class LF_MIA(MIA_Attack):
 			pin_memory=cfg.DEVICE.type == "cuda",
 		)
 
-		# 訓練前の初期重みを保持（学習後は同一インスタンスが更新されるため別途保存）
+		# 攻撃モデルの作成
 		attack_model = AttackNet(input_dim=cfg.NUM_CLASSES).to(cfg.DEVICE)
+		# 初期重みを保存
 		init_attack_model = AttackNet(input_dim=cfg.NUM_CLASSES)
 		init_attack_model.load_state_dict(attack_model.state_dict()) # attack_modelの初期重みをinit_attack_modelにコピー
+		init_path = os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_INIT_NAME)
+		torch.save(init_attack_model.state_dict(), init_path)
+		self.logger.info(f"Attack Model (init) saved -> {init_path}")
 
 		# 攻撃モデルの訓練
 		attack_model = MIA_Attack.train_model(
@@ -232,12 +236,26 @@ class LF_MIA(MIA_Attack):
 		analysis_dir = os.path.join(
 			self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_ANALYSIS_DIR
 		)
-		# 攻撃モデルの内部表現解析
-		w1_relative_change = analyze_attack_model(
-			attack_model, analysis_dir, init_model=init_attack_model
+		# 攻撃モデルの内部表現解析（重み差分 + 学習データ上の到達度・入力感度）
+		analysis = analyze_attack_model(
+			attack_model,
+			analysis_dir,
+			init_model=init_attack_model,
+			attack_x=attack_x,
+			attack_y=attack_y,
+		)
+		self.logger.info(
+			f"Attack Model fit -> Acc: {analysis.fit.accuracy:.4f}, Loss: {analysis.fit.loss:.4f} "
+			f"(IN: {analysis.fit.in_accuracy}, OUT: {analysis.fit.out_accuracy}, N={analysis.fit.num_samples})"
 		)
 		self.logger.info(f"Attack Model analysis saved -> {analysis_dir}")
-		self.metrics["w1_relative_change"] = w1_relative_change
+		self.metrics.update({
+			"w1_relative_change": analysis.w1_relative_change,
+			"attack_model_train_acc": analysis.fit.accuracy,
+			"attack_model_train_loss": analysis.fit.loss,
+			"attack_model_train_in_acc": analysis.fit.in_accuracy,
+			"attack_model_train_out_acc": analysis.fit.out_accuracy,
+		})
 
 		return attack_model
 
