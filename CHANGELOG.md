@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.7.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.6.3...v0.7.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* ターゲットの初期値固定
+
+### Features
+
+* attack_modelの学習度指標実装 ([2fee140](https://github.com/GoldenPoisonedApple/MIAOS/commit/2fee1403d9857f56c1ec9adee599387b676fe6ba))
+* attack_modelの解析プロトタイプ ([e096c66](https://github.com/GoldenPoisonedApple/MIAOS/commit/e096c66af1f9d06fc3aa51eaa56acef33c929a12))
+* 再実行API反映 ([0fbddde](https://github.com/GoldenPoisonedApple/MIAOS/commit/0fbddde049d0a215ec8f5dd9a9ac64b85bc509ef))
+* 再実行API実装 ([1ddd6bc](https://github.com/GoldenPoisonedApple/MIAOS/commit/1ddd6bcd1430420b28e164a6cbf2d9a0ddcaba98))
+* 再実行フロント実装 ([9f79719](https://github.com/GoldenPoisonedApple/MIAOS/commit/9f797195c4931c2f2423c9f7089e3d93f560804d))
+* 攻撃モデルの解析実装 ([1430dea](https://github.com/GoldenPoisonedApple/MIAOS/commit/1430dea0fb1e9219352be70abfe0324e8db735b1))
+
+
+### Bug Fixes
+
+* rustcのバージョンアップに伴う修正 ([16a62a3](https://github.com/GoldenPoisonedApple/MIAOS/commit/16a62a39e45465a35e9b234d0294a9f065775855))
+* ターゲットの初期値固定 ([5597f51](https://github.com/GoldenPoisonedApple/MIAOS/commit/5597f5191cc3d97e01226aeecd3f34210ceb1a64))
+* バージョン変更に伴う更新 ([cc03e9a](https://github.com/GoldenPoisonedApple/MIAOS/commit/cc03e9a7df5b6ab371f59d5946f9ccfb8f2964d8))
+
 ## [0.6.3](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.6.2...v0.6.3) (2026-10-01)
 
 
