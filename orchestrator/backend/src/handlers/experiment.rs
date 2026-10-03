@@ -89,6 +89,28 @@ pub async fn get_all_experiments(
   Ok(Json(experiments))
 }
 
+/// 実験の再実行
+#[utoipa::path(
+	post,
+	path = "/api/experiments/{id}/rerun",
+	params(
+		("id" = i64, Path, description = "再実行する実験のID")
+	),
+	responses(
+		(status = 200, description = "実験が再実行キューに投入された", body = Model),
+		(status = 404, description = "指定された実験が見つからない"),
+		(status = 500, description = "サーバー内部エラー")
+	),
+	tag = "Experiments"
+)]
+pub async fn rerun_experiment(
+  State(service): State<Arc<ExperimentService<ExperimentRepository, TaskRepository>>>,
+  Path(id): Path<i64>,
+) -> Result<Json<Model>, ServerError> {
+  let experiment = service.rerun_experiment(id).await?;
+  Ok(Json(experiment))
+}
+
 /// 実験の削除
 /// Path: /experiments/{id} のような指定の場合 idを取ってこれるエクストラクタ
 #[utoipa::path(

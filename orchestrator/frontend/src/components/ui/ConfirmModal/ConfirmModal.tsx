@@ -8,9 +8,20 @@ interface ConfirmModalProps {
   title: string;
   message: string;
   isConfirming: boolean;
+  confirmLabel?: string;
+  confirmVariant?: "primary" | "danger" | "secondary" | "outline";
 }
 
-export const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, isConfirming }: ConfirmModalProps) => {
+export const ConfirmModal = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  isConfirming,
+  confirmLabel = "削除する",
+  confirmVariant = "danger",
+}: ConfirmModalProps) => {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} maxWidth="400px">
       <p style={{ marginBottom: "24px" }}>{message}</p>
@@ -18,8 +29,8 @@ export const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, isCon
         <Button variant="outline" onClick={onClose} disabled={isConfirming}>
           キャンセル
         </Button>
-        <Button variant="danger" onClick={onConfirm} disabled={isConfirming}>
-          {isConfirming ? "処理中..." : "削除する"}
+        <Button variant={confirmVariant} onClick={onConfirm} disabled={isConfirming}>
+          {isConfirming ? "処理中..." : confirmLabel}
         </Button>
       </div>
     </Modal>

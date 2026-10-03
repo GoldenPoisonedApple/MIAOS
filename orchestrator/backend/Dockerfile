@@ -1,7 +1,7 @@
 # ---------------------------------
 # Base Stage: 開発・本番の共通のイメージ
 # ---------------------------------
-FROM rust:1.93-slim-bookworm AS base
+FROM rust:1.99-slim-bookworm AS base
 WORKDIR /app
 
 # 必要なシステムパッケージのインストール

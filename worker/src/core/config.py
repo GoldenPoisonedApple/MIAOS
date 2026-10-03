@@ -29,6 +29,10 @@ TARGET_MODEL_NAME: str = "target_model.pth"
 SHADOW_MODEL_NAME: str = "shadow_models.pth"
 # 攻撃モデルの保存名
 ATTACK_MODEL_NAME: str = "attack_models.pth"
+# 攻撃モデルの訓練前 (初期重み) の保存名。重み差分解析のベースラインとして事後利用する
+ATTACK_MODEL_INIT_NAME: str = "attack_model_init.pth"
+# 攻撃モデル解析結果の出力ディレクトリ名
+ATTACK_MODEL_ANALYSIS_DIR: str = "analyze_attack_model"
 
 # クラスの数
 NUM_CLASSES: int = 100

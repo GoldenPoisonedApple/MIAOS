@@ -308,12 +308,12 @@ impl Broker for AMQPBroker {
     async fn increase_prefetch_count(&self) -> Result<(), BrokerError> {
         let new_count = {
             let mut prefetch_count = self.prefetch_count.lock().await;
-            if *prefetch_count < std::u16::MAX {
+            if *prefetch_count < u16::MAX {
                 let new_count = *prefetch_count + 1;
                 *prefetch_count = new_count;
                 new_count
             } else {
-                std::u16::MAX
+                u16::MAX
             }
         };
         self.set_prefetch_count(new_count).await?;

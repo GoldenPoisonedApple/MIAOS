@@ -179,6 +179,45 @@
         }
       }
     },
+    "/api/experiments/{id}/rerun": {
+      "post": {
+        "tags": [
+          "Experiments"
+        ],
+        "summary": "実験の再実行",
+        "operationId": "rerun_experiment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "再実行する実験のID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "実験が再実行キューに投入された",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Model"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "指定された実験が見つからない"
+          },
+          "500": {
+            "description": "サーバー内部エラー"
+          }
+        }
+      }
+    },
     "/api/files/{key}": {
       "get": {
         "tags": [

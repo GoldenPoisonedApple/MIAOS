@@ -161,7 +161,7 @@ macro_rules! app {
             [ $( $t ),* ],
             [ $( $pattern => $queue ),* ],
             $( $x = $y, )*
-        );
+        )
     };
 }
 

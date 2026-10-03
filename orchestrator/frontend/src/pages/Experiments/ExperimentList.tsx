@@ -16,10 +16,11 @@ type Experiment = components["schemas"]["Model"];
 const EXPERIMENT_DEFAULT_SORTING = [{ id: "id", desc: false }] as const;
 
 export const ExperimentList = () => {
-  const { experiments, loading, error, deleteExperiments, createExperiment, isCreating, isDeleting } = useExperiments();
+  const { experiments, loading, error, deleteExperiments, rerunExperiments, createExperiment, isCreating, isDeleting, isRerunning } = useExperiments();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [copySource, setCopySource] = useState<Experiment | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isRerunModalOpen, setIsRerunModalOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState({});
 
   const filesRenderCell = useCallback((ctx: DictionaryCellRenderContext<Experiment>) => {
@@ -226,15 +227,29 @@ export const ExperimentList = () => {
     });
   };
 
+  const handleRerunConfirm = () => {
+    rerunExperiments(selectedIds, {
+      onSuccess: () => {
+        setRowSelection({});
+        setIsRerunModalOpen(false);
+      },
+    });
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.listHeader}>
         <h2>実験一覧</h2>
         <div className={styles.listActions}>
           {selectedCount > 0 && (
-            <Button variant="danger" onClick={() => setIsDeleteModalOpen(true)}>
-              選択した項目を削除 ({selectedCount})
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setIsRerunModalOpen(true)}>
+                選択した項目を再実行 ({selectedCount})
+              </Button>
+              <Button variant="danger" onClick={() => setIsDeleteModalOpen(true)}>
+                選択した項目を削除 ({selectedCount})
+              </Button>
+            </>
           )}
           <Button variant="primary" onClick={() => handleOpenCreateModal()}>
             新しい実験を作成
@@ -268,6 +283,17 @@ export const ExperimentList = () => {
         title="実験の削除"
         message={`選択した ${selectedCount} 件の実験を本当に削除しますか？この操作は取り消せません。`}
         isConfirming={isDeleting}
+      />
+
+      <ConfirmModal
+        isOpen={isRerunModalOpen}
+        onClose={() => setIsRerunModalOpen(false)}
+        onConfirm={handleRerunConfirm}
+        title="実験の再実行"
+        message={`選択した ${selectedCount} 件の実験を再実行キューに投入しますか？`}
+        isConfirming={isRerunning}
+        confirmLabel="再実行する"
+        confirmVariant="primary"
       />
 
     </div>
