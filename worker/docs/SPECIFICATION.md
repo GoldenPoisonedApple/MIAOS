@@ -134,7 +134,7 @@ target_model = mia_class.train_target_model(lambda: TargetCNN())
 | 手法            | `attack()` 第2引数 `target_model` | `attack()` 戻り値                         | Phase 5 の主な成果物                                      |
 | ------------- | ------------------------------- | -------------------------------------- | --------------------------------------------------- |
 | LiRA / Shokri | `nn.Module`（単一）                 | `(np.ndarray, np.ndarray)` スコア配列・真値ラベル | `roc_curve.png`、`global_auc`、TPR@FPR 等               |
-| LF_MIA        | `list[nn.Module]`（13 体）          | `(list[float], list[float])` スコア・装飾適用率（各 13 要素） | `attack_score` / `attack_fraction`（ROC は描画しない）。Phase 4 中に `analyze_attack_model/`（攻撃モデル解析）と `target_attacksign_output/`（ターゲット透かし出力）を出力 |
+| LF_MIA        | `list[nn.Module]`（13 体）          | `(list[float], list[float])` スコア・装飾適用率（各 13 要素） | `attack_score` / `attack_fraction`（ROC は描画しない）。Phase 4 中に `analyze_attack_model/`（攻撃モデル解析）、`target_attacksign_output/`（ターゲット透かし出力）、`shadow_pair_effect/`（シャドー IN/OUT ペア効果量解析）を出力 |
 | LF_Mult_MIA / LF_Mult_Diff_MIA | 同上 | 同上（`attack_score` は K 枚の IN 確率の平均） | 上記に加え `attack_scores_vars`（13 要素）/ `attack_all_scores`（13 × K）/ `attack_num_images` |
 
 
@@ -436,6 +436,7 @@ classDiagram
         IN/OUT シャドー
         透かし1枚 + AttackNet
         _output_target_attack_sign_analysis
+        _run_shadow_pair_effect_analysis
     }
     MIA_Attack <|-- MIA_OfflineLiRA
     MIA_Attack <|-- MIA_OnlineLiRA
@@ -461,7 +462,7 @@ classDiagram
 | `MIA_OfflineLiRA` | シャドウ OUT 分布から z-score → CDF スコア（論文 Equation 4） |
 | `MIA_OnlineLiRA`  | シャドウ IN/OUT 分布から対数尤度比スコア（論文 Algorithm 1）       |
 | `MIA_Shokri`      | ソフトマックス特徴 → `AttackNet`（クラス別）                  |
-| `LF_MIA`          | 装飾あり/なしシャドー + 攻撃用透かし → `AttackNet`。ターゲットは装飾適用率 13 段階で学習・攻撃     |
+| `LF_MIA`          | 装飾あり/なしシャドー + 攻撃用透かし → `AttackNet`。ターゲットは装飾適用率 13 段階で学習・攻撃。攻撃末尾でシャドー IN/OUT ペア効果量解析（`shadow_pair_effect/`）を出力     |
 | `LF_Mult_MIA`     | `LF_MIA` 派生。透かしを target test 画像 K 枚に合成し、モデル 1 体あたり K サンプルで `AttackNet` を学習。ターゲットごとに K 個の IN 確率を平均・分散・全値で集約 |
 | `LF_Mult_Diff_MIA` | `LF_Mult_MIA` 派生。特徴量を `logit(透かしあり) − logit(透かしなし)` の差分にして画像固有成分を打ち消す |
 
@@ -501,6 +502,7 @@ flowchart LR
         ANA["analyze_attack_model<br/>analyze_attack_model/"]
         TGT["13 体のターゲット推論 → attack_score[]"]
         VIS["target_attacksign_output/<br/>13 枚のクラス別確率棒グラフ"]
+        SPE["shadow_pair_effect/<br/>シャドー IN/OUT ペア効果量"]
     end
 
     IN --> PRED
@@ -515,6 +517,9 @@ flowchart LR
     M1 --> VIS
     M13 --> VIS
     WM --> VIS
+    IN --> SPE
+    OUT --> SPE
+    WM --> SPE
 ```
 
 1. IN / OUT シャドーそれぞれが `attack_watermark_loader` 上で `(1, NUM_CLASSES)` の softmax 出力を出す。
@@ -522,6 +527,7 @@ flowchart LR
 3. 13 体のターゲットモデルそれぞれに同じ透かしを入力し、攻撃モデルでメンバー確率 `attack_score`（`softmax[:, 1]`）を得る。結果は長さ 13 のリスト。
 4. `attack_fraction` は `LF_MIA_TARGET_FRACTIONS` の対応値（装飾適用率。MIA の真値ラベルではない）。
 5. 攻撃ループ後、13 体のターゲットそれぞれに `get_attack_watermark_dataloader` の透かし 1 枚を再入力し、softmax 確率を `target_attacksign_output/` に棒グラフ（13 枚）+ `summary.json` として保存する（下記「ターゲット攻撃透かし出力の可視化」）。LF_MIA 系全手法で同一。
+6. 上記の後、`attack()` 最末尾で `_run_shadow_pair_effect_analysis` を呼び、シャドー IN/OUT ペアのクラス別装飾効果量を `shadow_pair_effect/` に出力する（下記「シャドー IN/OUT ペア効果量解析」）。攻撃スコア・`AttackNet` 学習には影響しない。LF_MIA 系全手法で同一フックを使用する。
 
 ハイパーパラメータ（`hyperparameters`、省略時は `config.py` のデフォルト）:
 
@@ -540,8 +546,9 @@ flowchart LR
 | `attack_model_init.pth` | 攻撃モデル訓練前の初期重み（`analyze_attack_model` の差分ベースライン） |
 | `analyze_attack_model/` | 攻撃モデル解析結果（重みヒートマップ・クラス重要度・入力感度等の PNG + `summary.json`） |
 | `target_attacksign_output/` | ターゲットモデルへの攻撃透かし入力時のクラス別確率棒グラフ（13 枚）+ `summary.json` |
+| `shadow_pair_effect/` | シャドー IN/OUT ペア効果量解析（PNG 4 枚 + `summary.json`。下記） |
 
-`comprehensive_evaluate` は ROC を描画せず、`global_auc` / TPR@FPR 系を `None` で埋めたうえで `attack_score` / `attack_fraction`（各 13 要素のリスト）を `metrics` に追加する。加えて `target_train_accs` / `target_test_accs` / `target_acc_gaps`、攻撃モデル解析由来の `w1_relative_change` / `attack_model_train_acc` / `attack_model_train_loss` / `attack_model_train_in_acc` / `attack_model_train_out_acc` を格納する。
+`comprehensive_evaluate` は ROC を描画せず、`global_auc` / TPR@FPR 系を `None` で埋めたうえで `attack_score` / `attack_fraction`（各 13 要素のリスト）を `metrics` に追加する。加えて `target_train_accs` / `target_test_accs` / `target_acc_gaps`、攻撃モデル解析由来の `w1_relative_change` / `attack_model_train_acc` / `attack_model_train_loss` / `attack_model_train_in_acc` / `attack_model_train_out_acc`、シャドー IN/OUT ペア効果量解析由来の `shadow_pair_global_permutation_pvalue` / `shadow_pair_num_significant_fdr` を格納する。
 
 #### 攻撃モデル解析（`attack_model_analysis.py`）
 
@@ -562,6 +569,73 @@ flowchart LR
 - `summary.json`: 各 fraction の `probs`（100 要素）、`argmax_class`、`top_classes`（上位 10 クラス）
 - 描画スタイルは `attack_model_analysis.plot_class_importance` を再利用（`figsize=(16,5)`, `dpi=300`）
 
+#### シャドー IN/OUT ペア効果量解析（`shadow_pair_effect_analysis.py`）
+
+`LF_MIA._run_shadow_pair_effect_analysis` が Phase 4 末尾（`_output_target_attack_sign_analysis` の後）で呼ばれる。LF_MIA 系全手法で同一フックを使用する。出力先は `MODEL_SAVE_DIR/shadow_pair_effect/`（`config.SHADOW_PAIR_EFFECT_DIR`）。`AttackNet` には依存しないモデル非依存の診断。
+
+**ペア設計**: `train_shadow_models` は `seed=i` で IN シャドー i と OUT シャドー i の訓練サブセットを揃える。各ペアに同じプローブを入力し、クラス c ごとの差分 `mean(IN[:,c] - OUT[:,c])` を装飾効果の推定量とする。
+
+**特徴抽出**（`_collect_shadow_pair_features`）:
+
+| 手法 | プローブ | 1 シャドーあたりの特徴 |
+| ---- | -------- | ---------------------- |
+| `LF_MIA` | `get_attack_watermark_dataloader`（黒背景透かし 1 枚） | `logit_scaling(softmax)` → `(NUM_CLASSES,)` |
+| `LF_Mult_MIA` | `get_attack_composite_dataloaders(K)` の透かし合成 K 枚 | `_extract_features` → `(K, NUM_CLASSES)` を **クラス次元で平均** → `(NUM_CLASSES,)` |
+| `LF_Mult_Diff_MIA` | 同上 | 差分特徴 `logit(透かしあり) − logit(透かしなし)` の K 枚平均 |
+
+Mult 系は攻撃本体が K 枚を独立サンプルとして使うのに対し、本解析はペア 1 体あたり 1 ベクトル（K 枚平均）に要約し、Wilcoxon 等の統計単位は `n_pairs = num_shadow_models / 2` のままとする。
+
+**統計量**（クラス c ごと）:
+
+| 量 | 定義 |
+| -- | ---- |
+| `mean_diff[c]` | `mean(IN[:,c] - OUT[:,c])` |
+| `cohens_d[c]` | ペア差分の Cohen's d（`std=0` なら `null`） |
+| `wilcoxon_p[c]` | 両側 Wilcoxon 符号順位検定（`n_pairs < 6` または全ゼロなら `null`） |
+| Bonferroni 有意 | `wilcoxon_p * n_classes < alpha` |
+| BH-FDR 有意 | Benjamini–Hochberg（`alpha=0.05`） |
+| `global_permutation_p` | `T_obs = max_c \|mean_diff[c]\|` に対する符号反転置換検定（`config.SHADOW_PAIR_N_PERMUTATIONS` 回） |
+
+**出力ファイル**:
+
+| ファイル | 内容 |
+| -------- | ---- |
+| `summary.json` | 下記スキーマ |
+| `mean_diff_bar.png` | クラス別 `mean_diff`（正=IN 方向、負=OUT 方向） |
+| `cohens_d_bar.png` | クラス別 Cohen's d |
+| `wilcoxon_neglog10_p_bar.png` | `-log10(wilcoxon_p)`。Bonferroni 実線・BH-FDR 破線の有意閾値線付き |
+| `volcano.png` | x=`mean_diff`、y=`-log10(wilcoxon_p)`。Bonferroni/FDR 水平線付き |
+
+`wilcoxon_p` が `null` のクラスは Wilcoxon 系グラフでは非表示。
+
+**`summary.json` スキーマ**:
+
+```json
+{
+  "n_pairs": 50,
+  "alpha": 0.05,
+  "n_permutations": 9999,
+  "global_permutation_p": 0.001,
+  "top_class_by_abs_cohens_d": 42,
+  "top_class_cohens_d": 1.23,
+  "significant_class_ids_bonferroni": [42, 7],
+  "significant_class_ids_fdr": [42, 7, 15],
+  "classes": {
+    "0": {"mean_diff": 0.01, "cohens_d": 0.05, "wilcoxon_p": 0.82},
+    ...
+  }
+}
+```
+
+**metrics**（`other_metrics` へ自動収集。2 キーのみ）:
+
+| キー | 意味 |
+| ---- | ---- |
+| `shadow_pair_global_permutation_pvalue` | グローバル置換検定 p 値 |
+| `shadow_pair_num_significant_fdr` | BH-FDR 有意クラス数（主指標） |
+
+クラス別の詳細数値・`n_pairs`・`top_class_cohens_d`・Bonferroni 有意クラス一覧は `summary.json` のみ（metrics には載せない）。
+
 ### LF_Mult_MIA / LF_Mult_Diff_MIA（`lf_mult_mia.py` / `lf_mult_diff_mia.py`）
 
 `LF_MIA` を継承し、Phase 2 / 3 はそのまま再利用する。Phase 4 のみ以下に置き換える。
@@ -576,8 +650,9 @@ flowchart LR
    - `attack_scores_vars`: K 個の標本分散（K=1 のときは 0.0）
    - `attack_all_scores`: K 個の全値（13 × K の二重リスト。log-odds 平均など別の集約は事後計算する）
 5. `attack()` 末尾で `_output_target_attack_sign_analysis` を呼び、`target_attacksign_output/` を出力する（`LF_MIA` と同一。`get_attack_watermark_dataloader` 使用）。
+6. 続けて `_run_shadow_pair_effect_analysis` を呼ぶ。`LF_Mult_MIA` は `_collect_shadow_pair_features` をオーバーライドし、K 枚特徴のクラス次元平均をペア 1 体あたり 1 ベクトルとして `shadow_pair_effect/` に出力する（上記「シャドー IN/OUT ペア効果量解析」）。`LF_Mult_Diff_MIA` は `_extract_features` の差分特徴をそのまま継承する。
 
-同じ K 枚が IN / OUT 両群に現れるため画像内容はラベルに対して無情報であり、攻撃モデルは透かしが出力に与える差分を学習せざるを得ない。ただし K 本の出力は同一モデル由来で相関するため、有効標本数は K 倍にはならない（シャドー数が実質的なボトルネック）。
+同じ K 枚が IN / OUT 両群に現れるため画像内容はラベルに対して無情報であり、攻撃モデルは透かしが出力に与える差分を学習せざるを得ない。ただし K 本の出力は同一モデル由来で相関するため、有効標本数は K 倍にはならない（シャドー数が実質的なボトルネック）。シャドー IN/OUT ペア効果量解析も同様に統計単位は `n_pairs` であり、K 枚平均による要約のみ行う。
 
 追加ハイパーパラメータ（`LfMultMia` / `LfMultDiffMia` 共通）:
 
@@ -663,7 +738,7 @@ flowchart LR
 `build_other_metrics(metrics)` が残りのキーを自動収集する。例:
 
 - LiRA / Shokri: `tpr_at_001_fpr`, `threshold_at_001_fpr`, `shadow_train_accs` 等
-- LF_MIA: `attack_score`（13 要素リスト）, `attack_fraction`（13 要素リスト）, `target_*`, `shadow_*`, `w1_relative_change`, `attack_model_train_acc` / `attack_model_train_loss` / `attack_model_train_in_acc` / `attack_model_train_out_acc` 等
+- LF_MIA: `attack_score`（13 要素リスト）, `attack_fraction`（13 要素リスト）, `target_*`, `shadow_*`, `w1_relative_change`, `attack_model_train_acc` / `attack_model_train_loss` / `attack_model_train_in_acc` / `attack_model_train_out_acc`, `shadow_pair_global_permutation_pvalue`, `shadow_pair_num_significant_fdr` 等
 - LF_Mult_MIA / LF_Mult_Diff_MIA: 上記に加え `attack_scores_vars`（13 要素リスト）, `attack_all_scores`（13 × K の二重リスト）, `attack_num_images`
 
 `_json_safe_metric_value` で numpy スカラー・配列を JSON 直列化可能な型に変換してから送る。トップレベル取得には `metrics.get(...)` を使用し、LF_MIA のように一部キーが `None` でも KeyError にならない。
@@ -705,6 +780,8 @@ LF_MIA 系で参照する主な定数（抜粋）:
 | ---- | -- | ---- |
 | `ATTACK_MODEL_ANALYSIS_DIR` | `analyze_attack_model` | 攻撃モデル解析 PNG / `summary.json` の出力先 |
 | `TARGET_ATTACKSIGN_OUTPUT_DIR` | `target_attacksign_output` | ターゲット透かし確率棒グラフ / `summary.json` の出力先 |
+| `SHADOW_PAIR_EFFECT_DIR` | `shadow_pair_effect` | シャドー IN/OUT ペア効果量解析 PNG / `summary.json` の出力先 |
+| `SHADOW_PAIR_N_PERMUTATIONS` | `9999` | グローバル置換検定の反復回数 |
 | `ATTACK_MODEL_INIT_NAME` | `attack_model_init.pth` | 攻撃モデル初期重み（差分解析のベースライン） |
 | `NUM_CLASSES` | `100` | CIFAR-100 クラス数（`AttackNet` 入力次元） |
 
@@ -746,6 +823,7 @@ attacks/
 ├── mia_shokri.py
 ├── attack_model_analysis.py
 ├── target_attack_sign_output.py
+├── shadow_pair_effect_analysis.py
 ├── lf_mia.py
 ├── lf_mult_mia.py
 └── lf_mult_diff_mia.py

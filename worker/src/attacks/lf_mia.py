@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Callable
 
+import numpy as np
 import torch
 import torch.nn as nn
 from tqdm import trange
@@ -15,6 +16,7 @@ from src.attacks.attack_model_analysis import analyze_attack_model
 from src.attacks.mia_lira_common import (
 	logit_scaling,
 )
+from src.attacks.shadow_pair_effect_analysis import analyze_shadow_pair_effects
 from src.attacks.target_attack_sign_output import (
 	TargetAttackSignEntry,
 	analyze_target_attack_sign_output,
@@ -291,6 +293,42 @@ class LF_MIA(MIA_Attack):
 		self.logger.info(f"Target attack sign output saved -> {output_dir}")
 		self.logger.info(f"Target attack sign summary -> {summary_path}")
 
+	def _probe_shadow_feature(self, model: nn.Module, loader: DataLoader) -> np.ndarray:
+		"""1 シャドー → (NUM_CLASSES,) logit 特徴。attack 本体とは独立。"""
+		preds, _ = MIA_Attack.get_predictions(model, loader)
+		return logit_scaling(preds).squeeze(0).detach().cpu().numpy()
+
+	def _collect_shadow_pair_features(
+		self, shadow_models: list[nn.Module]
+	) -> tuple[np.ndarray, np.ndarray]:
+		"""IN/OUT シャドーペアのプローブ特徴 (n_pairs, NUM_CLASSES) を返す。"""
+		loader = self.dataset.get_attack_watermark_dataloader()
+		num_in = int(self.settings.num_shadow_models / 2)
+		in_feats, out_feats = [], []
+		for i in range(num_in):
+			in_feats.append(self._probe_shadow_feature(shadow_models[i], loader))
+			out_feats.append(
+				self._probe_shadow_feature(shadow_models[i + num_in], loader)
+			)
+		return np.stack(in_feats), np.stack(out_feats)
+
+	def _run_shadow_pair_effect_analysis(self, shadow_models: list[nn.Module]) -> None:
+		"""シャドー IN/OUT ペアのクラス別装飾効果量解析を実行する。"""
+		in_features, out_features = self._collect_shadow_pair_features(shadow_models)
+		output_dir = os.path.join(self.MODEL_SAVE_DIR, cfg.SHADOW_PAIR_EFFECT_DIR)
+		result = analyze_shadow_pair_effects(
+			in_features,
+			out_features,
+			output_dir,
+			random_state=int(self.settings.seed),
+		)
+		self.logger.info(f"Shadow pair effect analysis saved -> {output_dir}")
+		self.logger.info(f"Shadow pair effect summary -> {result.summary_path}")
+		self.metrics.update({
+			"shadow_pair_global_permutation_pvalue": result.global_permutation_pvalue,
+			"shadow_pair_num_significant_fdr": result.num_significant_fdr,
+		})
+
 	# LF_MIA Attack
 	def attack(
 		self, shadow_models: list[nn.Module], target_model: list[nn.Module]
@@ -346,6 +384,9 @@ class LF_MIA(MIA_Attack):
 
 		# ターゲットモデルへの攻撃透かし入力結果の可視化
 		self._output_target_attack_sign_analysis(target_model)
+
+		# シャドー IN/OUT ペアのクラス別装飾効果量解析（既存攻撃結果には影響しない）
+		self._run_shadow_pair_effect_analysis(shadow_models)
 
 		return attack_scores, attack_fractions
 
