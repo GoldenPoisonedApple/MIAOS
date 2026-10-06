@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.1](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.7.0...v0.7.1) (2026-10-06)
+
+
+### Features
+
+* shadowが統計的な信号が出ているか検出処理 ([89a0216](https://github.com/GoldenPoisonedApple/MIAOS/commit/89a02163bcedf738d961e6722177a6767d3107f9))
+* 予期しない場合エラー終了するように ([fee11b7](https://github.com/GoldenPoisonedApple/MIAOS/commit/fee11b7f9de5ef57e11e2d90ec99913a018cca4d))
+* 透かしのターゲットへの反応度の出力 ([61c29b1](https://github.com/GoldenPoisonedApple/MIAOS/commit/61c29b162ecf99d1415395a37e4a1e921dad341b))
+
 ## [0.7.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.6.3...v0.7.0) (2026-10-03)
 
 
