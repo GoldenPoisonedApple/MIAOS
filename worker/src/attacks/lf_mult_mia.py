@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -51,6 +52,25 @@ class LF_Mult_MIA(LF_MIA):
 		# logit 変換: 確率のまま学習するより変化が大きく、差分版では log 空間での引き算が意味を持つ
 		return logit_scaling(preds).float()
 
+	def _collect_shadow_pair_features(
+		self, shadow_models: list[nn.Module]
+	) -> tuple[np.ndarray, np.ndarray]:
+		"""IN/OUT シャドーペアのプローブ特徴 (n_pairs, NUM_CLASSES) を返す（K 枚平均）。"""
+		num_images = self._num_images()
+		decorated_loader, plain_loader = self.dataset.get_attack_composite_dataloaders(
+			num_images
+		)
+		num_in = int(self.settings.num_shadow_models / 2)
+		in_feats, out_feats = [], []
+		for i in range(num_in):
+			in_k = self._extract_features(shadow_models[i], decorated_loader, plain_loader)
+			out_k = self._extract_features(
+				shadow_models[i + num_in], decorated_loader, plain_loader
+			)
+			in_feats.append(in_k.mean(dim=0).detach().cpu().numpy())
+			out_feats.append(out_k.mean(dim=0).detach().cpu().numpy())
+		return np.stack(in_feats), np.stack(out_feats)
+
 	# LF_Mult_MIA Attack
 	def attack(
 		self, shadow_models: list[nn.Module], target_model: list[nn.Module]
@@ -101,7 +121,7 @@ class LF_Mult_MIA(LF_MIA):
 		attack_all_scores: list[list[float]] = []  # K 枚それぞれの IN 確率（ターゲットごと）
 		attack_fractions: list[float] = []
 		attack_model.eval()
-		for fraction, single_target_model in zip(LF_MIA_TARGET_FRACTIONS, target_model):
+		for fraction, single_target_model in zip(LF_MIA_TARGET_FRACTIONS, target_model, strict=True):
 			# ターゲットモデルの特徴量（学習時と同じ前処理）
 			target_feats = self._extract_features(
 				single_target_model, decorated_loader, plain_loader
@@ -131,6 +151,12 @@ class LF_Mult_MIA(LF_MIA):
 			"attack_scores_vars": attack_scores_vars,
 			"attack_all_scores": attack_all_scores,
 		})
+
+		# ターゲットモデルへの攻撃透かし入力結果の可視化
+		self._output_target_attack_sign_analysis(target_model)
+
+		# シャドー IN/OUT ペアのクラス別装飾効果量解析
+		self._run_shadow_pair_effect_analysis(shadow_models)
 
 		return attack_scores, attack_fractions
 

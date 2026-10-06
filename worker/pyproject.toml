@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 
 dependencies = [
   "numpy",
+  "scipy",
   "scikit-learn",
   "matplotlib",
   "tqdm",
@@ -22,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "jupyterlab",
+  "pytest",
   "ruff",
   "openapi-python-client"
 ]

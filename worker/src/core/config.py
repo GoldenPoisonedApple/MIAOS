@@ -33,6 +33,12 @@ ATTACK_MODEL_NAME: str = "attack_models.pth"
 ATTACK_MODEL_INIT_NAME: str = "attack_model_init.pth"
 # 攻撃モデル解析結果の出力ディレクトリ名
 ATTACK_MODEL_ANALYSIS_DIR: str = "analyze_attack_model"
+# ターゲットモデルへの攻撃透かし入力時のクラス別確率出力の保存ディレクトリ名
+TARGET_ATTACKSIGN_OUTPUT_DIR: str = "target_attacksign_output"
+# シャドー IN/OUT ペア効果量解析結果の出力ディレクトリ名
+SHADOW_PAIR_EFFECT_DIR: str = "shadow_pair_effect"
+# シャドー IN/OUT ペア効果量解析のグローバル置換検定の反復回数
+SHADOW_PAIR_N_PERMUTATIONS: int = 9999
 
 # クラスの数
 NUM_CLASSES: int = 100
