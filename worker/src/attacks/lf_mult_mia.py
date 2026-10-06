@@ -132,6 +132,9 @@ class LF_Mult_MIA(LF_MIA):
 			"attack_all_scores": attack_all_scores,
 		})
 
+		# ターゲットモデルへの攻撃透かし入力結果の可視化
+		self._output_target_attack_sign_analysis(target_model)
+
 		return attack_scores, attack_fractions
 
 	# K 枚分の IN 確率を集約

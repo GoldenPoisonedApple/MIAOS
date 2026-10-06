@@ -15,6 +15,10 @@ from src.attacks.attack_model_analysis import analyze_attack_model
 from src.attacks.mia_lira_common import (
 	logit_scaling,
 )
+from src.attacks.target_attack_sign_output import (
+	TargetAttackSignEntry,
+	analyze_target_attack_sign_output,
+)
 from src.data.dataset import dataset
 from src.data.decorations.config import with_fraction
 from src.server_client.models import CreateExperimentRequest
@@ -259,6 +263,34 @@ class LF_MIA(MIA_Attack):
 
 		return attack_model
 
+	# ターゲットモデルへの攻撃透かし入力結果を可視化・保存
+	def _output_target_attack_sign_analysis(
+		self,
+		target_models: list[nn.Module],
+	) -> None:
+		# 攻撃用透かし画像のデータローダー取得（黒背景に合成済みの1枚）
+		attack_watermark_loader = self.dataset.get_attack_watermark_dataloader()
+
+		entries: list[TargetAttackSignEntry] = []
+		for fraction, model in zip(LF_MIA_TARGET_FRACTIONS, target_models):
+			preds, _ = MIA_Attack.get_predictions(model, attack_watermark_loader)
+			probs = preds.squeeze(0).detach().cpu().numpy()
+			model.to("cpu")  # GPUメモリ節約
+
+			entries.append(
+				TargetAttackSignEntry(
+					fraction=fraction,
+					probs=probs,
+				)
+			)
+
+		output_dir = os.path.join(
+			self.MODEL_SAVE_DIR, cfg.TARGET_ATTACKSIGN_OUTPUT_DIR
+		)
+		summary_path = analyze_target_attack_sign_output(entries, output_dir)
+		self.logger.info(f"Target attack sign output saved -> {output_dir}")
+		self.logger.info(f"Target attack sign summary -> {summary_path}")
+
 	# LF_MIA Attack
 	def attack(
 		self, shadow_models: list[nn.Module], target_model: list[nn.Module]
@@ -311,6 +343,9 @@ class LF_MIA(MIA_Attack):
 
 			attack_scores.append(score)
 			attack_fractions.append(fraction)
+
+		# ターゲットモデルへの攻撃透かし入力結果の可視化
+		self._output_target_attack_sign_analysis(target_model)
 
 		return attack_scores, attack_fractions
 

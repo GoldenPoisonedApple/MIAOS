@@ -33,6 +33,8 @@ ATTACK_MODEL_NAME: str = "attack_models.pth"
 ATTACK_MODEL_INIT_NAME: str = "attack_model_init.pth"
 # 攻撃モデル解析結果の出力ディレクトリ名
 ATTACK_MODEL_ANALYSIS_DIR: str = "analyze_attack_model"
+# ターゲットモデルへの攻撃透かし入力時のクラス別確率出力の保存ディレクトリ名
+TARGET_ATTACKSIGN_OUTPUT_DIR: str = "target_attacksign_output"
 
 # クラスの数
 NUM_CLASSES: int = 100

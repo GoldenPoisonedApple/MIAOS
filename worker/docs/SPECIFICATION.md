@@ -134,7 +134,7 @@ target_model = mia_class.train_target_model(lambda: TargetCNN())
 | 手法            | `attack()` 第2引数 `target_model` | `attack()` 戻り値                         | Phase 5 の主な成果物                                      |
 | ------------- | ------------------------------- | -------------------------------------- | --------------------------------------------------- |
 | LiRA / Shokri | `nn.Module`（単一）                 | `(np.ndarray, np.ndarray)` スコア配列・真値ラベル | `roc_curve.png`、`global_auc`、TPR@FPR 等               |
-| LF_MIA        | `list[nn.Module]`（13 体）          | `(list[float], list[float])` スコア・装飾適用率（各 13 要素） | `attack_score` / `attack_fraction`（ROC は描画しない）      |
+| LF_MIA        | `list[nn.Module]`（13 体）          | `(list[float], list[float])` スコア・装飾適用率（各 13 要素） | `attack_score` / `attack_fraction`（ROC は描画しない）。Phase 4 中に `analyze_attack_model/`（攻撃モデル解析）と `target_attacksign_output/`（ターゲット透かし出力）を出力 |
 | LF_Mult_MIA / LF_Mult_Diff_MIA | 同上 | 同上（`attack_score` は K 枚の IN 確率の平均） | 上記に加え `attack_scores_vars`（13 要素）/ `attack_all_scores`（13 × K）/ `attack_num_images` |
 
 
@@ -435,6 +435,7 @@ classDiagram
     class LF_MIA {
         IN/OUT シャドー
         透かし1枚 + AttackNet
+        _output_target_attack_sign_analysis
     }
     MIA_Attack <|-- MIA_OfflineLiRA
     MIA_Attack <|-- MIA_OnlineLiRA
@@ -497,23 +498,30 @@ flowchart LR
     subgraph feat ["Phase 4: 特徴・攻撃"]
         PRED["各シャドーの softmax → logit_scaling"]
         ATK["AttackNet 学習 1回<br/>IN=1 / OUT=0"]
+        ANA["analyze_attack_model<br/>analyze_attack_model/"]
         TGT["13 体のターゲット推論 → attack_score[]"]
+        VIS["target_attacksign_output/<br/>13 枚のクラス別確率棒グラフ"]
     end
 
     IN --> PRED
     OUT --> PRED
     WM --> PRED
     PRED --> ATK
+    ATK --> ANA
     M1 --> TGT
     M13 --> TGT
     WM --> TGT
     ATK --> TGT
+    M1 --> VIS
+    M13 --> VIS
+    WM --> VIS
 ```
 
 1. IN / OUT シャドーそれぞれが `attack_watermark_loader` 上で `(1, NUM_CLASSES)` の softmax 出力を出す。
-2. 全クラスに `logit_scaling` を適用し、シャドー 1 体あたり 1 サンプルとして `AttackNet`（`input_dim=NUM_CLASSES`）を **1 回** 訓練。
+2. 全クラスに `logit_scaling` を適用し、シャドー 1 体あたり 1 サンプルとして `AttackNet`（`input_dim=NUM_CLASSES`）を **1 回** 訓練。訓練直後に `analyze_attack_model` で攻撃モデルの重み・入力感度を `analyze_attack_model/` に出力する。
 3. 13 体のターゲットモデルそれぞれに同じ透かしを入力し、攻撃モデルでメンバー確率 `attack_score`（`softmax[:, 1]`）を得る。結果は長さ 13 のリスト。
 4. `attack_fraction` は `LF_MIA_TARGET_FRACTIONS` の対応値（装飾適用率。MIA の真値ラベルではない）。
+5. 攻撃ループ後、13 体のターゲットそれぞれに `get_attack_watermark_dataloader` の透かし 1 枚を再入力し、softmax 確率を `target_attacksign_output/` に棒グラフ（13 枚）+ `summary.json` として保存する（下記「ターゲット攻撃透かし出力の可視化」）。LF_MIA 系全手法で同一。
 
 ハイパーパラメータ（`hyperparameters`、省略時は `config.py` のデフォルト）:
 
@@ -524,13 +532,35 @@ flowchart LR
 
 保存物:
 
-| ファイル | 内容 |
+| ファイル / ディレクトリ | 内容 |
 | -------- | ---- |
 | `target_model.pth` | LF_MIA: `list[state_dict]`（13 体）。他手法: 単一 `state_dict` |
 | `shadow_models.pth` | 全シャドーの `list[state_dict]` |
 | `attack_models.pth` | 攻撃モデル 1 体の `state_dict` |
+| `attack_model_init.pth` | 攻撃モデル訓練前の初期重み（`analyze_attack_model` の差分ベースライン） |
+| `analyze_attack_model/` | 攻撃モデル解析結果（重みヒートマップ・クラス重要度・入力感度等の PNG + `summary.json`） |
+| `target_attacksign_output/` | ターゲットモデルへの攻撃透かし入力時のクラス別確率棒グラフ（13 枚）+ `summary.json` |
 
-`comprehensive_evaluate` は ROC を描画せず、`global_auc` / TPR@FPR 系を `None` で埋めたうえで `attack_score` / `attack_fraction`（各 13 要素のリスト）を `metrics` に追加する。加えて `target_train_accs` / `target_test_accs` / `target_acc_gaps` を格納する。
+`comprehensive_evaluate` は ROC を描画せず、`global_auc` / TPR@FPR 系を `None` で埋めたうえで `attack_score` / `attack_fraction`（各 13 要素のリスト）を `metrics` に追加する。加えて `target_train_accs` / `target_test_accs` / `target_acc_gaps`、攻撃モデル解析由来の `w1_relative_change` / `attack_model_train_acc` / `attack_model_train_loss` / `attack_model_train_in_acc` / `attack_model_train_out_acc` を格納する。
+
+#### 攻撃モデル解析（`attack_model_analysis.py`）
+
+`_train_attack_model` 内で `AttackNet` 訓練後に `analyze_attack_model` を呼び出す。出力先は `MODEL_SAVE_DIR/analyze_attack_model/`（`config.ATTACK_MODEL_ANALYSIS_DIR`）。
+
+- 学習済み重みのスナップショット（`weight_heatmap.png`, `class_importance.png` 等）
+- 初期重みとの差分（`delta_*.png`）
+- 学習データ `attack_x` / `attack_y` 上の到達度・入力勾配（`input_gradient_*.png` 等）
+- `summary.json`（重みサマリ・fit 指標・入力感度サマリ）
+
+#### ターゲット攻撃透かし出力の可視化（`target_attack_sign_output.py`）
+
+`LF_MIA._output_target_attack_sign_analysis` が Phase 4 末尾（`attack()` の攻撃スコア計算後）で呼ばれる。LF_MIA 系全手法で同一実装を継承する。出力先は `MODEL_SAVE_DIR/target_attacksign_output/`（`config.TARGET_ATTACKSIGN_OUTPUT_DIR`）。
+
+- 入力: `get_attack_watermark_dataloader` の透かし 1 枚（攻撃特徴抽出とは別経路。Mult 系でも composite loader は使わない）
+- 各ターゲットモデルで `MIA_Attack.get_predictions` → softmax 確率 `(NUM_CLASSES,)`
+- PNG: `class_probabilities_fraction_{fraction}.png`（fraction の `.` を `_` に置換。例: `1.0` → `1_0`）を装飾適用率ごとに 13 枚
+- `summary.json`: 各 fraction の `probs`（100 要素）、`argmax_class`、`top_classes`（上位 10 クラス）
+- 描画スタイルは `attack_model_analysis.plot_class_importance` を再利用（`figsize=(16,5)`, `dpi=300`）
 
 ### LF_Mult_MIA / LF_Mult_Diff_MIA（`lf_mult_mia.py` / `lf_mult_diff_mia.py`）
 
@@ -545,6 +575,7 @@ flowchart LR
    - `attack_score`: K 個の平均（LF_MIA の `attack_score` と同じ確率スケール。比較用）
    - `attack_scores_vars`: K 個の標本分散（K=1 のときは 0.0）
    - `attack_all_scores`: K 個の全値（13 × K の二重リスト。log-odds 平均など別の集約は事後計算する）
+5. `attack()` 末尾で `_output_target_attack_sign_analysis` を呼び、`target_attacksign_output/` を出力する（`LF_MIA` と同一。`get_attack_watermark_dataloader` 使用）。
 
 同じ K 枚が IN / OUT 両群に現れるため画像内容はラベルに対して無情報であり、攻撃モデルは透かしが出力に与える差分を学習せざるを得ない。ただし K 本の出力は同一モデル由来で相関するため、有効標本数は K 倍にはならない（シャドー数が実質的なボトルネック）。
 
@@ -632,7 +663,7 @@ flowchart LR
 `build_other_metrics(metrics)` が残りのキーを自動収集する。例:
 
 - LiRA / Shokri: `tpr_at_001_fpr`, `threshold_at_001_fpr`, `shadow_train_accs` 等
-- LF_MIA: `attack_score`（13 要素リスト）, `attack_fraction`（13 要素リスト）, `target_*`, `shadow_*` 等
+- LF_MIA: `attack_score`（13 要素リスト）, `attack_fraction`（13 要素リスト）, `target_*`, `shadow_*`, `w1_relative_change`, `attack_model_train_acc` / `attack_model_train_loss` / `attack_model_train_in_acc` / `attack_model_train_out_acc` 等
 - LF_Mult_MIA / LF_Mult_Diff_MIA: 上記に加え `attack_scores_vars`（13 要素リスト）, `attack_all_scores`（13 × K の二重リスト）, `attack_num_images`
 
 `_json_safe_metric_value` で numpy スカラー・配列を JSON 直列化可能な型に変換してから送る。トップレベル取得には `metrics.get(...)` を使用し、LF_MIA のように一部キーが `None` でも KeyError にならない。
@@ -667,6 +698,15 @@ flowchart LR
 
 
 `core/config.py` 参照。`DEVICE` は CUDA 利用可能なら GPU。
+
+LF_MIA 系で参照する主な定数（抜粋）:
+
+| 定数 | 値 | 用途 |
+| ---- | -- | ---- |
+| `ATTACK_MODEL_ANALYSIS_DIR` | `analyze_attack_model` | 攻撃モデル解析 PNG / `summary.json` の出力先 |
+| `TARGET_ATTACKSIGN_OUTPUT_DIR` | `target_attacksign_output` | ターゲット透かし確率棒グラフ / `summary.json` の出力先 |
+| `ATTACK_MODEL_INIT_NAME` | `attack_model_init.pth` | 攻撃モデル初期重み（差分解析のベースライン） |
+| `NUM_CLASSES` | `100` | CIFAR-100 クラス数（`AttackNet` 入力次元） |
 
 ---
 
@@ -704,6 +744,8 @@ attacks/
 ├── mia_offline_lira.py
 ├── mia_online_lira.py
 ├── mia_shokri.py
+├── attack_model_analysis.py
+├── target_attack_sign_output.py
 ├── lf_mia.py
 ├── lf_mult_mia.py
 └── lf_mult_diff_mia.py
