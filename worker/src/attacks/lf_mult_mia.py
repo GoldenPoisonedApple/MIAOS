@@ -121,7 +121,7 @@ class LF_Mult_MIA(LF_MIA):
 		attack_all_scores: list[list[float]] = []  # K 枚それぞれの IN 確率（ターゲットごと）
 		attack_fractions: list[float] = []
 		attack_model.eval()
-		for fraction, single_target_model in zip(LF_MIA_TARGET_FRACTIONS, target_model):
+		for fraction, single_target_model in zip(LF_MIA_TARGET_FRACTIONS, target_model, strict=True):
 			# ターゲットモデルの特徴量（学習時と同じ前処理）
 			target_feats = self._extract_features(
 				single_target_model, decorated_loader, plain_loader

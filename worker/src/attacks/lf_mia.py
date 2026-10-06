@@ -274,7 +274,7 @@ class LF_MIA(MIA_Attack):
 		attack_watermark_loader = self.dataset.get_attack_watermark_dataloader()
 
 		entries: list[TargetAttackSignEntry] = []
-		for fraction, model in zip(LF_MIA_TARGET_FRACTIONS, target_models):
+		for fraction, model in zip(LF_MIA_TARGET_FRACTIONS, target_models, strict=True):
 			preds, _ = MIA_Attack.get_predictions(model, attack_watermark_loader)
 			probs = preds.squeeze(0).detach().cpu().numpy()
 			model.to("cpu")  # GPUメモリ節約
@@ -365,7 +365,7 @@ class LF_MIA(MIA_Attack):
 		# ------------- 攻撃 -------------
 		attack_scores: list[float] = []
 		attack_fractions: list[float] = []
-		for fraction, single_target_model in zip(LF_MIA_TARGET_FRACTIONS, target_model):
+		for fraction, single_target_model in zip(LF_MIA_TARGET_FRACTIONS, target_model, strict=True):
 			# ターゲットモデルの予測結果
 			target_preds, _ = MIA_Attack.get_predictions(
 				single_target_model, attack_watermark_loader
