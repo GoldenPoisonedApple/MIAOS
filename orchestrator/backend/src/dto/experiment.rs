@@ -1,11 +1,42 @@
 use sea_orm::Set;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::config::default::*;
 use crate::dto::watermark::WatermarkConfig;
-use crate::entities::experiment::{ActiveModel, ExperimentStatus, MiaMethod};
+use crate::entities::experiment::{ActiveModel, ExperimentStatus, MiaMethod, Model};
+
+/// 実験一覧のページングレスポンス
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ExperimentPageResponse {
+  /// 当該ページの実験
+  pub items: Vec<Model>,
+  /// 全件数
+  pub total: i64,
+  /// 返却したページ番号（1始まり）
+  pub page: i32,
+  /// 返却した limit（実質 100）
+  pub limit: i32,
+}
+
+/// 実験一覧 GET のクエリパラメータ（page=0 は最終ページ）
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct ListExperimentsQuery {
+  /// 1 始まりのページ番号。0 は最終ページ
+  #[param(default = 1, example = 1)]
+  pub page: Option<i32>,
+  /// 1 ページあたり件数（最大 100）
+  #[param(default = 100, maximum = 100)]
+  pub limit: Option<i32>,
+}
+
+impl ListExperimentsQuery {
+  /// クエリ未指定時の既定値を適用してサービス層へ渡す
+  pub fn into_page_and_limit(self) -> (i32, i32) {
+    (self.page.unwrap_or(1), self.limit.unwrap_or(100))
+  }
+}
 
 /// 実験の作成リクエスト
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]

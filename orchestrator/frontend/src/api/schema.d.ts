@@ -265,6 +265,26 @@ export interface components {
             /** @default null */
             watermark: null | components["schemas"]["WatermarkConfig"];
         };
+        /** @description 実験一覧のページングレスポンス */
+        ExperimentPageResponse: {
+            /** @description 当該ページの実験 */
+            items: components["schemas"]["Model"][];
+            /**
+             * Format: int32
+             * @description 返却した limit（実質 100）
+             */
+            limit: number;
+            /**
+             * Format: int32
+             * @description 返却したページ番号（1始まり）
+             */
+            page: number;
+            /**
+             * Format: int64
+             * @description 全件数
+             */
+            total: number;
+        };
         /** @enum {string} */
         ExperimentStatus: "Waiting" | "Running" | "Succeeded" | "Failed";
         /** @description フィルタ一覧レスポンス */
@@ -491,7 +511,15 @@ export type $defs = Record<string, never>;
 export interface operations {
     get_all_experiments: {
         parameters: {
-            query?: never;
+            query?: {
+                /**
+                 * @description 1 始まりのページ番号。0 は最終ページ
+                 * @example 1
+                 */
+                page?: number | null;
+                /** @description 1 ページあたり件数（最大 100） */
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -504,8 +532,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Model"][];
+                    "application/json": components["schemas"]["ExperimentPageResponse"];
                 };
+            };
+            /** @description 不正なクエリ */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description サーバー内部エラー */
             500: {

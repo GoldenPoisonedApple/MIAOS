@@ -21,6 +21,18 @@
   gap: 12px;
 }
 
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.paginationStatus {
+  font-size: 14px;
+  color: var(--text-muted, #555);
+}
+
 .fileCell {
   display: inline-flex;
   align-items: flex-start;

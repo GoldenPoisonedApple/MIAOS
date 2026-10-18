@@ -17,19 +17,51 @@
         ],
         "summary": "実験の一覧取得",
         "operationId": "get_all_experiments",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1 始まりのページ番号。0 は最終ページ",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "default": 1
+            },
+            "example": 1
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1 ページあたり件数（最大 100）",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "default": 100,
+              "maximum": 100
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "実験の一覧を取得",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Model"
-                  }
+                  "$ref": "#/components/schemas/ExperimentPageResponse"
                 }
               }
             }
+          },
+          "400": {
+            "description": "不正なクエリ"
           },
           "500": {
             "description": "サーバー内部エラー"
@@ -561,6 +593,40 @@
               }
             ],
             "default": null
+          }
+        }
+      },
+      "ExperimentPageResponse": {
+        "type": "object",
+        "description": "実験一覧のページングレスポンス",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "limit"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Model"
+            },
+            "description": "当該ページの実験"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "返却した limit（実質 100）"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "description": "返却したページ番号（1始まり）"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "全件数"
           }
         }
       },

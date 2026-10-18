@@ -49,19 +49,19 @@
 
 `renderCell` を指定した辞書はセル表示を上書きし、`meta: { align: "left" }` を付与して配置を固定します（例: 実験一覧の `files` 列で PNG インライン表示・リンク）。
 
-各動的列には `sortingFn` が付与され、値は文字列化（オブジェクトは `JSON.stringify`）したうえで `localeCompare`（`numeric: true`）により比較されます。`renderCell` 未指定の動的列は、列の生値がすべて数値のとき `DataTable` 側で右寄せになります。
+`renderCell` 未指定の動的列は、列の生値がすべて数値のとき `DataTable` 側で右寄せになります。
 
 ### 1.5 `useTablePreferences`
-`DataTable` の UI 設定（表示カラム・列順・ソート）を管理し、任意で `localStorage` に永続化するフック。
+`DataTable` の UI 設定（表示カラム・列順）を管理し、任意で `localStorage` に永続化するフック。
 
 - **引数:**
   - `storageKey`: 永続化キーの識別子（例: `"experiments"`, `"tasks"`）。未指定時はメモリ内のみ
   - `defaults`: ストレージ未ヒット時および新規カラム追加時のフォールバック
-    - `columnVisibility`, `columnOrder`, `sorting`
+    - `columnVisibility`, `columnOrder`
   - `columnIds`: 現在のカラム ID 一覧（動的カラムの増減検知用）
 - **戻り値:**
-  - `columnVisibility`, `columnOrder`, `sorting`: マージ済みの表示用状態
-  - `onColumnVisibilityChange`, `onColumnOrderChange`, `onSortingChange`: TanStack Table 用の更新ハンドラ
+  - `columnVisibility`, `columnOrder`: マージ済みの表示用状態
+  - `onColumnVisibilityChange`, `onColumnOrderChange`: TanStack Table 用の更新ハンドラ
 - **永続化:** `tablePreferences.ts` の純粋関数が `localStorage` に JSON 保存。パース失敗時は `defaults` にフォールバック
 
 ---
@@ -75,17 +75,15 @@
   - 行の複数選択機能 (チェックボックス)
   - カラムの表示・非表示の切り替え (`ColumnVisibilityMenu` を内包)
   - カラムヘッダーのドラッグ＆ドロップによる並び替え (`@dnd-kit` 統合)
-  - 列ソート: `getSortedRowModel` によりソート済み行を表示。チェック列以外のヘッダーに **昇順（▲）・降順（▼）** ボタンがあり、クリックした列のみが `SortingState` に反映される（タスクマネージャ風の単一キーソート）。
   - 列の配置: `resolveColumnAlign` により `th` / `td` の `text-align` を決定。数値列は右寄せ、選択列は中央、それ以外は左寄せ（詳細は `columnAlign.ts`）。
-  - 設定の永続化: `storageKey` 指定時、表示カラム・列順・ソートを `localStorage` に自動保存・復元（`useTablePreferences` 経由）
+  - 設定の永続化: `storageKey` 指定時、表示カラム・列順を `localStorage` に自動保存・復元（`useTablePreferences` 経由）
 - **Props:**
   - `columns`: テーブルのカラム定義 (`ColumnDef[]`)
   - `data`: 表示するデータ配列
   - `rowSelection`: 現在の行選択ステート
   - `onRowSelectionChange`: 行選択ステートの更新関数
   - `initialColumnVisibility`: ストレージ未ヒット時・新規動的カラムのフォールバック表示状態
-  - `initialSorting` (任意): ストレージ未ヒット時のフォールバック `SortingState`（例: 実験一覧は `id` 昇順）
-  - `getRowId` (任意): 行の安定 ID（データ上の主キー文字列）。ソート後も `rowSelection` のキーが行インデックスに依存しないようにするために指定する（実験は `String(id)`、タスクは UUID の `id`）
+  - `getRowId` (任意): 行の安定 ID（データ上の主キー文字列）。`rowSelection` のキーが行インデックスに依存しないようにするために指定する（実験は `String(id)`、タスクは UUID の `id`）
   - `storageKey` (任意): 永続化用識別子。例: `"experiments"`, `"tasks"`。未指定時はリロードで設定がリセットされる
 
 ### 2.2 `KeyValueEditor`
@@ -111,13 +109,14 @@
 実験データの一覧を表示するページコンポーネント。
 
 - **構成:**
-  - `useExperiments` でデータを取得。
-  - `useDynamicColumns` を用いて、`hyperparameters`, `other_metrics`, `files` を動的カラムとして展開。
-  - `DataTable` に `storageKey="experiments"` を渡し、表示カラム・列順・ソートをブラウザに永続化。
-  - `DataTable` に `initialSorting={[{ id: "id", desc: false }]}`（**ID 昇順**）と `getRowId={(row) => String(row.id)}` を渡す。行選択のキーは実験 ID 文字列であり、列ソート後も一括削除が正しい ID に紐づく。
+  - `useExperiments` でページ単位のデータを取得（サーバー側ページング。仕様は `docs/paging.md`）。
+  - `useDynamicColumns` を用いて、`hyperparameters`, `other_metrics`, `files` を動的カラムとして展開（当該ページの `items` のみ）。
+  - `DataTable` に `storageKey="experiments"` を渡し、表示カラム・列順をブラウザに永続化。
+  - `DataTable` に `getRowId={(row) => String(row.id)}` を渡す。行選択のキーは実験 ID 文字列。
+  - 前へ / 次へとページ番号表示でページ移動。初回入場は最終ページ（`page=0`）、`sessionStorage` に保存済みページがあればそれを優先。
   - `files` 列: セル値は MinIO オブジェクトキー（例: `results/42/roc_curve.png`）。`isPngObjectKey` で PNG と判定し、PNG は高さ 160px の `<img>` をセル内表示し、画像クリック（`<a target="_blank">`）で別タブを開く。非 PNG はファイル名リンク（`fileApiPath`、`target="_blank"`）のみ。
-  - 一部静的列は表示用に変換（例: AUC・TPR を `%` 表示、`total_time` を分単位、真偽値フラグを `○`）。ソート・配置推論は `accessorKey` の生値（数値）に基づくため、数値列は右寄せとなる。
-  - `DataTable` に静的カラム（ID, 名前, ステータス等）と動的カラムを結合して表示。選択列は `enableSorting: false`。`id` 列は `sortingFn: "basic"` で数値ソート。
+  - 一部静的列は表示用に変換（例: AUC・TPR を `%` 表示、`total_time` を分単位、真偽値フラグを `○`）。配置推論は `accessorKey` の生値（数値）に基づくため、数値列は右寄せとなる。
+  - `DataTable` に静的カラム（ID, 名前, ステータス等）と動的カラムを結合して表示。
   - ヘッダー部に「新しい実験を作成」ボタンと、選択項目がある場合のみ「選択した項目を削除」ボタンを表示。フィルタ管理は `/filters` タブで行う（本画面には含めない）。
 
 ### 3.2 `CreateExperimentModal`
@@ -184,7 +183,6 @@ MinIO ファイル取得 API への相対パスを返す。
   - `version`: `1`（将来のマイグレーション用）
   - `columnVisibility`: カラム表示/非表示
   - `columnOrder`: DnD による列順
-  - `sorting`: ソート状態
 - **主要関数:**
   - `loadTablePreferences(storageKey)`: 保存値を読み込み。パース・バリデーション失敗時は `null`
   - `saveTablePreferences(storageKey, prefs)`: JSON 保存（quota 超過等は握りつぶす）
@@ -193,4 +191,4 @@ MinIO ファイル取得 API への相対パスを返す。
 - **マージ方針:**
   - `columnVisibility`: 保存済み ID は保存値を優先。新規 ID は `defaults.columnVisibility` を適用
   - `columnOrder`: 保存順から存在しない ID を除去し、未登録の新規 ID を末尾に追加
-  - `sorting`: ソート対象カラムが存在しなければ `defaults.sorting` にフォールバック
+  - 旧バージョンに含まれる `sorting` フィールドは読み捨て

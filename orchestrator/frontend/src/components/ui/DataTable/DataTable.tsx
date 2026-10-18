@@ -1,14 +1,12 @@
 import {
   flexRender,
   getCoreRowModel,
-  getSortedRowModel,
   useReactTable,
   type ColumnDef,
   type RowSelectionState,
   type VisibilityState,
   type ColumnOrderState,
   type Header,
-  type SortingState,
 } from "@tanstack/react-table";
 import { useMemo } from "react";
 import {
@@ -41,16 +39,13 @@ interface DataTableProps<TData, TValue> {
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: import("@tanstack/react-table").OnChangeFn<RowSelectionState>;
   initialColumnVisibility?: VisibilityState;
-  /** 初期ソート（例: 実験一覧の ID 昇順） */
-  initialSorting?: SortingState;
-  /** 行 ID をデータの識別子に固定（ソート後も選択・削除が正しく動く） */
+  /** 行 ID をデータの識別子に固定（選択・削除が正しく動く） */
   getRowId?: (row: TData) => string;
-  /** 指定時は表示カラム・列順・ソートを localStorage に永続化 */
+  /** 指定時は表示カラム・列順を localStorage に永続化 */
   storageKey?: string;
 }
 
 const EMPTY_COLUMN_VISIBILITY: VisibilityState = {};
-const EMPTY_SORTING: SortingState = [];
 const EMPTY_COLUMN_ORDER: ColumnOrderState = [];
 
 // Draggable Header Cell Component
@@ -82,9 +77,6 @@ function DraggableHeader<TData, TValue>({
     );
   }
 
-  const { table } = header.getContext();
-  const canSort = header.column.getCanSort();
-  const sorted = header.column.getIsSorted();
   const thAlignClass =
     align === "right" ? styles.thRight : align === "center" ? styles.thCenter : undefined;
 
@@ -101,33 +93,9 @@ function DraggableHeader<TData, TValue>({
           ⋮⋮
         </div>
         <div className={styles.headerMain}>
-          <span className={styles.headerTitle}>{flexRender(header.column.columnDef.header, header.getContext())}</span>
-          {canSort && (
-            <span className={styles.sortGroup}>
-              <button
-                type="button"
-                className={sorted === "asc" ? styles.sortBtnActive : styles.sortBtn}
-                aria-label="昇順で並べ替え"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  table.setSorting([{ id: header.column.id, desc: false }]);
-                }}
-              >
-                ▲
-              </button>
-              <button
-                type="button"
-                className={sorted === "desc" ? styles.sortBtnActive : styles.sortBtn}
-                aria-label="降順で並べ替え"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  table.setSorting([{ id: header.column.id, desc: true }]);
-                }}
-              >
-                ▼
-              </button>
-            </span>
-          )}
+          <span className={styles.headerTitle}>
+            {flexRender(header.column.columnDef.header, header.getContext())}
+          </span>
         </div>
       </div>
     </th>
@@ -144,7 +112,6 @@ export function DataTable<TData, TValue>({
   rowSelection,
   onRowSelectionChange,
   initialColumnVisibility = EMPTY_COLUMN_VISIBILITY,
-  initialSorting = EMPTY_SORTING,
   getRowId,
   storageKey,
 }: DataTableProps<TData, TValue>) {
@@ -157,19 +124,12 @@ export function DataTable<TData, TValue>({
     () => ({
       columnVisibility: initialColumnVisibility,
       columnOrder: EMPTY_COLUMN_ORDER,
-      sorting: initialSorting,
     }),
-    [initialColumnVisibility, initialSorting]
+    [initialColumnVisibility]
   );
 
-  const {
-    columnVisibility,
-    columnOrder,
-    sorting,
-    onColumnVisibilityChange,
-    onColumnOrderChange,
-    onSortingChange,
-  } = useTablePreferences(storageKey, preferenceDefaults, columnIds);
+  const { columnVisibility, columnOrder, onColumnVisibilityChange, onColumnOrderChange } =
+    useTablePreferences(storageKey, preferenceDefaults, columnIds);
 
   const table = useReactTable({
     data,
@@ -178,15 +138,12 @@ export function DataTable<TData, TValue>({
       rowSelection,
       columnVisibility,
       columnOrder,
-      sorting,
     },
     enableRowSelection: true,
     onRowSelectionChange,
     onColumnVisibilityChange,
     onColumnOrderChange,
-    onSortingChange,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
     getRowId: getRowId ? (original) => getRowId(original) : undefined,
   });
 

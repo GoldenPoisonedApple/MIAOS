@@ -1,24 +1,83 @@
+import { useCallback, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import type { components } from "../api/schema";
 
 export type CreateExperimentRequest = components["schemas"]["CreateExperimentRequest"];
+export type Experiment = components["schemas"]["Model"];
+export type ExperimentPageResponse = components["schemas"]["ExperimentPageResponse"];
+
+const EXPERIMENTS_LIST_PAGE_KEY = "experimentsListPage";
+const PAGE_LIMIT = 100;
+
+function readStoredPage(): number | null {
+  try {
+    const raw = sessionStorage.getItem(EXPERIMENTS_LIST_PAGE_KEY);
+    if (raw == null) return null;
+    const parsed = parseInt(raw, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredPage(page: number): void {
+  try {
+    sessionStorage.setItem(EXPERIMENTS_LIST_PAGE_KEY, String(page));
+  } catch {
+    // sessionStorage 不可時は握りつぶす
+  }
+}
+
+async function fetchExperimentsPage(page: number): Promise<ExperimentPageResponse> {
+  const { data, error, response } = await apiClient.GET("/api/experiments", {
+    params: { query: { page, limit: PAGE_LIMIT } },
+  });
+  if (error !== undefined) {
+    const serverError = error as { message?: string; detail?: string };
+    const errorMessage =
+      serverError?.message ||
+      serverError?.detail ||
+      `エラー (${response.status} ${response.statusText})`;
+    throw new Error(errorMessage);
+  }
+  if (!data) {
+    throw new Error("実験一覧のレスポンスが空です");
+  }
+  return data;
+}
 
 export const useExperiments = () => {
   const queryClient = useQueryClient();
+  const [page, setPageState] = useState<number | null>(() => readStoredPage());
 
-  const { data: experiments = [], isLoading, error } = useQuery({
-    queryKey: ["experiments"],
-    queryFn: async () => {
-      const { data, error, response } = await apiClient.GET("/api/experiments");
-      if (error !== undefined) {
-        const serverError = error as { message?: string; detail?: string };
-        const errorMessage = serverError?.message || serverError?.detail || `エラー (${response.status} ${response.statusText})`;
-        throw new Error(errorMessage);
-      }
-      return data || [];
-    },
+  const queryPage = page ?? 0;
+
+  const { data, isLoading, error, isFetching } = useQuery({
+    queryKey: ["experiments", queryPage],
+    queryFn: () => fetchExperimentsPage(queryPage),
   });
+
+  const setPage = useCallback((next: number) => {
+    setPageState(next);
+    writeStoredPage(next);
+  }, []);
+
+  const adjustPageAfterMutation = useCallback(async () => {
+    const currentQueryPage = page ?? 0;
+    const fresh = await queryClient.fetchQuery({
+      queryKey: ["experiments", currentQueryPage],
+      queryFn: () => fetchExperimentsPage(currentQueryPage),
+    });
+    if (fresh.items.length === 0 && fresh.total > 0) {
+      const pageMax = Math.max(1, Math.ceil(fresh.total / fresh.limit));
+      const effectivePage = currentQueryPage === 0 ? pageMax : currentQueryPage;
+      setPage(Math.min(effectivePage, pageMax));
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: ["experiments"] });
+  }, [page, queryClient, setPage]);
 
   const createMutation = useMutation({
     mutationFn: async (req: CreateExperimentRequest) => {
@@ -27,7 +86,10 @@ export const useExperiments = () => {
       });
       if (error !== undefined) {
         const serverError = error as { message?: string; detail?: string };
-        const errorMessage = serverError?.message || serverError?.detail || `作成エラー (${response.status} ${response.statusText})`;
+        const errorMessage =
+          serverError?.message ||
+          serverError?.detail ||
+          `作成エラー (${response.status} ${response.statusText})`;
         throw new Error(errorMessage);
       }
       return data;
@@ -50,14 +112,17 @@ export const useExperiments = () => {
           });
           if (error !== undefined) {
             const serverError = error as { message?: string; detail?: string };
-            const errorMessage = serverError?.message || serverError?.detail || `削除エラー (${response.status} ${response.statusText})`;
+            const errorMessage =
+              serverError?.message ||
+              serverError?.detail ||
+              `削除エラー (${response.status} ${response.statusText})`;
             throw new Error(errorMessage);
           }
         })
       );
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["experiments"] });
+    onSuccess: async () => {
+      await adjustPageAfterMutation();
     },
     onError: (err) => {
       console.error(err);
@@ -74,7 +139,10 @@ export const useExperiments = () => {
           });
           if (error !== undefined) {
             const serverError = error as { message?: string; detail?: string };
-            const errorMessage = serverError?.message || serverError?.detail || `再実行エラー (${response.status} ${response.statusText})`;
+            const errorMessage =
+              serverError?.message ||
+              serverError?.detail ||
+              `再実行エラー (${response.status} ${response.statusText})`;
             throw new Error(errorMessage);
           }
         })
@@ -89,17 +157,31 @@ export const useExperiments = () => {
     },
   });
 
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const limit = data?.limit ?? PAGE_LIMIT;
+  const currentPage = page ?? data?.page ?? 1;
+  const pageMax = Math.max(1, Math.ceil(total / limit));
+
   return {
-    experiments,
+    items,
+    total,
+    limit,
+    page: currentPage,
+    pageMax,
+    setPage,
     loading: isLoading,
+    fetching: isFetching,
     error,
     createExperiment: async (req: CreateExperimentRequest) => {
       await createMutation.mutateAsync(req);
     },
     isCreating: createMutation.isPending,
-    deleteExperiments: (ids: number[], options?: Parameters<typeof deleteMutation.mutate>[1]) => deleteMutation.mutate(ids, options),
+    deleteExperiments: (ids: number[], options?: Parameters<typeof deleteMutation.mutate>[1]) =>
+      deleteMutation.mutate(ids, options),
     isDeleting: deleteMutation.isPending,
-    rerunExperiments: (ids: number[], options?: Parameters<typeof rerunMutation.mutate>[1]) => rerunMutation.mutate(ids, options),
+    rerunExperiments: (ids: number[], options?: Parameters<typeof rerunMutation.mutate>[1]) =>
+      rerunMutation.mutate(ids, options),
     isRerunning: rerunMutation.isPending,
     refetch: () => queryClient.invalidateQueries({ queryKey: ["experiments"] }),
   };

@@ -1,9 +1,11 @@
-use axum::{extract::Path, extract::State, Json};
+use axum::{extract::Path, extract::Query, extract::State, Json};
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::dto::experiment::UpdateResultsRequest;
-use crate::dto::experiment::{ClaimExperimentRequest, CreateExperimentRequest};
+use crate::dto::experiment::{
+  ClaimExperimentRequest, CreateExperimentRequest, ExperimentPageResponse, ListExperimentsQuery,
+};
 use crate::entities::experiment::Model;
 use crate::entities::task::Task;
 use crate::error::ServerError;
@@ -76,17 +78,21 @@ pub async fn claim_experiment(
 #[utoipa::path(
 	get,
 	path = "/api/experiments",
+	params(ListExperimentsQuery),
 	responses(
-		(status = 200, description = "実験の一覧を取得", body = [Model]),
+		(status = 200, description = "実験の一覧を取得", body = ExperimentPageResponse),
+		(status = 400, description = "不正なクエリ"),
 		(status = 500, description = "サーバー内部エラー")
 	),
 	tag = "Experiments"
 )]
 pub async fn get_all_experiments(
   State(service): State<Arc<ExperimentService<ExperimentRepository, TaskRepository>>>,
-) -> Result<Json<Vec<Model>>, ServerError> {
-  let experiments = service.get_all_experiments().await?;
-  Ok(Json(experiments))
+  Query(query): Query<ListExperimentsQuery>,
+) -> Result<Json<ExperimentPageResponse>, ServerError> {
+  let (page, limit) = query.into_page_and_limit();
+  let response = service.get_experiments_page(page, limit).await?;
+  Ok(Json(response))
 }
 
 /// 実験の再実行

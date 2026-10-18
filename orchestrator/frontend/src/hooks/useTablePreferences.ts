@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type {
-  ColumnOrderState,
-  OnChangeFn,
-  SortingState,
-  VisibilityState,
-} from "@tanstack/react-table";
+import type { ColumnOrderState, OnChangeFn, VisibilityState } from "@tanstack/react-table";
 import {
   loadTablePreferences,
   mergeTablePreferences,
@@ -16,10 +11,8 @@ import {
 interface UseTablePreferencesResult {
   columnVisibility: VisibilityState;
   columnOrder: ColumnOrderState;
-  sorting: SortingState;
   onColumnVisibilityChange: OnChangeFn<VisibilityState>;
   onColumnOrderChange: OnChangeFn<ColumnOrderState>;
-  onSortingChange: OnChangeFn<SortingState>;
 }
 
 export function useTablePreferences(
@@ -76,26 +69,10 @@ export function useTablePreferences(
     [defaults, columnIds]
   );
 
-  const onSortingChange = useCallback<OnChangeFn<SortingState>>(
-    (updater) => {
-      setStoredPrefs((current) => {
-        const currentMerged = mergeTablePreferences(current, defaults, columnIds);
-        return {
-          ...current,
-          sorting:
-            typeof updater === "function" ? updater(currentMerged.sorting) : updater,
-        };
-      });
-    },
-    [defaults, columnIds]
-  );
-
   return {
     columnVisibility: prefs.columnVisibility,
     columnOrder: prefs.columnOrder,
-    sorting: prefs.sorting,
     onColumnVisibilityChange,
     onColumnOrderChange,
-    onSortingChange,
   };
 }

@@ -1,39 +1,20 @@
-import type {
-  ColumnOrderState,
-  SortingState,
-  VisibilityState,
-} from "@tanstack/react-table";
+import type { ColumnOrderState, VisibilityState } from "@tanstack/react-table";
 
 export interface TablePreferencesV1 {
   version: 1;
   columnVisibility: VisibilityState;
   columnOrder: ColumnOrderState;
-  sorting: SortingState;
 }
 
 export interface TablePreferencesDefaults {
   columnVisibility: VisibilityState;
   columnOrder: ColumnOrderState;
-  sorting: SortingState;
 }
 
 const STORAGE_PREFIX = "app:table-preferences:v1:";
 
 export function buildStorageKey(storageKey: string): string {
   return `${STORAGE_PREFIX}${storageKey}`;
-}
-
-function isSortingState(value: unknown): value is SortingState {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (item) =>
-        item &&
-        typeof item === "object" &&
-        typeof (item as { id?: unknown }).id === "string" &&
-        typeof (item as { desc?: unknown }).desc === "boolean"
-    )
-  );
 }
 
 function isVisibilityState(value: unknown): value is VisibilityState {
@@ -57,8 +38,7 @@ function parseTablePreferences(raw: string): TablePreferencesV1 | null {
       typeof parsed === "object" &&
       (parsed as { version?: unknown }).version === 1 &&
       isVisibilityState((parsed as TablePreferencesV1).columnVisibility) &&
-      isColumnOrderState((parsed as TablePreferencesV1).columnOrder) &&
-      isSortingState((parsed as TablePreferencesV1).sorting)
+      isColumnOrderState((parsed as TablePreferencesV1).columnOrder)
     ) {
       return parsed as TablePreferencesV1;
     }
@@ -110,16 +90,6 @@ function mergeColumnOrder(saved: ColumnOrderState, columnIds: string[]): ColumnO
   return [...filtered, ...appended];
 }
 
-function mergeSorting(
-  saved: SortingState,
-  defaults: SortingState,
-  columnIds: string[]
-): SortingState {
-  const columnIdSet = new Set(columnIds);
-  const valid = saved.filter((s) => columnIdSet.has(s.id));
-  return valid.length > 0 ? valid : defaults;
-}
-
 export function mergeTablePreferences(
   saved: TablePreferencesV1 | null,
   defaults: TablePreferencesDefaults,
@@ -130,7 +100,6 @@ export function mergeTablePreferences(
       version: 1,
       columnVisibility: mergeColumnVisibility({}, defaults.columnVisibility, columnIds),
       columnOrder: mergeColumnOrder(defaults.columnOrder, columnIds),
-      sorting: mergeSorting(defaults.sorting, defaults.sorting, columnIds),
     };
   }
 
@@ -142,11 +111,12 @@ export function mergeTablePreferences(
       columnIds
     ),
     columnOrder: mergeColumnOrder(saved.columnOrder, columnIds),
-    sorting: mergeSorting(saved.sorting, defaults.sorting, columnIds),
   };
 }
 
-export function getColumnId<TData, TValue>(col: import("@tanstack/react-table").ColumnDef<TData, TValue>): string | undefined {
+export function getColumnId<TData, TValue>(
+  col: import("@tanstack/react-table").ColumnDef<TData, TValue>
+): string | undefined {
   if (col.id) return col.id;
   if ("accessorKey" in col && typeof col.accessorKey === "string") {
     return col.accessorKey;

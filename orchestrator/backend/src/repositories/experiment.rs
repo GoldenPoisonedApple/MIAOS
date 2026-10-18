@@ -1,5 +1,9 @@
 use async_trait::async_trait;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait};
+use sea_orm::{
+  ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryOrder, QuerySelect,
+};
+
+use crate::entities::experiment::Column;
 
 use crate::dto::experiment::CreateExperimentRequest;
 use crate::entities::experiment::{ActiveModel, Entity, Model};
@@ -11,6 +15,8 @@ pub trait ExperimentRepositoryTrait: Send + Sync {
   async fn update(&self, model: Model) -> Result<Model, ServerError>;
   async fn find_by_id(&self, id: i64) -> Result<Model, ServerError>;
   async fn find_all(&self) -> Result<Vec<Model>, ServerError>;
+  async fn find_page(&self, limit: u64, offset: u64) -> Result<Vec<Model>, ServerError>;
+  async fn count(&self) -> Result<u64, ServerError>;
   async fn delete_from_id(&self, id: i64) -> Result<u64, ServerError>;
 }
 
@@ -72,6 +78,23 @@ impl ExperimentRepositoryTrait for ExperimentRepository {
   async fn find_all(&self) -> Result<Vec<Model>, ServerError> {
     let experiments = Entity::find().all(&self.pool).await?;
     Ok(experiments)
+  }
+
+  /// id 昇順で limit / offset 指定のページを取得
+  async fn find_page(&self, limit: u64, offset: u64) -> Result<Vec<Model>, ServerError> {
+    let experiments = Entity::find()
+      .order_by_asc(Column::Id)
+      .limit(limit)
+      .offset(offset)
+      .all(&self.pool)
+      .await?;
+    Ok(experiments)
+  }
+
+  /// 実験の総件数
+  async fn count(&self) -> Result<u64, ServerError> {
+    let count = Entity::find().count(&self.pool).await?;
+    Ok(count)
   }
 
   /// 指定されたIDの実験を削除
@@ -170,6 +193,38 @@ mod tests {
     assert_eq!(verifications.len(), 2); // テストデータの数が2件である事
     assert_eq!(verifications[0].name, "test_experiment1"); // 1件目の実験名が一致する事
     assert_eq!(verifications[1].name, "test_experiment2"); // 2件目の実験名が一致する事
+  }
+
+  /// find_page: 総件数を超える offset は空
+  #[sqlx::test]
+  async fn test_find_page_empty_beyond_total(pool: sqlx::PgPool) {
+    let repository = setup(pool).await;
+
+    let total = repository.count().await.unwrap();
+    let page = repository.find_page(100, total + 1000).await.unwrap();
+
+    assert_eq!(page.len(), 0);
+  }
+
+  /// find_page: offset 0 のチャンクと末尾 1 件
+  #[sqlx::test]
+  async fn test_find_page_boundaries(pool: sqlx::PgPool) {
+    let repository = setup(pool).await;
+    let before = repository.count().await.unwrap();
+    for i in 0..2 {
+      let request = create_experiment_request_factory(&format!("page_test_{}", i));
+      repository.create(request).await.unwrap();
+    }
+    let after = repository.count().await.unwrap();
+    assert_eq!(after, before + 2);
+
+    let chunk = repository.find_page(2, before).await.unwrap();
+    assert_eq!(chunk.len(), 2);
+    assert!(chunk[0].id < chunk[1].id);
+    assert_eq!(chunk[0].notes, Some("backend_test".to_string()));
+
+    let last = repository.find_page(100, after - 1).await.unwrap();
+    assert_eq!(last.len(), 1);
   }
 
   /// 実験の削除テスト
