@@ -41,7 +41,7 @@ graph TD
 │   ├── useExperiments.ts    # 実験データの取得(Query)と操作(Mutation)
 │   ├── useTasks.ts          # タスクデータの取得(Query)と操作(Mutation)
 │   ├── useFilters.ts        # フィルタ画像の一覧取得・アップロード・削除
-│   ├── useDynamicColumns.ts # JSON型の動的キー抽出・カラム生成（列ソート用 sortingFn を含む）
+│   ├── useDynamicColumns.ts # JSON型の動的キー抽出・カラム生成
 │   └── useTablePreferences.ts # テーブル UI 設定の状態管理と localStorage 永続化
 │
 ├── utils/           # 画面横断の小さな純関数
@@ -58,7 +58,7 @@ graph TD
 │       ├── Badge/   # ステータス表示バッジ
 │       ├── Button/  # 共通ボタン
 │       ├── ConfirmModal/ # 削除確認等の共通モーダル
-│       ├── DataTable/    # TanStack Table（ソート・行選択・D&D列順・列表示切替）
+│       ├── DataTable/    # TanStack Table（行選択・D&D列順・列表示切替）
 │       ├── KeyValueEditor/ # 辞書型(JSON)編集用エディタ
 │       └── Modal/   # モーダル基底コンポーネント
 │
@@ -89,10 +89,10 @@ graph TD
 カラム数が非常に多いデータ（実験一覧等）を扱うため、`@tanstack/react-table` を利用しています。
 - **動的カラムの展開**: JSON（辞書型）のプロパティ（例: `hyperparameters`, `files`）は、`useDynamicColumns` フックにより内部のキーを抽出し、テーブルのフラットなカラムとして動的に展開されます。辞書単位で任意の `renderCell` を差し込める（実験の `files` は PNG をセル内インライン表示し、画像クリックで別タブ、非 PNG はファイル名リンクで別タブのみ等）。`renderCell` 指定列は `meta.align: "left"` を付与し、カスタム描画列の配置を固定します。
 - **列の配置**: `DataTable` は `resolveColumnAlign`（`columnAlign.ts`）により各列の `text-align` を決定します。`meta.align` が明示されていればそれを優先し、未指定時は全行の生値がすべて `number` なら右寄せ、それ以外は左寄せ、選択列は中央寄せとします。静的列・動的列の追加時に個別指定は不要です（数値のみの動的列は自動で右寄せ）。
-- **列ソート**: `getSortedRowModel` とヘッダー上の昇順・降順操作により、単一キーでソート状態を管理します。実験一覧は初期状態で **ID 昇順**。動的列には比較可能な文字列表現へ正規化する `sortingFn` を付与しています。
-- **行 ID と行選択**: 列ソート後もチェックボックスの選択がデータ行と一致するよう、`DataTable` は任意の `getRowId`（実験は数値 `id` の文字列化、タスクは UUID）を TanStack Table に渡し、`rowSelection` のキーを行インデックスから切り離しています。
+- **サーバー側ページング（実験一覧）**: `GET /api/experiments` は最大 100 件ずつ返す。初回は `page=0` で最終ページを 1 RTT 取得し、`sessionStorage` の `experimentsListPage` で再訪問時のページを復元する。詳細はリポジトリ直下 `docs/paging.md`。
+- **行 ID と行選択**: `DataTable` は任意の `getRowId`（実験は数値 `id` の文字列化、タスクは UUID）を TanStack Table に渡し、`rowSelection` のキーを行インデックスから切り離しています。
 - **カラムの制御**: カラムの表示/非表示の切り替え、および `@dnd-kit` を用いたヘッダーのドラッグ＆ドロップによる**列の並び順**変更が実装されています（行の並び替えとは別レイヤー）。
-- **テーブル設定の永続化**: 表示カラム・列順・ソートは `useTablePreferences` により `localStorage` に保存されます（キー: `app:table-preferences:v1:{storageKey}`）。実験一覧は `experiments`、タスク一覧は `tasks`。`storageKey` 未指定時は従来どおりエフェメラル。`rowSelection` やモーダル開閉は永続化しません。
+- **テーブル設定の永続化**: 表示カラム・列順は `useTablePreferences` により `localStorage` に保存されます（キー: `app:table-preferences:v1:{storageKey}`）。実験一覧は `experiments`、タスク一覧は `tasks`。`storageKey` 未指定時は従来どおりエフェメラル。`rowSelection` やモーダル開閉は永続化しません。
 - **動的カラムとのマージ**: 保存済み設定を復元する際、存在しないカラム ID は除去し、新規に出現した動的カラムには `defaultHiddenColumns`（初期非表示）を適用します。既存カラムのユーザー設定は維持されます。
 
 ### 3.3 コンポーネントのカプセル化

@@ -267,7 +267,8 @@ class InputSensitivity:
 	IN 行 - OUT 行と同値であり、``W2 @ W1`` の線形近似を ReLU 込みに補正したものになる。
 
 	重みの絶対値 (class_importance) は入力スケールを無視するため、
-	クラスごとの入力標準偏差を掛けた ``scaled_importance`` を実効的な寄与の指標とする。
+	平均勾配にクラスごとの入力標準偏差を掛けた ``scaled_importance`` を
+	符号付きの実効寄与の指標とする。
 	"""
 
 	signed_mean_gradient: np.ndarray  # (C,) 正なら IN 方向、負なら OUT 方向
@@ -278,8 +279,8 @@ class InputSensitivity:
 
 	@property
 	def scaled_importance(self) -> np.ndarray:
-		"""入力スケールを考慮した実効寄与 mean|∂margin/∂x_c| * std(x_c)。"""
-		return self.mean_abs_gradient * self.input_std
+		"""入力スケールを考慮した符号付き実効寄与 mean(∂margin/∂x_c) * std(x_c)。"""
+		return self.signed_mean_gradient * self.input_std
 
 	@property
 	def dead_hidden_units(self) -> int:
@@ -334,7 +335,8 @@ def summarize_input_sensitivity(
 		"note": (
 			"Evaluated on attack_x. signed_mean_gradient = mean_n d(logit_IN - logit_OUT)/dx, "
 			"which equals IN - OUT row of activation_aware_effective_path (exact for ReLU nets). "
-			"scaled_importance = mean|grad| * std(x_c) accounts for per-class input scale."
+			"scaled_importance = mean(grad) * std(x_c) accounts for per-class input scale "
+			"(+: IN, -: OUT)."
 		),
 		"signed_mean_gradient": [float(v) for v in sensitivity.signed_mean_gradient],
 		"mean_abs_gradient": [float(v) for v in sensitivity.mean_abs_gradient],
@@ -342,7 +344,10 @@ def summarize_input_sensitivity(
 		"scaled_importance": [float(v) for v in sensitivity.scaled_importance],
 		"top_in_leaning_classes": _top_class_entries(sensitivity.signed_mean_gradient, top_k),
 		"top_out_leaning_classes": _top_class_entries(-sensitivity.signed_mean_gradient, top_k),
-		"top_scaled_importance_classes": _top_class_entries(sensitivity.scaled_importance, top_k),
+		"top_scaled_importance_classes": [
+			{"class_id": int(class_id), "value": float(sensitivity.scaled_importance[class_id])}
+			for class_id in np.argsort(np.abs(sensitivity.scaled_importance))[::-1][:top_k]
+		],
 		"hidden_activation_rate": [float(v) for v in sensitivity.hidden_activation_rate],
 		"dead_hidden_units": sensitivity.dead_hidden_units,
 		"always_active_hidden_units": sensitivity.always_active_hidden_units,
@@ -497,11 +502,11 @@ def plot_input_sensitivity(sensitivity: InputSensitivity, model_dir: Path) -> No
 		f"Mean input gradient of (logit_IN - logit_OUT) on attack_x (all {inputs} classes)",
 		"mean d(margin)/dx_c (+: IN, -: OUT)",
 	)
-	plot_class_importance(
+	plot_signed_class_values(
 		sensitivity.scaled_importance,
 		model_dir / "input_gradient_scaled_importance.png",
-		f"Scale-aware importance mean|d(margin)/dx_c| * std(x_c) (all {inputs} classes)",
-		"mean|grad| * std(x_c)",
+		f"Scale-aware importance mean d(margin)/dx_c * std(x_c) (all {inputs} classes)",
+		"mean(grad) * std(x_c) (+: IN, -: OUT)",
 	)
 	plot_effective_path_heatmap(
 		sensitivity.activation_aware_effective_path,

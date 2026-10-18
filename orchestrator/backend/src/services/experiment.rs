@@ -1,6 +1,32 @@
 use crate::dto::experiment::{
-  ClaimExperimentRequest, CreateExperimentRequest, UpdateResultsRequest,
+  ClaimExperimentRequest, CreateExperimentRequest, ExperimentPageResponse, UpdateResultsRequest,
 };
+
+/// 実験一覧の 1 ページあたり件数（最大 100、仕様どおりクランプ）
+#[derive(Clone, Copy)]
+struct PageSize(u64);
+
+impl PageSize {
+  const MAX: u64 = 100;
+  const DEFAULT: u64 = 100;
+
+  fn normalize(limit: i32) -> Self {
+    let value = if limit <= 0 {
+      Self::DEFAULT
+    } else {
+      limit.min(Self::MAX as i32) as u64
+    };
+    Self(value)
+  }
+
+  fn as_u64(self) -> u64 {
+    self.0
+  }
+
+  fn as_i32(self) -> i32 {
+    self.0 as i32
+  }
+}
 use crate::dto::task::CreateTaskRequest;
 use crate::entities::experiment::Model;
 use crate::entities::task::Task;
@@ -90,6 +116,53 @@ impl<E: ExperimentRepositoryTrait, T: TaskRepositoryTrait> ExperimentService<E, 
   /// * 戻り値: Result<Vec<Model>, ServerError> - 実験の一覧取得結果
   pub async fn get_all_experiments(&self) -> Result<Vec<Model>, ServerError> {
     self.experiment_repository.find_all().await
+  }
+
+  /// ページング最大ページ数
+  /// total == 0 のとき 1
+  /// total > 0 のとき total / limit の切り上げ
+  fn experiments_page_max(total: u64, limit: u64) -> u64 {
+    if total == 0 {
+      1
+    } else {
+      total.div_ceil(limit)
+    }
+  }
+
+  /// ページング付き実験一覧
+  /// page == 0 のとき最終ページを返す（レスポンスの page は実際のページ番号）
+  pub async fn get_experiments_page(
+    &self,
+    page: i32,
+    limit: i32,
+  ) -> Result<ExperimentPageResponse, ServerError> {
+    if page < 0 {
+      return Err(ServerError::InvalidPath("page must be >= 0".to_string()));
+    }
+
+    let page_size = PageSize::normalize(limit);
+    let limit_u64 = page_size.as_u64();
+    let total_u64 = self.experiment_repository.count().await?;
+    let page_max = Self::experiments_page_max(total_u64, limit_u64);
+
+    let resolved_page = if page == 0 { page_max } else { page as u64 };
+
+    let items = if page >= 1 && resolved_page > page_max {
+      Vec::new()
+    } else {
+      let offset = (resolved_page - 1) * limit_u64;
+      self
+        .experiment_repository
+        .find_page(limit_u64, offset)
+        .await?
+    };
+
+    Ok(ExperimentPageResponse {
+      items,
+      total: total_u64 as i64,
+      page: resolved_page as i32,
+      limit: page_size.as_i32(),
+    })
   }
 
   /// タスクの一覧取得
@@ -419,6 +492,62 @@ mod tests {
     assert_eq!(experiment_tasks.len(), 1);
     assert_ne!(experiment_tasks[0].id, task_id_before);
     remove_test_tasks(&service.task_repository).await;
+  }
+
+  /// page=0 で最終ページと同じ内容を返す
+  #[sqlx::test]
+  async fn test_get_experiments_page_zero_is_last_page(pool: sqlx::PgPool) {
+    let service = setup_with_mock_task_repository(pool).await;
+    for i in 0..3 {
+      service
+        .experiment_repository
+        .create(create_experiment_request_factory(&format!(
+          "page_zero_{}",
+          i
+        )))
+        .await
+        .unwrap();
+    }
+    let via_zero = service.get_experiments_page(0, 100).await.unwrap();
+    let total = via_zero.total;
+    let page_max =
+      ExperimentService::<ExperimentRepository, MockTaskRepository>::experiments_page_max(
+        total as u64,
+        100,
+      );
+    let via_last = service
+      .get_experiments_page(page_max as i32, 100)
+      .await
+      .unwrap();
+    assert_eq!(via_zero.page, page_max as i32);
+    assert_eq!(via_zero.items.len(), via_last.items.len());
+    assert_eq!(
+      via_zero.items.last().map(|m| m.id),
+      via_last.items.last().map(|m| m.id)
+    );
+  }
+
+  /// 総ページ超過は空 items
+  #[sqlx::test]
+  async fn test_get_experiments_page_beyond_max_is_empty(pool: sqlx::PgPool) {
+    let service = setup_with_mock_task_repository(pool).await;
+    service
+      .experiment_repository
+      .create(create_experiment_request_factory("beyond_max"))
+      .await
+      .unwrap();
+    let result = service.get_experiments_page(99, 100).await.unwrap();
+    assert_eq!(result.page, 99);
+    assert!(result.items.is_empty());
+    assert_eq!(result.total, 1);
+  }
+
+  /// page < 0 は 400 相当
+  #[sqlx::test]
+  async fn test_get_experiments_page_negative_page(pool: sqlx::PgPool) {
+    let service = setup_with_mock_task_repository(pool).await;
+    let result = service.get_experiments_page(-1, 100).await;
+    assert!(matches!(result, Err(ServerError::InvalidPath(_))));
   }
 
   /// 存在しない実験の再実行テスト

@@ -7,16 +7,27 @@ import { Button } from "../../components/ui/Button/Button";
 import { Badge } from "../../components/ui/Badge/Badge";
 import { DataTable } from "../../components/ui/DataTable/DataTable";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { components } from "../../api/schema";
+import type { Experiment } from "../../hooks/useExperiments";
 import { fileApiPath, isPngObjectKey } from "../../utils/fileApiPath";
 import styles from "./ExperimentList.module.css";
 
-type Experiment = components["schemas"]["Model"];
-
-const EXPERIMENT_DEFAULT_SORTING = [{ id: "id", desc: false }] as const;
-
 export const ExperimentList = () => {
-  const { experiments, loading, error, deleteExperiments, rerunExperiments, createExperiment, isCreating, isDeleting, isRerunning } = useExperiments();
+  const {
+    items,
+    page,
+    pageMax,
+    total,
+    setPage,
+    loading,
+    fetching,
+    error,
+    deleteExperiments,
+    rerunExperiments,
+    createExperiment,
+    isCreating,
+    isDeleting,
+    isRerunning,
+  } = useExperiments();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [copySource, setCopySource] = useState<Experiment | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -76,7 +87,7 @@ export const ExperimentList = () => {
     [filesRenderCell]
   );
 
-  const { dynamicColumns, defaultHiddenColumns } = useDynamicColumns<Experiment>(experiments, dictionaryConfigs);
+  const { dynamicColumns, defaultHiddenColumns } = useDynamicColumns<Experiment>(items, dictionaryConfigs);
 
   const initialColumnVisibility = useMemo(
     () => ({ ...defaultHiddenColumns }),
@@ -113,7 +124,7 @@ export const ExperimentList = () => {
           />
         ),
       },
-      { accessorKey: "id", header: "ID", sortingFn: "basic" },
+      { accessorKey: "id", header: "ID" },
       { accessorKey: "name", header: "名前" },
       { accessorKey: "method", header: "手法" },
       {
@@ -210,7 +221,15 @@ export const ExperimentList = () => {
   );
 
   if (loading) return <div>実験情報を読み込み中...</div>;
-  if (error) return <div>エラー: {error.message}</div>;
+  if (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return <div>エラー: {message}</div>;
+  }
+
+  const goToPage = (next: number) => {
+    setPage(next);
+    setRowSelection({});
+  };
 
   const selectedRowIds = Object.entries(rowSelection)
     .filter(([, selected]) => selected)
@@ -257,14 +276,30 @@ export const ExperimentList = () => {
         </div>
       </div>
 
+      <div className={styles.pagination}>
+        <Button variant="outline" disabled={page <= 1 || fetching} onClick={() => goToPage(page - 1)}>
+          前へ
+        </Button>
+        <span className={styles.paginationStatus}>
+          {page} / {pageMax} ページ（全 {total} 件）
+          {fetching ? " …" : ""}
+        </span>
+        <Button
+          variant="outline"
+          disabled={page >= pageMax || fetching}
+          onClick={() => goToPage(page + 1)}
+        >
+          次へ
+        </Button>
+      </div>
+
       <DataTable
         storageKey="experiments"
-        data={experiments}
+        data={items}
         columns={columns}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
         initialColumnVisibility={initialColumnVisibility}
-        initialSorting={[...EXPERIMENT_DEFAULT_SORTING]}
         getRowId={(row) => String(row.id)}
       />
 

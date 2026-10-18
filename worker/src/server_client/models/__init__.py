@@ -5,6 +5,7 @@ from .create_experiment_request import CreateExperimentRequest
 from .create_experiment_request_hyperparameters import (
     CreateExperimentRequestHyperparameters,
 )
+from .experiment_page_response import ExperimentPageResponse
 from .experiment_status import ExperimentStatus
 from .filter_list_response import FilterListResponse
 from .filter_summary import FilterSummary
@@ -27,6 +28,7 @@ __all__ = (
     "ClaimExperimentRequest",
     "CreateExperimentRequest",
     "CreateExperimentRequestHyperparameters",
+    "ExperimentPageResponse",
     "ExperimentStatus",
     "FilterListResponse",
     "FilterSummary",
