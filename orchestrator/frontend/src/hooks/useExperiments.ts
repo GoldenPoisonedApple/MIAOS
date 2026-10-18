@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import type { components } from "../api/schema";
@@ -30,6 +30,13 @@ function writeStoredPage(page: number): void {
   }
 }
 
+/** 空ページ（総ページ超過など）のときに遷移すべきページ番号 */
+function pageAfterEmptyItems(queryPage: number, total: number, limit: number): number {
+  const pageMax = Math.max(1, Math.ceil(total / limit));
+  const effectivePage = queryPage === 0 ? pageMax : queryPage;
+  return Math.min(effectivePage, pageMax);
+}
+
 async function fetchExperimentsPage(page: number): Promise<ExperimentPageResponse> {
   const { data, error, response } = await apiClient.GET("/api/experiments", {
     params: { query: { page, limit: PAGE_LIMIT } },
@@ -59,6 +66,24 @@ export const useExperiments = () => {
     queryFn: () => fetchExperimentsPage(queryPage),
   });
 
+  // sessionStorage 復元や invalidate 後に総ページを超えたページを開いている場合は補正する
+  useEffect(() => {
+    if (!data) return;
+    if (data.items.length === 0 && data.total > 0) {
+      const next = pageAfterEmptyItems(queryPage, data.total, data.limit);
+      if (queryPage !== next) {
+        setPageState(next);
+        writeStoredPage(next);
+      }
+      return;
+    }
+    // 初回 sentinel page=0 の応答後は実際のページ番号に state を揃える（§2.2）
+    if (page === null && data.page >= 1) {
+      setPageState(data.page);
+      writeStoredPage(data.page);
+    }
+  }, [data, queryPage, page]);
+
   const setPage = useCallback((next: number) => {
     setPageState(next);
     writeStoredPage(next);
@@ -71,9 +96,7 @@ export const useExperiments = () => {
       queryFn: () => fetchExperimentsPage(currentQueryPage),
     });
     if (fresh.items.length === 0 && fresh.total > 0) {
-      const pageMax = Math.max(1, Math.ceil(fresh.total / fresh.limit));
-      const effectivePage = currentQueryPage === 0 ? pageMax : currentQueryPage;
-      setPage(Math.min(effectivePage, pageMax));
+      setPage(pageAfterEmptyItems(currentQueryPage, fresh.total, fresh.limit));
       return;
     }
     await queryClient.invalidateQueries({ queryKey: ["experiments"] });
@@ -94,8 +117,8 @@ export const useExperiments = () => {
       }
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["experiments"] });
+    onSuccess: async () => {
+      await adjustPageAfterMutation();
     },
     onError: (err) => {
       console.error(err);
