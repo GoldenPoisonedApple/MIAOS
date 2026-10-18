@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import type { components } from "../api/schema";
@@ -55,6 +55,21 @@ async function fetchExperimentsPage(page: number): Promise<ExperimentPageRespons
   return data;
 }
 
+async function fetchExperimentsPageResolved(queryPage: number): Promise<ExperimentPageResponse> {
+  let result = await fetchExperimentsPage(queryPage);
+  if (result.items.length === 0 && result.total > 0) {
+    const next = pageAfterEmptyItems(queryPage, result.total, result.limit);
+    if (next !== queryPage) {
+      result = await fetchExperimentsPage(next);
+    }
+  }
+  // sentinel(0) や総ページ超過の補正後は、次回復元用に実際のページを保存する
+  if (result.page !== queryPage) {
+    writeStoredPage(result.page);
+  }
+  return result;
+}
+
 export const useExperiments = () => {
   const queryClient = useQueryClient();
   const [page, setPageState] = useState<number | null>(() => readStoredPage());
@@ -63,26 +78,8 @@ export const useExperiments = () => {
 
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ["experiments", queryPage],
-    queryFn: () => fetchExperimentsPage(queryPage),
+    queryFn: () => fetchExperimentsPageResolved(queryPage),
   });
-
-  // sessionStorage 復元や invalidate 後に総ページを超えたページを開いている場合は補正する
-  useEffect(() => {
-    if (!data) return;
-    if (data.items.length === 0 && data.total > 0) {
-      const next = pageAfterEmptyItems(queryPage, data.total, data.limit);
-      if (queryPage !== next) {
-        setPageState(next);
-        writeStoredPage(next);
-      }
-      return;
-    }
-    // 初回 sentinel page=0 の応答後は実際のページ番号に state を揃える（§2.2）
-    if (page === null && data.page >= 1) {
-      setPageState(data.page);
-      writeStoredPage(data.page);
-    }
-  }, [data, queryPage, page]);
 
   const setPage = useCallback((next: number) => {
     setPageState(next);
@@ -93,7 +90,7 @@ export const useExperiments = () => {
     const currentQueryPage = page ?? 0;
     const fresh = await queryClient.fetchQuery({
       queryKey: ["experiments", currentQueryPage],
-      queryFn: () => fetchExperimentsPage(currentQueryPage),
+      queryFn: () => fetchExperimentsPageResolved(currentQueryPage),
     });
     if (fresh.items.length === 0 && fresh.total > 0) {
       setPage(pageAfterEmptyItems(currentQueryPage, fresh.total, fresh.limit));
@@ -183,7 +180,8 @@ export const useExperiments = () => {
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
   const limit = data?.limit ?? PAGE_LIMIT;
-  const currentPage = page ?? data?.page ?? 1;
+  // 総ページ超過時は queryFn 内で実ページを取り直すため、表示は API の page を優先する
+  const currentPage = data?.page ?? page ?? 1;
   const pageMax = Math.max(1, Math.ceil(total / limit));
 
   return {
