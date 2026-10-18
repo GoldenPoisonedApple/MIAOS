@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.8.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.7.1...v0.8.0) (2026-10-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* ページ送り実装
+
+### Features
+
+* input_gradient_scaled_importanceを±で見えるように ([1a524df](https://github.com/GoldenPoisonedApple/MIAOS/commit/1a524dff99fc66662031dc9d4c9d1b9855f76034))
+* sessionStorage から復元したページ番号が、現在の total に対する最大ページを超えている場合の補正 ([af5a613](https://github.com/GoldenPoisonedApple/MIAOS/commit/af5a613a8c4ab639af2cbac20c43d713142e6067))
+* ページ送り実装 ([780d439](https://github.com/GoldenPoisonedApple/MIAOS/commit/780d4398b30a03d548a3ab05382f91fd55805b66))
+
+
+### Bug Fixes
+
+* openapi ([6309678](https://github.com/GoldenPoisonedApple/MIAOS/commit/6309678c28e29d2276e7101236c0c8fa3a275025))
+* エラー修正 ([05499fb](https://github.com/GoldenPoisonedApple/MIAOS/commit/05499fbba61592ef0760433500dc420689b90493))
+
 ## [0.7.1](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.7.0...v0.7.1) (2026-10-06)
 
 
