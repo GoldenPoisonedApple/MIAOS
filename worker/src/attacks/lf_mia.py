@@ -21,6 +21,13 @@ from src.attacks.target_attack_sign_output import (
 	TargetAttackSignEntry,
 	analyze_target_attack_sign_output,
 )
+from src.attacks.lf_mia_membership_scorer import (
+	DEFAULT_DIAGONAL_LDA_REG_LAMBDA,
+	DiagonalLdaMembershipScorer,
+	MEMBERSHIP_SCORER_DIAGONAL_LDA,
+	MEMBERSHIP_SCORER_NEURAL,
+	VALID_MEMBERSHIP_SCORERS,
+)
 from src.data.dataset import dataset
 from src.data.decorations.config import with_fraction
 from src.server_client.models import CreateExperimentRequest
@@ -29,7 +36,9 @@ from src.server_client.types import UNSET
 
 # LF_MIA 用ターゲットモデルの装飾適用率スイープ
 LF_MIA_TARGET_FRACTIONS = [
-	1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.01, 0.001, 0.0,
+	1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.01, 0.001,
+	# fraction=0.0 を複数学習する場合は初期化 RNG のみずらす（train_target_model 参照）
+	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 ]
 
 
@@ -145,6 +154,7 @@ class LF_MIA(MIA_Attack):
 		train_accs = []
 		test_accs = []
 
+		zero_run_idx = 0
 		for i in trange(len(LF_MIA_TARGET_FRACTIONS), desc="Target Models"):
 			fraction_value = LF_MIA_TARGET_FRACTIONS[i]
 			decoration_spec = with_fraction(base_spec, fraction_value)
@@ -156,7 +166,14 @@ class LF_MIA(MIA_Attack):
 			)
 
 			# fraction 間で初期重みを揃え、装飾サブセットの効果だけを比較可能にする
-			_reset_target_model_init_rng(int(self.settings.seed))
+			base_seed = int(self.settings.seed)
+			if fraction_value == 0.0:
+				# 1 本目の 0.0 は従来どおり base_seed。追加の 0.0 だけ初期化シードをずらす。
+				init_seed = base_seed + zero_run_idx
+				zero_run_idx += 1
+			else:
+				init_seed = base_seed
+			_reset_target_model_init_rng(init_seed)
 			target_model = model_factory().to(cfg.DEVICE)
 			target_model = MIA_Attack.train_model(
 				target_model, trainloader, self.settings.max_epochs
@@ -199,6 +216,31 @@ class LF_MIA(MIA_Attack):
 			hp.get("attack_model_batch_size", cfg.ATTACK_MODEL_BATCH_SIZE),
 			hp.get("attack_model_epochs", cfg.ATTACK_MODEL_EPOCHS),
 		)
+
+	def _parse_membership_scorer_settings(self) -> tuple[str, float]:
+		"""
+		hyperparameters からメンバシップ推定器種別と対角 LDA 正則係数を返す。
+		membership_scorer: neural（デフォルト）| diagonal_lda
+		diagonal_lda_reg_lambda: 未指定時 DEFAULT_DIAGONAL_LDA_REG_LAMBDA
+		"""
+		hyperparameters = self.settings.hyperparameters
+		if hyperparameters is UNSET or hyperparameters is None:
+			return (MEMBERSHIP_SCORER_NEURAL, DEFAULT_DIAGONAL_LDA_REG_LAMBDA)
+		hp = hyperparameters.to_dict()
+		kind_raw = hp.get("membership_scorer", MEMBERSHIP_SCORER_NEURAL)
+		if isinstance(kind_raw, str):
+			kind = kind_raw.strip().lower()
+		else:
+			kind = str(kind_raw).strip().lower()
+		if kind not in VALID_MEMBERSHIP_SCORERS:
+			raise ValueError(
+				f"Invalid membership_scorer={kind_raw!r}; "
+				f"expected one of {sorted(VALID_MEMBERSHIP_SCORERS)}"
+			)
+		reg_lambda = float(
+			hp.get("diagonal_lda_reg_lambda", DEFAULT_DIAGONAL_LDA_REG_LAMBDA)
+		)
+		return (kind, reg_lambda)
 
 	def _train_attack_model(
 		self, attack_x: torch.Tensor, attack_y: torch.Tensor
@@ -333,9 +375,49 @@ class LF_MIA(MIA_Attack):
 	def attack(
 		self, shadow_models: list[nn.Module], target_model: list[nn.Module]
 	) -> tuple[list[float], list[float]]:
+		membership_kind, reg_lambda = self._parse_membership_scorer_settings()
+		self.metrics.update({
+			"membership_scorer": membership_kind,
+			"diagonal_lda_reg_lambda": reg_lambda,
+		})
+		self.logger.info(
+			f"Membership scorer={membership_kind}, diagonal_lda_reg_lambda={reg_lambda}"
+		)
+
 		# 攻撃用透かし画像のデータローダー取得（黒背景に合成済みの1枚）
 		attack_watermark_loader = self.dataset.get_attack_watermark_dataloader()
-  
+
+		if membership_kind == MEMBERSHIP_SCORER_DIAGONAL_LDA:
+			# 統計: シャドーペア特徴 (n_pairs, C) で対角 LDA 風スコアを学習
+			in_arr, out_arr = self._collect_shadow_pair_features(shadow_models)
+			scorer = DiagonalLdaMembershipScorer(reg_lambda=reg_lambda)
+			scorer.fit(in_arr, out_arr)
+			if scorer.w is not None:
+				w_norm = float(np.linalg.norm(scorer.w))
+				self.logger.info(
+					f"Diagonal LDA fit -> ||w||={w_norm:.6f}, b={scorer.b:.6f}"
+				)
+
+			attack_scores: list[float] = []
+			attack_fractions: list[float] = []
+			for fraction, single_target_model in zip(
+				LF_MIA_TARGET_FRACTIONS, target_model, strict=True
+			):
+				target_preds, _ = MIA_Attack.get_predictions(
+					single_target_model, attack_watermark_loader
+				)
+				target_preds = logit_scaling(target_preds).float()
+				target_vec = target_preds.squeeze(0).detach().cpu().numpy()
+				score = scorer.score_target(target_vec)
+				attack_scores.append(score)
+				attack_fractions.append(fraction)
+				single_target_model.to("cpu")  # GPUメモリ節約
+
+			self._output_target_attack_sign_analysis(target_model)
+			self._run_shadow_pair_effect_analysis(shadow_models)
+			return attack_scores, attack_fractions
+
+		# --- membership_scorer == neural（既存: AttackNet） ---
 		# 特徴量抽出
 		in_preds = []
 		for i in range(int(self.settings.num_shadow_models / 2)):
@@ -363,8 +445,8 @@ class LF_MIA(MIA_Attack):
 		attack_model = self._train_attack_model(attack_x, attack_y)
 
 		# ------------- 攻撃 -------------
-		attack_scores: list[float] = []
-		attack_fractions: list[float] = []
+		attack_scores = []
+		attack_fractions = []
 		for fraction, single_target_model in zip(LF_MIA_TARGET_FRACTIONS, target_model, strict=True):
 			# ターゲットモデルの予測結果
 			target_preds, _ = MIA_Attack.get_predictions(

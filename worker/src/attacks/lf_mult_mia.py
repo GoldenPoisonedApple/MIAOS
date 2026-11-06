@@ -5,6 +5,10 @@ from torch.utils.data import DataLoader
 
 import src.core.config as cfg
 from src.attacks.lf_mia import LF_MIA, LF_MIA_TARGET_FRACTIONS
+from src.attacks.lf_mia_membership_scorer import (
+	DiagonalLdaMembershipScorer,
+	MEMBERSHIP_SCORER_DIAGONAL_LDA,
+)
 from src.attacks.mia_attack import MIA_Attack
 from src.attacks.mia_lira_common import logit_scaling
 from src.server_client.types import UNSET
@@ -19,7 +23,7 @@ class LF_Mult_MIA(LF_MIA):
 	同じ K 枚が IN / OUT 両群に現れるため画像内容はラベルに対して無情報であり、
 	攻撃モデルは透かしが出力に与える差分を使わざるを得ない。
 
-	シャドー・ターゲットの学習は LF_MIA をそのまま継承し、attack のみ置き換える。
+	シャドー・ターゲットの学習は LF_MIA をそのまま継承し、attack のみ置き換える
 	"""
 
 	# 合成画像枚数 K の取得
@@ -75,6 +79,15 @@ class LF_Mult_MIA(LF_MIA):
 	def attack(
 		self, shadow_models: list[nn.Module], target_model: list[nn.Module]
 	) -> tuple[list[float], list[float]]:
+		membership_kind, reg_lambda = self._parse_membership_scorer_settings()
+		self.metrics.update({
+			"membership_scorer": membership_kind,
+			"diagonal_lda_reg_lambda": reg_lambda,
+		})
+		self.logger.info(
+			f"Membership scorer={membership_kind}, diagonal_lda_reg_lambda={reg_lambda}"
+		)
+
 		num_images = self._num_images()
 		num_in = int(self.settings.num_shadow_models / 2)
 		self.logger.info(f"LF_Mult_MIA: num_images(K)={num_images}")
@@ -83,6 +96,50 @@ class LF_Mult_MIA(LF_MIA):
 		decorated_loader, plain_loader = self.dataset.get_attack_composite_dataloaders(
 			num_images
 		)
+
+		if membership_kind == MEMBERSHIP_SCORER_DIAGONAL_LDA:
+			in_arr, out_arr = self._collect_shadow_pair_features(shadow_models)
+			scorer = DiagonalLdaMembershipScorer(reg_lambda=reg_lambda)
+			scorer.fit(in_arr, out_arr)
+			if scorer.w is not None:
+				w_norm = float(np.linalg.norm(scorer.w))
+				self.logger.info(
+					f"Diagonal LDA fit -> ||w||={w_norm:.6f}, b={scorer.b:.6f}"
+				)
+
+			attack_scores: list[float] = []
+			attack_scores_vars: list[float] = []
+			attack_all_scores: list[list[float]] = []
+			attack_fractions: list[float] = []
+			for fraction, single_target_model in zip(
+				LF_MIA_TARGET_FRACTIONS, target_model, strict=True
+			):
+				target_feats = self._extract_features(
+					single_target_model, decorated_loader, plain_loader
+				)
+				single_target_model.to("cpu")  # GPUメモリ節約
+				row_scores = [
+					scorer.score_target(target_feats[k].detach().cpu().numpy())
+					for k in range(target_feats.shape[0])
+				]
+				probs = torch.tensor(row_scores, dtype=torch.float32)
+				score, var, all_scores = LF_Mult_MIA.aggregate_scores(probs)
+				self.logger.info(
+					f"Target fraction={fraction} -> score(mean)={score:.4f}, var={var:.6f}"
+				)
+				attack_scores.append(score)
+				attack_scores_vars.append(var)
+				attack_all_scores.append(all_scores)
+				attack_fractions.append(fraction)
+
+			self.metrics.update({
+				"attack_num_images": num_images,
+				"attack_scores_vars": attack_scores_vars,
+				"attack_all_scores": attack_all_scores,
+			})
+			self._output_target_attack_sign_analysis(target_model)
+			self._run_shadow_pair_effect_analysis(shadow_models)
+			return attack_scores, attack_fractions
 
 		# 特徴量抽出: IN シャドー（各 (K, C)）
 		# K: 画像枚数, C: クラス数

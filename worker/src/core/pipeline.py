@@ -83,6 +83,9 @@ def run_experiment(
             raise ValueError(
                 "Error: No model to load. Please specify the model to load."
             )
+        # LF_MIA 系で hyperparameters.membership_scorer=diagonal_lda のときは AttackNet
+        # （load_attack_model が想定するチェックポイント）を使わない。未実装のロード
+        # 経路がある場合は整合を確認すること。
 
     # メタ情報表示
     logger.info("Request information:")

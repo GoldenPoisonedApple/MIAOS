@@ -10,6 +10,23 @@
 最終的に
 score = wx+b
 
+```python
+# 1. ペア特徴の取得: (n_pairs, NUM_CLASSES)
+# LF_MIA では 1枚、LF_Mult 系では K枚平均の特徴が返る
+in_feats, out_feats = self._collect_shadow_pair_features(shadow_models)
+# 2. ペア差分と中点
+diffs = in_feats - out_feats                    # (n_pairs, C)
+midpoints = 0.5 * (in_feats + out_feats)        # (n_pairs, C)
+# 3. 対角LDAによる重みとバイアスの算出
+mean_diff = diffs.mean(axis=0)                  # (C,)
+var_diff = diffs.var(axis=0, ddof=1) + reg_lambda    # (C,) 正則化項 λ=1e-3
+w = mean_diff / var_diff                        # (C,)
+b = - float(w @ midpoints.mean(axis=0))         # スカラー
+# 4. ターゲット推論 (target_feat: (C,) または (K, C) の平均)
+logit = float(w @ target_feat + b)
+score = 1.0 / (1.0 + np.exp(-logit))
+```
+
 
 # モデル
 1出力で、BCEWithLogitsLoss(純粋な2値分類のため、ONとOUTの2出力よりも 1出力で0～1の方が一般的)
