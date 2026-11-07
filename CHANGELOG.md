@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.9.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.8.0...v0.9.0) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* ターゲットの0.0のモデルを12に変更
+
+### Features
+
+* all_scores廃止、lf_miaの結果のグラフ描画 ([40b2e8e](https://github.com/GoldenPoisonedApple/MIAOS/commit/40b2e8e4f60520206bfc82d7811e2e2d95b6bc0f))
+* backup用のコマンド作成 ([6c0a9f8](https://github.com/GoldenPoisonedApple/MIAOS/commit/6c0a9f85c22af6260e273d176680074b3676a02a))
+* ターゲットの0.0のモデルを12に変更 ([03b0d81](https://github.com/GoldenPoisonedApple/MIAOS/commit/03b0d812fec1ed34beee09b6a1aadac67d219eef))
+* 平坦化LDAとガウス尤度比手法追加 ([6379b54](https://github.com/GoldenPoisonedApple/MIAOS/commit/6379b54d9d55b6f0a8ab6268696d81e3aa849420))
+* 統計的アプローチの作成 ([c950eea](https://github.com/GoldenPoisonedApple/MIAOS/commit/c950eeaf7c58662debc358dd9a575c6058c8abe7))
+* 過学習防止手法追加 ([5d1156e](https://github.com/GoldenPoisonedApple/MIAOS/commit/5d1156e35b51b9d14f555a084f2e9a9bb436f26f))
+
 ## [0.8.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.7.1...v0.8.0) (2026-10-18)
 
 
