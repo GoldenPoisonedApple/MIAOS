@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-from src.attacks.attack_model_analysis import plot_class_importance
+from src.attacks.analysis.attack_model_analysis import plot_class_importance
 
 # summary.json に含める上位クラス数
 TOP_K_CLASSES = 10

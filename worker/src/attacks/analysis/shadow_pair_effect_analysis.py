@@ -17,7 +17,7 @@ import numpy as np
 from scipy.stats import wilcoxon
 
 import src.core.config as cfg
-from src.attacks.attack_model_analysis import plot_signed_class_values
+from src.attacks.analysis.attack_model_analysis import plot_signed_class_values
 
 # Wilcoxon 符号順位検定の最小ペア数（scipy の推奨に合わせる）
 _MIN_PAIRS_FOR_WILCOXON = 6
