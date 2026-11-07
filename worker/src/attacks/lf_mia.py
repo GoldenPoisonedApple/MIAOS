@@ -22,7 +22,9 @@ from src.attacks.analysis.target_attack_sign_output import (
 	analyze_target_attack_sign_output,
 )
 from src.attacks.membership_scorers import (
+	MembershipScore,
 	MembershipScorerConfig,
+	ScoreScale,
 	build_membership_scorer,
 )
 from src.data.dataset import dataset
@@ -313,9 +315,9 @@ class LF_MIA(MIA_Attack):
 		self.logger.info(f"Membership scorer diagnostics -> {diagnostics}")
 
 		# ------------- 攻撃 -------------
-		attack_scores: list[float] = []  # K 枚の IN 確率の平均
-		attack_scores_vars: list[float] = []  # K 枚の IN 確率の標本分散（K=1 では 0）
-		attack_all_scores: list[list[float]] = []  # K 枚それぞれの IN 確率（ターゲットごと）
+		attack_scores: list[float] = []  # スコアラーが K 枚分を集約したスコア
+		attack_scores_vars: list[float] = []  # K 枚の画像ごとのスコアの標本分散（K=1 では 0）
+		attack_all_scores: list[list[float]] = []  # K 枚それぞれの画像ごとのスコア（ターゲットごと）
 		attack_fractions: list[float] = []
 		for fraction, single_target_model in zip(LF_MIA_TARGET_FRACTIONS, target_model, strict=True):
 			# ターゲットモデルの特徴量（シャドーと同じ前処理）
@@ -323,10 +325,10 @@ class LF_MIA(MIA_Attack):
 			single_target_model.to("cpu")  # GPUメモリ節約
 
 			# 攻撃モデルで予測
-			probs = torch.from_numpy(scorer.score(target_feats))
-			score, var, all_scores = LF_MIA.aggregate_scores(probs) # K枚のIN確率の平均, 標本分散, 全値のリスト
+			result = scorer.score(target_feats)
+			score, var, all_scores = LF_MIA.aggregate_scores(result) # 集約スコア, 画像ごとのスコアの標本分散, 全値のリスト
 			self.logger.info(
-				f"Target fraction={fraction} -> score(mean)={score:.4f}, var={var:.6f}"
+				f"Target fraction={fraction} -> score={score:.4f}, var={var:.6f}"
 			)
 
 			attack_scores.append(score)
@@ -338,6 +340,8 @@ class LF_MIA(MIA_Attack):
 		# attack_all_scores は値が多く DB に載せられないため、metrics ではなくファイルで出力する
 		self.metrics.update({
 			"membership_scorer": config.kind,
+			# attack_score や threshold_at_* の単位（probability / log_odds）
+			"membership_score_scale": scorer.score_scale.value,
 			**diagnostics,
 			"attack_scores_vars": attack_scores_vars,
 			**self._extra_attack_metrics(),
@@ -345,10 +349,12 @@ class LF_MIA(MIA_Attack):
 
 		# ターゲットごとの K 枚分のスコア分布の可視化
 		score_entries = [
-			TargetScoreEntry(fraction=fraction, scores=np.asarray(all_scores))
-			for fraction, all_scores in zip(attack_fractions, attack_all_scores, strict=True)
+			TargetScoreEntry(fraction=fraction, score=score, scores=np.asarray(all_scores))
+			for fraction, score, all_scores in zip(
+				attack_fractions, attack_scores, attack_all_scores, strict=True
+			)
 		]
-		self._output_attack_score_distribution(score_entries)
+		self._output_attack_score_distribution(score_entries, scorer.score_scale)
 
 		# K 枚分のスコア全体での ROC（fraction>0 を IN、fraction=0 を OUT）
 		self._evaluate_all_scores_roc(score_entries)
@@ -362,31 +368,32 @@ class LF_MIA(MIA_Attack):
 
 		return attack_scores, attack_fractions
 
-	# K 枚分の IN 確率を集約
+	# K 枚分のスコアを集約
 	@staticmethod
-	def aggregate_scores(probs: torch.Tensor) -> tuple[float, float, list[float]]:
+	def aggregate_scores(result: MembershipScore) -> tuple[float, float, list[float]]:
 		"""
-		K 枚分の IN 確率 (K,) を集約する。
+		スコアラーの出力から、集約スコア・画像ごとのスコアの分散・全値を取り出す。
+		集約方法（平均 / 和）はスコアラーの責務であり、ここでは再集約しない。
 		Args:
-				probs: 各画像に対する IN 確率 (K,)
+				result: スコアラーの出力（value: 集約スコア, per_image: 画像ごとのスコア (K,)）
 		Returns:
-				score: 平均（LF_MIA の attack_score と比較可能な確率スケール）
-				var: 標本分散（K=1 のときは 0.0）
-				all_scores: 全値のリスト（log-odds 平均など別の集約は事後計算する）
+				score: 集約スコア（スケールは scorer.score_scale）
+				var: 画像ごとのスコアの標本分散（K=1 のときは 0.0）
+				all_scores: 画像ごとのスコアの全値のリスト（別の集約は事後計算する）
 		"""
-		# detach: 計算グラフから切り離す: メタデータ削除
-		# float: 浮動小数点数に変換
+		# detach: 計算グラフから切り離す: メタデータ削除（per_image は numpy のため不要）
+		# float: 浮動小数点数に変換（np.float64 に変換）
 		# flatten: 1次元に平坦化
-		probs = probs.detach().float().flatten()
-		score = probs.mean().item()
-		# K=1 では unbiased 分散が NaN になるため 0.0 とする
-		var = probs.var(unbiased=True).item() if probs.numel() > 1 else 0.0
-		return score, var, probs.tolist()
+		per_image = np.asarray(result.per_image, dtype=np.float64).flatten()
+		# K=1 では unbiased 分散が NaN になるため 0.0 とする（MembershipScore.per_image_var）
+		return float(result.value), result.per_image_var, per_image.tolist()
 
 	# ターゲットごとのスコア分布を可視化・保存
-	def _output_attack_score_distribution(self, entries: list[TargetScoreEntry]) -> None:
+	def _output_attack_score_distribution(
+		self, entries: list[TargetScoreEntry], scale: ScoreScale
+	) -> None:
 		output_dir = os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_SCORE_DISTRIBUTION_DIR)
-		scores_path = analyze_attack_score_distribution(entries, output_dir)
+		scores_path = analyze_attack_score_distribution(entries, output_dir, scale)
 		self.logger.info(f"Attack score distribution saved -> {output_dir}")
 		self.logger.info(f"Attack score raw data -> {scores_path}")
 

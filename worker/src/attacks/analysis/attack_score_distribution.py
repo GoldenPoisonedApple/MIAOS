@@ -1,6 +1,7 @@
-"""LF_MIA 系ターゲットモデルごとの攻撃スコア分布（K 枚分の IN 確率）の可視化。
+"""LF_MIA 系ターゲットモデルごとの攻撃スコア分布（K 枚分の画像ごとのスコア）の可視化。
 
-各ターゲット（装飾適用率 fraction ごと）について K 枚分の IN 確率を
+各ターゲット（装飾適用率 fraction ごと）について K 枚分の画像ごとのスコア
+（IN 確率、または logit / 対数尤度比の寄与）を
 重ね描きヒストグラム・Facet ヒストグラム・バイオリンプロットとして
 ``attack_score_distribution/`` に出力し、生データを scores.json に保存する。
 
@@ -19,24 +20,30 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import to_hex
 
+from src.attacks.membership_scorers.base import ScoreScale
+
 # fraction=1.0 に割り当てる最も彩度の高い赤
 IN_COLOR_STRONGEST = np.array([1.0, 0.0, 0.0])
 # 最も小さい fraction に割り当てる淡い赤（白背景で視認できる下限）
 IN_COLOR_PALEST = np.array([1.0, 0.72, 0.72])
 # OUT (fraction=0) の色
 OUT_COLOR = "#1f4fd8"
-# ヒストグラムの bin 数（IN 確率 [0, 1] を等分）
+# ヒストグラムの bin 数（IN 確率 [0, 1]、または log_odds の表示範囲を等分）
 HIST_BINS = 40
 # Facet の列数
 FACET_NCOLS = 4
+# log_odds スケールで横軸範囲に付ける余白（データ範囲に対する比率）
+LOG_ODDS_AXIS_MARGIN_RATIO = 0.05
 
 
 @dataclass(frozen=True)
 class TargetScoreEntry:
-	"""1 ターゲットモデル分の K 枚の IN 確率。"""
+	"""1 ターゲットモデル分の集約スコアと K 枚の画像ごとのスコア。"""
 
 	fraction: float
-	# K 枚分の IN 確率 (K,)
+	# スコアラーが K 枚分を集約したスコア（平均とは限らない。和で集約するスコアラーもある）
+	score: float
+	# K 枚分の画像ごとのスコア (K,)
 	scores: np.ndarray
 
 	@property
@@ -53,6 +60,33 @@ class TargetScoreEntry:
 		if self.scores.size < 2:
 			return 0.0
 		return float(np.var(self.scores, ddof=1))
+
+
+@dataclass(frozen=True)
+class ScoreAxis:
+	"""スコアの軸（範囲とラベル）。スコアのスケールに応じて決まる。"""
+
+	scale: ScoreScale
+	lo: float
+	hi: float
+	label: str
+
+	@classmethod
+	def for_entries(cls, entries: list[TargetScoreEntry], scale: ScoreScale) -> "ScoreAxis":
+		"""probability は [0, 1] 固定、log_odds は全エントリの画像ごとのスコアの範囲に余白を付ける。"""
+		if scale == ScoreScale.PROBABILITY:
+			return cls(scale, 0.0, 1.0, "IN probability (attack score)")
+		values = np.concatenate([e.scores for e in entries]) if entries else np.zeros(1)
+		lo, hi = float(np.min(values)), float(np.max(values))
+		# 全値が同一のときは範囲が 0 になるため、幅 1 の範囲を取る
+		margin = (hi - lo) * LOG_ODDS_AXIS_MARGIN_RATIO if hi > lo else 0.5
+		return cls(scale, lo - margin, hi + margin, "Per-image score, log-odds (attack score)")
+
+	def bins(self) -> np.ndarray:
+		return np.linspace(self.lo, self.hi, HIST_BINS + 1)
+
+	def grid(self) -> np.ndarray:
+		return np.linspace(self.lo, self.hi, 500)
 
 
 def _ordered(entries: list[TargetScoreEntry]) -> list[TargetScoreEntry]:
@@ -153,24 +187,26 @@ def _draw_target(
 	return float(np.max(heights)) if len(heights) else 0.0
 
 
-def plot_overlay_histogram(entries: list[TargetScoreEntry], output_path: Path) -> None:
+def plot_overlay_histogram(
+	entries: list[TargetScoreEntry], output_path: Path, axis: ScoreAxis
+) -> None:
 	"""全ターゲットのヒストグラムを 1 枚に重ね描きする。"""
 	entries = _ordered(entries)
 	colors = target_colors(entries)
 	labels = _legend_labels(entries)
-	bins = np.linspace(0.0, 1.0, HIST_BINS + 1)
-	x_grid = np.linspace(0.0, 1.0, 500)
+	bins = axis.bins()
+	x_grid = axis.grid()
 
 	fig, ax = plt.subplots(figsize=(12, 6))
 	max_height = 0.0
 	for entry, color, label in zip(entries, colors, labels, strict=True):
 		max_height = max(max_height, _draw_target(ax, entry, color, label, bins, x_grid))
 
-	ax.set_xlim(0.0, 1.0)
+	ax.set_xlim(axis.lo, axis.hi)
 	# 分散の小さいターゲットの正規分布曲線が突出して他が潰れないよう、ヒストグラム基準で上限を決める
 	if max_height > 0:
 		ax.set_ylim(0.0, max_height * 1.1)
-	ax.set_xlabel("IN probability (attack score)")
+	ax.set_xlabel(axis.label)
 	ax.set_ylabel("Density")
 	ax.set_title("Attack score distribution per target (dashed: mean, solid: N(mean, var))")
 	ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=8)
@@ -179,13 +215,15 @@ def plot_overlay_histogram(entries: list[TargetScoreEntry], output_path: Path) -
 	plt.close(fig)
 
 
-def plot_facet_histogram(entries: list[TargetScoreEntry], output_path: Path) -> None:
+def plot_facet_histogram(
+	entries: list[TargetScoreEntry], output_path: Path, axis: ScoreAxis
+) -> None:
 	"""ターゲットごとに小さなサブプロット（4 列。24 ターゲットで 6x4）に描画する。"""
 	entries = _ordered(entries)
 	colors = target_colors(entries)
 	labels = target_labels(entries)
-	bins = np.linspace(0.0, 1.0, HIST_BINS + 1)
-	x_grid = np.linspace(0.0, 1.0, 500)
+	bins = axis.bins()
+	x_grid = axis.grid()
 
 	nrows = math.ceil(len(entries) / FACET_NCOLS)
 	fig, axes = plt.subplots(
@@ -196,14 +234,18 @@ def plot_facet_histogram(entries: list[TargetScoreEntry], output_path: Path) -> 
 		max_height = _draw_target(ax, entry, color, label, bins, x_grid)
 		if max_height > 0:
 			ax.set_ylim(0.0, max_height * 1.1)
-		ax.set_xlim(0.0, 1.0)
-		ax.set_title(f"{label}\nmean={entry.mean:.3f}, var={entry.var:.4f}", fontsize=9)
+		ax.set_xlim(axis.lo, axis.hi)
+		# score はスコアラーが集約した値（和で集約する場合は横軸の範囲外になり得るため数値で示す）
+		ax.set_title(
+			f"{label}\nscore={entry.score:.3f}, mean={entry.mean:.3f}, var={entry.var:.4f}",
+			fontsize=9,
+		)
 		ax.grid(True, ls="--", alpha=0.4)
 	# 余ったサブプロットは非表示
 	for ax in flat_axes[len(entries):]:
 		ax.set_visible(False)
 
-	fig.supxlabel("IN probability (attack score)")
+	fig.supxlabel(axis.label)
 	fig.supylabel("Density")
 	fig.suptitle("Attack score distribution per target (dashed: mean, solid: N(mean, var))")
 	fig.tight_layout()
@@ -211,7 +253,7 @@ def plot_facet_histogram(entries: list[TargetScoreEntry], output_path: Path) -> 
 	plt.close(fig)
 
 
-def plot_violin(entries: list[TargetScoreEntry], output_path: Path) -> None:
+def plot_violin(entries: list[TargetScoreEntry], output_path: Path, axis: ScoreAxis) -> None:
 	"""全ターゲットのスコア分布をバイオリンプロットで 1 枚に並べる。"""
 	entries = _ordered(entries)
 	colors = target_colors(entries)
@@ -239,22 +281,30 @@ def plot_violin(entries: list[TargetScoreEntry], output_path: Path) -> None:
 
 	ax.set_xticks(positions)
 	ax.set_xticklabels(labels, rotation=60, ha="right", fontsize=8)
-	ax.set_ylim(-0.02, 1.02)
-	ax.set_ylabel("IN probability (attack score)")
+	# probability は [0, 1] に余白 0.02 を付ける（従来どおり）。log_odds は ScoreAxis の範囲
+	if axis.scale == ScoreScale.PROBABILITY:
+		ax.set_ylim(-0.02, 1.02)
+	else:
+		ax.set_ylim(axis.lo, axis.hi)
+	ax.set_ylabel(axis.label)
 	ax.set_title("Attack score distribution per target (black bar: mean)")
 	ax.grid(True, axis="y", ls="--", alpha=0.4)
 	fig.savefig(output_path, dpi=200, bbox_inches="tight")
 	plt.close(fig)
 
 
-def save_scores_json(entries: list[TargetScoreEntry], output_path: Path) -> None:
-	"""fraction・mean・var・K 枚分のスコアを JSON に保存する（事後解析用）。"""
+def save_scores_json(
+	entries: list[TargetScoreEntry], output_path: Path, scale: ScoreScale
+) -> None:
+	"""スケール・fraction・集約スコア・mean・var・K 枚分のスコアを JSON に保存する（事後解析用）。"""
 	labels = target_labels(entries)
 	payload = {
+		"scale": scale.value,
 		"entries": [
 			{
 				"label": label,
 				"fraction": entry.fraction,
+				"score": entry.score,
 				"mean": entry.mean,
 				"var": entry.var,
 				"scores": [float(v) for v in entry.scores],
@@ -269,10 +319,12 @@ def save_scores_json(entries: list[TargetScoreEntry], output_path: Path) -> None
 def analyze_attack_score_distribution(
 	entries: list[TargetScoreEntry],
 	output_dir: str | Path,
+	scale: ScoreScale,
 ) -> Path:
 	"""
 	スコア分布の図と scores.json を出力する。
 	分布図は全ターゲットで K>=2 のときのみ出力する（K=1 では分布が意味を持たない）。
+	横軸の範囲とラベルは scale（probability / log_odds）に応じて切り替える。
 
 	Returns:
 		scores.json のパス
@@ -281,11 +333,12 @@ def analyze_attack_score_distribution(
 	model_dir.mkdir(parents=True, exist_ok=True)
 
 	scores_path = model_dir / "scores.json"
-	save_scores_json(entries, scores_path)
+	save_scores_json(entries, scores_path, scale)
 
 	if entries and min(e.scores.size for e in entries) >= 2:
-		plot_overlay_histogram(entries, model_dir / "histogram_overlay.png")
-		plot_facet_histogram(entries, model_dir / "histogram_facet.png")
-		plot_violin(entries, model_dir / "violin.png")
+		axis = ScoreAxis.for_entries(entries, scale)
+		plot_overlay_histogram(entries, model_dir / "histogram_overlay.png", axis)
+		plot_facet_histogram(entries, model_dir / "histogram_facet.png", axis)
+		plot_violin(entries, model_dir / "violin.png", axis)
 
 	return scores_path

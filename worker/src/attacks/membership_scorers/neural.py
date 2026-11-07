@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 import src.core.config as cfg
 from src.attacks.analysis.attack_model_analysis import analyze_attack_model
+from src.attacks.membership_scorers.base import MembershipScore, ScoreScale
 from src.attacks.mia_attack import MIA_Attack
 from src.models.attack_model import AttackNet
 
@@ -16,6 +17,7 @@ class NeuralMembershipScorer:
 	"""AttackNet を IN/OUT 2 クラス分類として学習し、softmax の IN 列を IN 確率とする。"""
 
 	name = "neural"
+	score_scale = ScoreScale.PROBABILITY
 
 	def __init__(
 		self,
@@ -97,8 +99,8 @@ class NeuralMembershipScorer:
 		attack_model.eval()
 		self._model = attack_model
 
-	def score(self, feats: np.ndarray) -> np.ndarray:
-		"""feats: (K, C) → (K,) IN 確率"""
+	def score(self, feats: np.ndarray) -> MembershipScore:
+		"""feats: (K, C) → value: K 枚の IN 確率の平均, per_image: (K,) IN 確率"""
 		if self._model is None:
 			raise RuntimeError("NeuralMembershipScorer.fit must be called before score")
 		x = torch.from_numpy(np.ascontiguousarray(feats)).float().to(cfg.DEVICE)
@@ -107,7 +109,9 @@ class NeuralMembershipScorer:
 			# (K: 画像枚数, 2: OUT/IN) なので [:, 1] で IN のスコアを取得
 			# softmaxをとっているので IN のみで良い
 			probs = torch.softmax(attack_preds, dim=1)[:, 1]
-		return probs.cpu().numpy()
+		per_image = probs.cpu().numpy().astype(np.float64)
+		# K 枚を独立に推定しているため、集約は IN 確率の平均とする
+		return MembershipScore(value=float(per_image.mean()), per_image=per_image)
 
 	def diagnostics(self) -> dict[str, Any]:
 		return dict(self._diagnostics)
