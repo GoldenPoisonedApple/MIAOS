@@ -136,7 +136,7 @@ target_model = mia_class.train_target_model(lambda: TargetCNN())
 | 手法            | `attack()` 第2引数 `target_model` | `attack()` 戻り値                         | Phase 5 の主な成果物                                      |
 | ------------- | ------------------------------- | -------------------------------------- | --------------------------------------------------- |
 | LiRA / Shokri | `nn.Module`（単一）                 | `(np.ndarray, np.ndarray)` スコア配列・真値ラベル | `roc_curve.png`、`global_auc`、TPR@FPR 等               |
-| LF_MIA 系（`LfMia` / `LfMultMia` / `LfMultDiffMia`） | `list[nn.Module]`（24 体）          | `(list[float], list[float])` スコア・装飾適用率（各 24 要素）。`attack_score` は membership scorer が K 枚分を集約したスコア（`LfMia` は K=1）。スケールは `membership_score_scale` | `roc_curve.png`（ターゲット単位。fraction>0 を IN、fraction=0 を OUT）、`global_auc`、TPR@FPR 等、`attack_score` / `attack_fraction`。Phase 4 中に `roc_curve_all_scores.png`、`attack_score_distribution/`、`target_attacksign_output/`、`shadow_pair_effect/`、（`neural` のみ）`analyze_attack_model/` を出力 |
+| LF_MIA 系（`LfMia` / `LfMultMia` / `LfMultDiffMia`） | `list[nn.Module]`（24 体）          | `(list[float], list[float])` スコア・装飾適用率（各 24 要素）。`attack_score` は membership scorer が K 枚分を集約したスコア（`LfMia` は K=1）。スケールは `membership_score_scale` | `roc_curve.png`（ターゲット単位。fraction>0 を IN、fraction=0 を OUT）、`global_auc`、TPR@FPR 等、`attack_score` / `attack_fraction`。Phase 4 中に `roc_curve_all_scores.png`、`attack_score_distribution/`、`target_attacksign_output/`、`shadow_pair_effect/`、（`neural` のみ）`analyze_attack_model/`、（`neural_regularized` のみ）`neural_regularized_cv/` を出力 |
 
 
 ログ: `work_dir/execution.log` + stdout
@@ -555,6 +555,7 @@ Phase 5 の `comprehensive_evaluate` は `attack_score` と「fraction>0 を IN�
 | `attack_models.pth` | （`neural` のみ）攻撃モデル 1 体の `state_dict` |
 | `attack_model_init.pth` | （`neural` のみ）攻撃モデル訓練前の初期重み（`analyze_attack_model` の差分ベースライン） |
 | `analyze_attack_model/` | （`neural` のみ）攻撃モデル解析結果（重みヒートマップ・クラス重要度・入力感度等の PNG + `summary.json`） |
+| `neural_regularized_cv/` | （`neural_regularized` のみ）`trials.csv`（Optuna 全 trial）、`best_params.json`（最良 trial のハイパーパラメータと CV スコア）、`folds.json`（最良 trial の fold ごとのスコア・best epoch・ペア分割） |
 | `roc_curve.png` | ターゲット単位（`attack_score`）の ROC |
 | `roc_curve_all_scores.png` | 画像ごとのスコア（`per_image`）全体の ROC |
 | `attack_score_distribution/` | `scores.json`（全ターゲット）。K>=2 のときのみ `histogram_overlay.png` / `histogram_facet.png` / `violin.png` |
@@ -568,6 +569,7 @@ metrics には ROC 指標・`attack_score` / `attack_fraction` に加えて、`t
 | `membership_scorer` | キー |
 | ------------------- | ---- |
 | `neural` | `w1_relative_change`, `attack_model_train_acc` / `attack_model_train_loss` / `attack_model_train_in_acc` / `attack_model_train_out_acc` |
+| `neural_regularized` | `cv_objective`, `cv_score` / `cv_fold_mean` / `cv_fold_std`, `best_trial_number`, `best_lr` / `best_weight_decay` / `best_n_hidden` / `best_hidden_dim`（0 層時 `null`）/ `best_dropout`, `best_epoch_median`, `n_trials_completed` / `n_trials_pruned` |
 | `diagonal_lda` | `diagonal_lda_reg_lambda`, `diagonal_lda_w_norm`, `diagonal_lda_b` |
 | `flat_diagonal_lda` | `flat_diagonal_lda_reg_lambda`, `flat_diagonal_lda_variance`, `flat_diagonal_lda_w_norm`, `flat_diagonal_lda_b`, `flat_diagonal_lda_w_norm_per_image`（K 要素リスト） |
 | `gaussian_lr` | `gaussian_lr_variance`, `gaussian_lr_var_floor`, `gaussian_lr_floored_ratio_in` / `gaussian_lr_floored_ratio_out` |
@@ -683,12 +685,13 @@ Wilcoxon 等の統計単位は `n_pairs = num_shadow_models / 2` とする。
 
 ### Membership scorer（`attacks/membership_scorers/`）
 
-LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し、`build_membership_scorer(MembershipScorerConfig)` で生成する。`fit(in_feats, out_feats)` は `(n_pairs, K, C)`、`score(feats)` は `(K, C)` を受け取り `MembershipScore(value: float, per_image: (K,))` を返す。`score_scale`（`ScoreScale.PROBABILITY` / `LOG_ODDS`）は metrics の `membership_score_scale` として出力され、`attack_score` / `threshold_at_*` の単位を表す。
+LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し、`build_membership_scorer(MembershipScorerConfig, save_dir=, logger=, seed=)` で生成する（`seed` は `settings.seed`。`neural_regularized` の分割・探索・初期化に使う）。`fit(in_feats, out_feats)` は `(n_pairs, K, C)`、`score(feats)` は `(K, C)` を受け取り `MembershipScore(value: float, per_image: (K,))` を返す。`score_scale`（`ScoreScale.PROBABILITY` / `LOG_ODDS`）は metrics の `membership_score_scale` として出力され、`attack_score` / `threshold_at_*` の単位を表す。
 
 | モジュール | 内容 |
 | ---------- | ---- |
 | `base.py` | `MembershipScorer`（Protocol）, `MembershipScore`, `ScoreScale` |
 | `neural.py` | `NeuralMembershipScorer` |
+| `neural_regularized.py` | `NeuralRegularizedMembershipScorer`, `NeuralRegularizedSettings`, `CvObjective`, `train_with_early_stopping` |
 | `diagonal_lda.py` | `DiagonalLdaMembershipScorer`, 共通推定関数 `fit_diagonal_linear`, `DiagonalVariance` |
 | `flat_diagonal_lda.py` | `FlatDiagonalLdaMembershipScorer` |
 | `gaussian_lr.py` | `GaussianLrMembershipScorer`, `GaussianVariance` |
@@ -697,6 +700,7 @@ LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し�
 | `membership_scorer` | 手法 | `per_image` | `value` | `score_scale` |
 | ------------------- | ---- | ----------- | ------- | ------------- |
 | `neural`（既定） | `AttackNet` で画像ごとに IN/OUT 分類 | 画像ごとの IN 確率 | 平均 | `probability` |
+| `neural_regularized` | `BinaryAttackNet`（1 出力）をペア単位 k-fold CV + 早期停止 + Optuna で探索し、最良 trial の k 個の fold モデルをアンサンブル | 画像ごとの IN 確率（fold モデル平均） | 平均 | `probability` |
 | `diagonal_lda` | K 平均した特徴に対する対角 LDA（分母はペア差分の分散） | 画像ごとの logit | 平均 | `log_odds` |
 | `flat_diagonal_lda` | `(K·C)` に平坦化した対角 LDA（(k, c) ごとに独立な重み） | 画像ごとの寄与 `w_k·x_k + b/K` | 和 | `log_odds` |
 | `gaussian_lr` | (k, c) ごとに IN/OUT の正規分布を推定する尤度比検定（LiRA の拡張） | 画像ごとの対数尤度比の和 | 和 | `log_odds` |
@@ -711,6 +715,23 @@ LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し�
 | `gaussian_lr_var_floor` | `gaussian_lr` | `1e-3` | 分散の下限（logit 飽和で分散 0 になる次元への対策） |
 
 各クラスのシャドーが 1 本（`n_pairs=1`）のときは分散が定義できないため、分散を正則化項 / 下限のみとして動作する。
+
+#### `neural_regularized`
+
+1. ペア index に `KFold(n_splits=k, shuffle=True, random_state=seed)` を適用する。同じペアの IN / OUT は同じ側に入るため IN/OUT 比は常に 1:1（層化しない）。各 fold の学習側ペアから `round(n × val_ratio)` ペア（1 以上、学習側に 1 以上残す）を `RandomState(seed + fold)` で validation に回す。分割は全 trial で共通。
+2. Optuna（`TPESampler(seed)`, `MedianPruner(n_startup_trials=5, n_warmup_steps=1)`）で `n_trials` 回探索する。探索空間（固定）: `lr` 1e-5〜1e-3（log）、`weight_decay` 1e-5〜1e-1（log）、`n_hidden` {0, 1}、`hidden_dim` 8〜128（log, `n_hidden=1` のみ）、`dropout` 0〜0.5（`n_hidden=1` のみ）。
+3. 各 fold: 学習側で fit した z-score 標準化 → `BinaryAttackNet` を `BCEWithLogitsLoss` + AdamW（スケジューラなし）で学習。毎 epoch validation の目的指標（同値時は validation BCE が小さい方）で best を更新し、`patience` epoch 改善しなければ停止して best の重みを復元する（上限 `max_epochs`）。テスト fold の目的指標を記録し、それまでの平均を `trial.report` して枝刈り判定する。
+4. trial の値は `mean(fold 指標) − λ·std(fold 指標)`（std は母標準偏差）。最良値を更新した trial の k 個の fold モデルのみ保持する。
+5. `score(feats)`: k 個の fold モデルの画像ごとの IN 確率を平均して `per_image`、その平均を `value` とする。
+
+目的指標（`neural_regularized_objective`）:
+
+| 値 | 評価単位 | 指標 |
+| -- | -------- | ---- |
+| `auc`（既定） | シャドー単位（K 枚の IN 確率平均。ターゲットの `value` と同じ集約） | AUC |
+| `tpr_at_1_fpr` | 画像単位 | TPR@FPR=0.01（`MIA_Attack.get_tpr_and_threshold`） |
+
+`tpr_at_1_fpr` はテスト fold・validation の OUT 画像数（ペア数 × K）がいずれも 100 以上必要で、満たさない場合は `fit` 開始時に `ValueError`。`n_folds > n_pairs` も `ValueError`。最良 trial の CV スコアは選択バイアスで楽観側に偏るため、診断値として扱う。
 
 
 ### LiRA 共通モジュール（`mia_lira_common.py`）
@@ -749,6 +770,7 @@ Online LiRA の keep 行列は `dataset.build_online_lira_keep_matrix(num_shadow
 | ----------- | --------------------------------------- |
 | `TargetCNN` | CIFAR-100（3×32×32, 100 クラス）ターゲット・シャドウ共用 |
 | `AttackNet` | Shokri / LF_MIA 系（`membership_scorer=neural`）用 2 クラス MLP（`NUM_CLASSES` → 64 → 2） |
+| `BinaryAttackNet` | LF_MIA 系（`membership_scorer=neural_regularized`）用 1 出力（IN の logit）。隠れ層 0 層（`NUM_CLASSES` → 1）または 1 層（`NUM_CLASSES` → h → ReLU → Dropout → 1） |
 
 
 ---
@@ -839,7 +861,8 @@ LF_MIA 系で参照する主な定数（抜粋）:
 | `TARGET_ATTACKSIGN_OUTPUT_DIR` | `target_attacksign_output` | ターゲット透かし確率棒グラフ / `summary.json` の出力先 |
 | `SHADOW_PAIR_EFFECT_DIR` | `shadow_pair_effect` | シャドー IN/OUT ペア効果量解析 PNG / `summary.json` の出力先 |
 | `ATTACK_SCORE_DISTRIBUTION_DIR` | `attack_score_distribution` | ターゲットごとの画像ごとのスコア分布 PNG / `scores.json` の出力先 |
-| `ATTACK_MODEL_BATCH_SIZE` | `16` | `neural` スコアラーのバッチサイズ既定値 |
+| `NEURAL_REGULARIZED_CV_DIR` | `neural_regularized_cv` | `neural_regularized` の CV・探索結果の出力先 |
+| `ATTACK_MODEL_BATCH_SIZE` | `16` | `neural` / `neural_regularized` スコアラーのバッチサイズ既定値 |
 | `ATTACK_MODEL_EPOCHS` | `100` | `neural` スコアラーのエポック数既定値（Shokri は常にこの値） |
 | `SHADOW_PAIR_N_PERMUTATIONS` | `9999` | グローバル置換検定の反復回数 |
 | `ATTACK_MODEL_INIT_NAME` | `attack_model_init.pth` | 攻撃モデル初期重み（差分解析のベースライン） |
@@ -893,6 +916,7 @@ attacks/
     ├── __init__.py
     ├── base.py
     ├── neural.py
+    ├── neural_regularized.py
     ├── diagonal_lda.py
     ├── flat_diagonal_lda.py
     └── gaussian_lr.py

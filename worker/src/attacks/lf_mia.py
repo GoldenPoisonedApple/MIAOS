@@ -308,7 +308,10 @@ class LF_MIA(MIA_Attack):
 
 		# 攻撃モデルの訓練
 		scorer = build_membership_scorer(
-			config, save_dir=self.MODEL_SAVE_DIR, logger=self.logger
+			config,
+			save_dir=self.MODEL_SAVE_DIR,
+			logger=self.logger,
+			seed=int(self.settings.seed),
 		)
 		scorer.fit(in_feats, out_feats)
 		diagnostics = scorer.diagnostics()

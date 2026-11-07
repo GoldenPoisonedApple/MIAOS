@@ -17,8 +17,15 @@
 | `attack_decoration` | 装飾オブジェクト（`watermark` のみ） | なし | LF_MIA 系（**必須**） | `dataset.get_attack_watermark_dataloader` / `get_attack_composite_dataloaders` |
 | `attack_num_images` | int (>= 1) | なし | `LfMultMia` / `LfMultDiffMia`（**必須**） | `LF_Mult_MIA._num_images` |
 | `membership_scorer` | str | `neural` | LF_MIA 系 | `attacks/membership_scorers/__init__.py` |
-| `attack_model_batch_size` | int | `16`（`cfg.ATTACK_MODEL_BATCH_SIZE`） | LF_MIA 系（`membership_scorer=neural`） | 同上 |
+| `attack_model_batch_size` | int | `16`（`cfg.ATTACK_MODEL_BATCH_SIZE`） | LF_MIA 系（`membership_scorer=neural` / `neural_regularized`） | 同上 |
 | `attack_model_epochs` | int | `100`（`cfg.ATTACK_MODEL_EPOCHS`） | LF_MIA 系（`membership_scorer=neural`） | 同上 |
+| `neural_regularized_objective` | str | `auc` | LF_MIA 系（`neural_regularized`） | `attacks/membership_scorers/neural_regularized.py` |
+| `neural_regularized_n_folds` | int (>= 2, <= n_pairs) | `10` | 同上 | 同上 |
+| `neural_regularized_val_ratio` | float (0 < x < 1) | `0.2` | 同上 | 同上 |
+| `neural_regularized_n_trials` | int (>= 1) | `50` | 同上 | 同上 |
+| `neural_regularized_stability_lambda` | float (>= 0) | `0.5` | 同上 | 同上 |
+| `neural_regularized_patience` | int (>= 1) | `20` | 同上 | 同上 |
+| `neural_regularized_max_epochs` | int (>= 1) | `500` | 同上 | 同上 |
 | `diagonal_lda_reg_lambda` | float | `1e-3` | LF_MIA 系（`diagonal_lda` / `flat_diagonal_lda`） | 同上 |
 | `flat_diagonal_lda_variance` | str | `within_class` | LF_MIA 系（`flat_diagonal_lda`） | 同上 |
 | `gaussian_lr_variance` | str | `per_class` | LF_MIA 系（`gaussian_lr`） | 同上 |
@@ -109,6 +116,7 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
 | `membership_scorer` | 手法 | 使用するキー | スコアのスケール |
 | ------------------- | ---- | ------------ | ---------------- |
 | `neural` | `AttackNet` で画像ごとに IN/OUT を分類し、IN 確率を平均する | `attack_model_batch_size`, `attack_model_epochs` | `probability` |
+| `neural_regularized` | 1 出力 MLP をペア単位 k-fold CV + 早期停止 + Optuna で探索し、最良 trial の fold モデルのアンサンブルで画像ごとの IN 確率を平均する | `attack_model_batch_size`, `neural_regularized_*` | `probability` |
 | `diagonal_lda` | K 枚を平均した特徴に対する対角 LDA（分母はペア差分の分散） | `diagonal_lda_reg_lambda` | `log_odds` |
 | `flat_diagonal_lda` | `(K·C)` に平坦化した対角 LDA | `diagonal_lda_reg_lambda`, `flat_diagonal_lda_variance` | `log_odds` |
 | `gaussian_lr` | (k, c) ごとの正規分布による尤度比検定 | `gaussian_lr_variance`, `gaussian_lr_var_floor` | `log_odds` |
@@ -119,6 +127,20 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
 | | `pair_diff` | 重みの分母をペア差分 IN−OUT の分散にする。データ分割由来の分散がペア内で相殺される |
 | `gaussian_lr_variance` | `per_class`（既定） | IN / OUT で別々の分散を使う |
 | | `pooled` | IN / OUT の分散の平均を共通に使う（シャドーが少ないとき向け） |
+| `neural_regularized_objective` | `auc`（既定） | シャドー単位（K 枚の IN 確率平均）の AUC。CV の fold 指標と早期停止の監視に使う |
+| | `tpr_at_1_fpr` | 画像単位の TPR@FPR=0.01。テスト fold・validation の OUT 画像数（ペア数 × K）が 100 以上必要（満たさない場合 `ValueError`） |
+
+`neural_regularized` の各キー:
+
+| キー | 意味 |
+| ---- | ---- |
+| `neural_regularized_n_folds` | シャドーペア単位の k-fold の k。`n_pairs`（`num_shadow_models / 2`）を超えると `ValueError` |
+| `neural_regularized_val_ratio` | 各 fold の学習側ペアのうち早期停止用 validation に回す割合（最低 1 ペア） |
+| `neural_regularized_n_trials` | Optuna の試行回数（1 trial = k fold 分の学習。MedianPruner で枝刈りあり） |
+| `neural_regularized_stability_lambda` | trial のスコア `mean − λ·std`（fold 指標）の λ |
+| `neural_regularized_patience` / `neural_regularized_max_epochs` | 早期停止の猶予 epoch 数 / epoch 上限 |
+
+探索空間（`lr`, `weight_decay`, 隠れ層数 0〜1, 隠れ層幅, `dropout`）はコード定数で固定。詳細は `SPECIFICATION.md` の「`neural_regularized`」を参照。
 
 - 文字列の値は前後の空白を除き、小文字に正規化してから解釈する。取り得る値以外は `ValueError`。
 - スコアのスケールは metrics の `membership_score_scale` に出力され、`attack_score` / `threshold_at_*` の単位を表す。
@@ -138,6 +160,21 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
   "membership_scorer": "gaussian_lr",
   "gaussian_lr_variance": "per_class",
   "gaussian_lr_var_floor": 1e-3
+}
+```
+
+### `LfMultMia` + `neural_regularized`
+
+```json
+{
+  "target_train_decoration": {"type": "watermark", "filter_id": "circle"},
+  "shadow_decoration": {"type": "watermark", "filter_id": "circle", "fraction": 1.0},
+  "attack_decoration": {"type": "watermark", "filter_id": "circle"},
+  "attack_num_images": 100,
+  "membership_scorer": "neural_regularized",
+  "neural_regularized_objective": "tpr_at_1_fpr",
+  "neural_regularized_n_trials": 50,
+  "neural_regularized_stability_lambda": 0.5
 }
 ```
 

@@ -16,7 +16,8 @@ dependencies = [
   "minio",
   "boto3",
   "requests",
-  "python-dotenv"
+  "python-dotenv",
+  "optuna>=5.0.0",
 ]
 
 # --extraで指定
