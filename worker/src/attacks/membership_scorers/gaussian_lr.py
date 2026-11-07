@@ -98,6 +98,7 @@ class GaussianLrMembershipScorer:
 		x = np.asarray(feats, dtype=np.float64)
 		if x.shape != self._mu_in.shape:
 			raise ValueError(f"feats shape {x.shape} does not match {self._mu_in.shape}")
+
 		# 正規分布の対数尤度（定数項 -0.5*log(2π) は IN/OUT で相殺されるため省略）
 		ll_in = -0.5 * (np.log(self._var_in) + (x - self._mu_in) ** 2 / self._var_in)
 		ll_out = -0.5 * (np.log(self._var_out) + (x - self._mu_out) ** 2 / self._var_out)

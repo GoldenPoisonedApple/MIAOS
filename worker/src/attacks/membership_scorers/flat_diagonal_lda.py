@@ -52,6 +52,7 @@ class FlatDiagonalLdaMembershipScorer:
 			raise ValueError("in_feats and out_feats must have the same shape")
 		if in_feats.ndim != 3:
 			raise ValueError("in_feats and out_feats must be 3D (n_pairs, K, C)")
+
 		n_pairs, num_images, num_classes = in_feats.shape
 		# 平坦化: (n_pairs, K, C) -> (n_pairs, K*C)
 		in_flat = in_feats.reshape(n_pairs, -1)
@@ -68,6 +69,7 @@ class FlatDiagonalLdaMembershipScorer:
 		x = np.asarray(feats, dtype=np.float64)
 		if x.shape != self._w.shape:
 			raise ValueError(f"feats shape {x.shape} does not match {self._w.shape}")
+
 		num_images = self._w.shape[0]
 		# 画像ごとの寄与: w_k·x_k + b/K（バイアスは K 枚に等分し、和が w·vec(x) + b になるようにする）
 		contrib = (x * self._w).sum(axis=1) + self._b / num_images
