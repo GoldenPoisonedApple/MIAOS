@@ -37,6 +37,8 @@ ATTACK_MODEL_ANALYSIS_DIR: str = "analyze_attack_model"
 TARGET_ATTACKSIGN_OUTPUT_DIR: str = "target_attacksign_output"
 # シャドー IN/OUT ペア効果量解析結果の出力ディレクトリ名
 SHADOW_PAIR_EFFECT_DIR: str = "shadow_pair_effect"
+# LF_MIA 系ターゲットごとの攻撃スコア分布（K 枚分）の出力ディレクトリ名
+ATTACK_SCORE_DISTRIBUTION_DIR: str = "attack_score_distribution"
 # シャドー IN/OUT ペア効果量解析のグローバル置換検定の反復回数
 SHADOW_PAIR_N_PERMUTATIONS: int = 9999
 

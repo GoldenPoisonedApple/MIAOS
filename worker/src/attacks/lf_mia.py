@@ -12,6 +12,10 @@ from src.attacks.mia_attack import MIA_Attack
 from src.attacks.mia_lira_common import (
 	logit_scaling,
 )
+from src.attacks.analysis.attack_score_distribution import (
+	TargetScoreEntry,
+	analyze_attack_score_distribution,
+)
 from src.attacks.analysis.shadow_pair_effect_analysis import analyze_shadow_pair_effects
 from src.attacks.analysis.target_attack_sign_output import (
 	TargetAttackSignEntry,
@@ -331,13 +335,23 @@ class LF_MIA(MIA_Attack):
 			attack_fractions.append(fraction)
 
 		# attack_score / attack_fraction は comprehensive_evaluate が格納する
+		# attack_all_scores は値が多く DB に載せられないため、metrics ではなくファイルで出力する
 		self.metrics.update({
 			"membership_scorer": config.kind,
 			**diagnostics,
 			"attack_scores_vars": attack_scores_vars,
-			"attack_all_scores": attack_all_scores,
 			**self._extra_attack_metrics(),
 		})
+
+		# ターゲットごとの K 枚分のスコア分布の可視化
+		score_entries = [
+			TargetScoreEntry(fraction=fraction, scores=np.asarray(all_scores))
+			for fraction, all_scores in zip(attack_fractions, attack_all_scores, strict=True)
+		]
+		self._output_attack_score_distribution(score_entries)
+
+		# K 枚分のスコア全体での ROC（fraction>0 を IN、fraction=0 を OUT）
+		self._evaluate_all_scores_roc(score_entries)
 
 		# ターゲットモデルへの攻撃透かし入力結果の可視化
 		self._output_target_attack_sign_analysis(target_model)
@@ -369,18 +383,64 @@ class LF_MIA(MIA_Attack):
 		var = probs.var(unbiased=True).item() if probs.numel() > 1 else 0.0
 		return score, var, probs.tolist()
 
+	# ターゲットごとのスコア分布を可視化・保存
+	def _output_attack_score_distribution(self, entries: list[TargetScoreEntry]) -> None:
+		output_dir = os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_SCORE_DISTRIBUTION_DIR)
+		scores_path = analyze_attack_score_distribution(entries, output_dir)
+		self.logger.info(f"Attack score distribution saved -> {output_dir}")
+		self.logger.info(f"Attack score raw data -> {scores_path}")
+
+	# K 枚分のスコア全体での ROC 評価
+	def _evaluate_all_scores_roc(self, entries: list[TargetScoreEntry]) -> None:
+		# 各ターゲットの K 個のスコアに、そのターゲットのラベル（fraction>0 なら IN=1）を付けて展開
+		scores = np.concatenate([entry.scores for entry in entries])
+		trues = np.concatenate([
+			np.full(entry.scores.size, 1 if entry.is_in else 0) for entry in entries
+		])
+		roc_metrics, fpr, tpr, roc_auc = MIA_Attack.compute_roc_metrics(trues, scores)
+
+		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, "roc_curve_all_scores.png")
+		MIA_Attack.plot_roc_curve(
+			fpr,
+			tpr,
+			roc_auc,
+			roc_plot_path,
+			"LF MIA ROC Curve over all per-image scores (Log-Log Scale)",
+		)
+		self.logger.info(f"Saved all-scores ROC curve plot to: {roc_plot_path}")
+		self.log_roc_metrics(roc_metrics, header="--- Results (all per-image scores) ---")
+
+		# global_auc -> all_scores_auc, tpr_at_1_fpr -> all_scores_tpr_at_1_fpr ...
+		self.metrics.update({
+			"all_scores_auc": roc_metrics["global_auc"],
+			**{
+				f"all_scores_{key}": value
+				for key, value in roc_metrics.items()
+				if key != "global_auc"
+			},
+		})
 
 	# モデルの総合評価 オーバーライド
 	def comprehensive_evaluate(self, scores: list[float], trues: list[float]):
+		# trues には fraction が入る。fraction>0 を IN(1)、fraction=0 を OUT(0) とする
+		labels = [1 if fraction > 0 else 0 for fraction in trues]
+		roc_metrics, fpr, tpr, roc_auc = MIA_Attack.compute_roc_metrics(labels, scores)
+
+		# ------------- ROC曲線描画 -------------
+		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, "roc_curve.png")
+		MIA_Attack.plot_roc_curve(
+			fpr,
+			tpr,
+			roc_auc,
+			roc_plot_path,
+			"LF MIA ROC Curve over targets (Log-Log Scale)",
+		)
+		self.logger.info(f"Saved ROC curve plot to: {roc_plot_path}")
+		self.log_roc_metrics(roc_metrics, header="--- Results (per-target mean scores) ---")
+
 		self.metrics.update({
 			"attack_score": scores,
 			"attack_fraction": trues,
-			"global_auc": None,
-			"tpr_at_001_fpr": None,
-			"threshold_at_001_fpr": None,
-			"tpr_at_01_fpr": None,
-			"threshold_at_01_fpr": None,
-			"tpr_at_1_fpr": None,
-			"threshold_at_1_fpr": None,
+			**roc_metrics,
 		})
 		return self.metrics

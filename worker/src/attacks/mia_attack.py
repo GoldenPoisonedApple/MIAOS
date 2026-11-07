@@ -141,11 +141,88 @@ class MIA_Attack(ABC):
     # モデルの総合評価
     def comprehensive_evaluate(self, scores: np.ndarray, trues: np.ndarray):
 
+        roc_metrics, fpr, tpr, roc_auc = MIA_Attack.compute_roc_metrics(trues, scores)
+
         # ------------- ROC曲線描画 -------------
+        roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, "roc_curve.png")
+        MIA_Attack.plot_roc_curve(
+            fpr,
+            tpr,
+            roc_auc,
+            roc_plot_path,
+            "Membership Inference Attack ROC Curve (Log-Log Scale)",
+        )
+        self.logger.info(f"Saved ROC curve plot to: {roc_plot_path}")
+
+        # ------- 総合評価 -------
+        self.log_roc_metrics(roc_metrics, header="--- Results ---")
+
+        self.metrics.update(roc_metrics)
+        return self.metrics
+
+    # ROC 指標の計算
+    @staticmethod
+    def compute_roc_metrics(
+        trues, scores
+    ) -> tuple[dict[str, float], np.ndarray, np.ndarray, float]:
+        """
+        ROC 曲線と AUC、特定 FPR における TPR と閾値を計算する。
+        Args:
+                trues: 真値ラベル (1=IN, 0=OUT)
+                scores: 攻撃スコア（大きいほど IN）
+        Returns:
+                roc_metrics: global_auc, tpr_at_*_fpr, threshold_at_*_fpr
+                fpr, tpr: ROC 曲線
+                roc_auc: AUC
+        """
         # thresholds: 閾値(閾値より大きい場合は1(陽性)と判断)
         fpr, tpr, thresholds = roc_curve(trues, scores)
         roc_auc = auc(fpr, tpr)
 
+        tpr_at_1_fpr, threshold_at_1_fpr = MIA_Attack.get_tpr_and_threshold(
+            fpr, tpr, thresholds, 0.01
+        )
+        tpr_at_01_fpr, threshold_at_01_fpr = MIA_Attack.get_tpr_and_threshold(
+            fpr, tpr, thresholds, 0.001
+        )
+        tpr_at_001_fpr, threshold_at_001_fpr = MIA_Attack.get_tpr_and_threshold(
+            fpr, tpr, thresholds, 0.0001
+        )
+
+        roc_metrics = {
+            "global_auc": float(roc_auc),
+            "tpr_at_1_fpr": float(tpr_at_1_fpr),
+            "tpr_at_01_fpr": float(tpr_at_01_fpr),
+            "tpr_at_001_fpr": float(tpr_at_001_fpr),
+            "threshold_at_1_fpr": float(threshold_at_1_fpr),
+            "threshold_at_01_fpr": float(threshold_at_01_fpr),
+            "threshold_at_001_fpr": float(threshold_at_001_fpr),
+        }
+        return roc_metrics, fpr, tpr, float(roc_auc)
+
+    # ROC 指標のログ出力
+    def log_roc_metrics(self, roc_metrics: dict[str, float], header: str) -> None:
+        self.logger.info(header)
+        self.logger.info(f"Global AUC: {roc_metrics['global_auc']:.4f}")
+        self.logger.info(
+            f"TPR: {(roc_metrics['tpr_at_1_fpr'] * 100):.4f}% at 1.0% FPR, Threshold: {roc_metrics['threshold_at_1_fpr']:.4f}"
+        )
+        self.logger.info(
+            f"TPR: {(roc_metrics['tpr_at_01_fpr'] * 100):.4f}% at 0.1% FPR, Threshold: {roc_metrics['threshold_at_01_fpr']:.4f}"
+        )
+        self.logger.info(
+            f"TPR: {(roc_metrics['tpr_at_001_fpr'] * 100):.4f}% at 0.01% FPR, Threshold: {roc_metrics['threshold_at_001_fpr']:.4f}"
+        )
+
+    # ROC曲線描画 (Log-Log Scale)
+    @staticmethod
+    def plot_roc_curve(
+        fpr: np.ndarray,
+        tpr: np.ndarray,
+        roc_auc: float,
+        output_path: str,
+        title: str,
+    ) -> None:
         plt.figure(figsize=(8, 8))
         plt.plot(
             fpr,
@@ -178,49 +255,12 @@ class MIA_Attack(ABC):
         plt.ylim([1e-5, 1.05])
         plt.xlabel("False Positive Rate (FPR)")
         plt.ylabel("True Positive Rate (TPR)")
-        plt.title("Membership Inference Attack ROC Curve (Log-Log Scale)")
+        plt.title(title)
         plt.legend(loc="lower right")
         plt.grid(True, which="both", ls="--", alpha=0.5)
         # 保存
-        roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, "roc_curve.png")
-        plt.savefig(roc_plot_path, dpi=300, bbox_inches="tight")
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
-        self.logger.info(f"Saved ROC curve plot to: {roc_plot_path}")
-
-        # ------- 総合評価 -------
-        self.logger.info("--- Results ---")
-        self.logger.info(f"Global AUC: {roc_auc:.4f}")
-
-        tpr_at_1_fpr, threshold_at_1_fpr = MIA_Attack.get_tpr_and_threshold(
-            fpr, tpr, thresholds, 0.01
-        )
-        tpr_at_01_fpr, threshold_at_01_fpr = MIA_Attack.get_tpr_and_threshold(
-            fpr, tpr, thresholds, 0.001
-        )
-        tpr_at_001_fpr, threshold_at_001_fpr = MIA_Attack.get_tpr_and_threshold(
-            fpr, tpr, thresholds, 0.0001
-        )
-
-        self.logger.info(
-            f"TPR: {(tpr_at_1_fpr * 100):.4f}% at 1.0% FPR, Threshold: {threshold_at_1_fpr:.4f}"
-        )
-        self.logger.info(
-            f"TPR: {(tpr_at_01_fpr * 100):.4f}% at 0.1% FPR, Threshold: {threshold_at_01_fpr:.4f}"
-        )
-        self.logger.info(
-            f"TPR: {(tpr_at_001_fpr * 100):.4f}% at 0.01% FPR, Threshold: {threshold_at_001_fpr:.4f}"
-        )
-
-        self.metrics.update({
-            "global_auc": float(roc_auc),
-            "tpr_at_1_fpr": float(tpr_at_1_fpr),
-            "tpr_at_01_fpr": float(tpr_at_01_fpr),
-            "tpr_at_001_fpr": float(tpr_at_001_fpr),
-            "threshold_at_1_fpr": float(threshold_at_1_fpr),
-            "threshold_at_01_fpr": float(threshold_at_01_fpr),
-            "threshold_at_001_fpr": float(threshold_at_001_fpr),
-        })
-        return self.metrics
 
     # ==========================================
     # 以下、Utility関数
