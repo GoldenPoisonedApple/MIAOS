@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 import torch
@@ -9,17 +9,23 @@ from tqdm import trange
 
 import src.core.config as cfg
 from src.attacks.mia_attack import MIA_Attack
-from torch.utils.data import TensorDataset
-from torch.utils.data import DataLoader
-from src.models.attack_model import AttackNet
-from src.attacks.attack_model_analysis import analyze_attack_model
 from src.attacks.mia_lira_common import (
 	logit_scaling,
 )
-from src.attacks.shadow_pair_effect_analysis import analyze_shadow_pair_effects
-from src.attacks.target_attack_sign_output import (
+from src.attacks.analysis.attack_score_distribution import (
+	TargetScoreEntry,
+	analyze_attack_score_distribution,
+)
+from src.attacks.analysis.shadow_pair_effect_analysis import analyze_shadow_pair_effects
+from src.attacks.analysis.target_attack_sign_output import (
 	TargetAttackSignEntry,
 	analyze_target_attack_sign_output,
+)
+from src.attacks.membership_scorers import (
+	MembershipScore,
+	MembershipScorerConfig,
+	ScoreScale,
+	build_membership_scorer,
 )
 from src.data.dataset import dataset
 from src.data.decorations.config import with_fraction
@@ -29,7 +35,9 @@ from src.server_client.types import UNSET
 
 # LF_MIA 用ターゲットモデルの装飾適用率スイープ
 LF_MIA_TARGET_FRACTIONS = [
-	1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.01, 0.001, 0.0,
+	1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.01, 0.001,
+	# fraction=0.0 を複数学習する場合は初期化 RNG のみずらす（train_target_model 参照）
+	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 ]
 
 
@@ -145,6 +153,7 @@ class LF_MIA(MIA_Attack):
 		train_accs = []
 		test_accs = []
 
+		zero_run_idx = 0
 		for i in trange(len(LF_MIA_TARGET_FRACTIONS), desc="Target Models"):
 			fraction_value = LF_MIA_TARGET_FRACTIONS[i]
 			decoration_spec = with_fraction(base_spec, fraction_value)
@@ -156,7 +165,14 @@ class LF_MIA(MIA_Attack):
 			)
 
 			# fraction 間で初期重みを揃え、装飾サブセットの効果だけを比較可能にする
-			_reset_target_model_init_rng(int(self.settings.seed))
+			base_seed = int(self.settings.seed)
+			if fraction_value == 0.0:
+				# 1 本目の 0.0 は従来どおり base_seed。追加の 0.0 だけ初期化シードをずらす。
+				init_seed = base_seed + zero_run_idx
+				zero_run_idx += 1
+			else:
+				init_seed = base_seed
+			_reset_target_model_init_rng(init_seed)
 			target_model = model_factory().to(cfg.DEVICE)
 			target_model = MIA_Attack.train_model(
 				target_model, trainloader, self.settings.max_epochs
@@ -190,80 +206,31 @@ class LF_MIA(MIA_Attack):
 
 		return target_models
 
-	def from_request(self, settings: CreateExperimentRequest) -> tuple[int, int]:
-		hyperparameters = settings.hyperparameters
+	# 攻撃モデル（メンバシップ推定器）の設定取得
+	def _membership_scorer_config(self) -> MembershipScorerConfig:
+		hyperparameters = self.settings.hyperparameters
 		if hyperparameters is UNSET or hyperparameters is None:
-			return (cfg.ATTACK_MODEL_BATCH_SIZE, cfg.ATTACK_MODEL_EPOCHS)
-		hp = hyperparameters.to_dict()
-		return (
-			hp.get("attack_model_batch_size", cfg.ATTACK_MODEL_BATCH_SIZE),
-			hp.get("attack_model_epochs", cfg.ATTACK_MODEL_EPOCHS),
-		)
+			return MembershipScorerConfig()
+		return MembershipScorerConfig.from_hyperparameters(hyperparameters.to_dict())
 
-	def _train_attack_model(
-		self, attack_x: torch.Tensor, attack_y: torch.Tensor
-	) -> AttackNet:
-		"""攻撃モデルを訓練・保存し、重み解析結果を出力する。"""
-		attack_model_batch_size, attack_model_epochs = self.from_request(self.settings)
+	# モデルに対する特徴量抽出関数の構築（テンプレートメソッド。サブクラスで差し替える）
+	def _build_probe(self) -> Callable[[nn.Module], torch.Tensor]:
+		"""
+		1 モデルからプローブ特徴 (K, NUM_CLASSES) を返す callable を作る。
+		本クラスは黒背景に合成した攻撃用透かし 1 枚（K=1）を入力する。
+		"""
+		# 攻撃用透かし画像のデータローダー取得（黒背景に合成済みの1枚）
+		attack_watermark_loader = self.dataset.get_attack_watermark_dataloader()
 
-		# 攻撃モデルのデータセット作成
-		attack_dataset = TensorDataset(attack_x, attack_y)
-		attack_loader = DataLoader(
-			attack_dataset,
-			batch_size=attack_model_batch_size,
-			shuffle=True,
-			num_workers=0,
-			pin_memory=cfg.DEVICE.type == "cuda",
-		)
+		def probe(model: nn.Module) -> torch.Tensor:
+			preds, _ = MIA_Attack.get_predictions(model, attack_watermark_loader)
+			return logit_scaling(preds).float()	# なんとなくロジット変換 機械学習の時の前処理として変化は大きい方がいいかなと思って
 
-		# 攻撃モデルの作成
-		attack_model = AttackNet(input_dim=cfg.NUM_CLASSES).to(cfg.DEVICE)
-		# 初期重みを保存
-		init_attack_model = AttackNet(input_dim=cfg.NUM_CLASSES)
-		init_attack_model.load_state_dict(attack_model.state_dict()) # attack_modelの初期重みをinit_attack_modelにコピー
-		init_path = os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_INIT_NAME)
-		torch.save(init_attack_model.state_dict(), init_path)
-		self.logger.info(f"Attack Model (init) saved -> {init_path}")
+		return probe
 
-		# 攻撃モデルの訓練
-		attack_model = MIA_Attack.train_model(
-			attack_model, attack_loader, attack_model_epochs
-		)
-
-		# 攻撃モデルの保存
-		torch.save(
-			attack_model.state_dict(),
-			os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_NAME),
-		)
-		self.logger.info(
-			f"Attack Model saved -> {os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_NAME)}"
-		)
-
-		analysis_dir = os.path.join(
-			self.MODEL_SAVE_DIR, cfg.ATTACK_MODEL_ANALYSIS_DIR
-		)
-		# 攻撃モデルの内部表現解析（重み差分 + 学習データ上の到達度・入力感度）
-		analysis = analyze_attack_model(
-			attack_model,
-			analysis_dir,
-			init_model=init_attack_model,
-			attack_x=attack_x,
-			attack_y=attack_y,
-		)
-		self.logger.info(
-			f"Attack Model fit -> Acc: {analysis.fit.accuracy:.4f}, Loss: {analysis.fit.loss:.4f} "
-			f"(IN: {analysis.fit.in_accuracy}, OUT: {analysis.fit.out_accuracy}, N={analysis.fit.num_samples})"
-		)
-		self.logger.info(f"Attack Model analysis saved -> {analysis_dir}")
-		self.metrics.update({
-			"w1_relative_change": analysis.w1_relative_change,
-			"attack_model_train_acc": analysis.fit.accuracy,
-			"attack_model_train_loss": analysis.fit.loss,
-			"attack_model_train_in_acc": analysis.fit.in_accuracy,
-			"attack_model_train_out_acc": analysis.fit.out_accuracy,
-		})
-
-		return attack_model
+	# サブクラス固有の追加 metrics
+	def _extra_attack_metrics(self) -> dict[str, Any]:
+		return {}
 
 	# ターゲットモデルへの攻撃透かし入力結果を可視化・保存
 	def _output_target_attack_sign_analysis(
@@ -293,28 +260,27 @@ class LF_MIA(MIA_Attack):
 		self.logger.info(f"Target attack sign output saved -> {output_dir}")
 		self.logger.info(f"Target attack sign summary -> {summary_path}")
 
-	def _probe_shadow_feature(self, model: nn.Module, loader: DataLoader) -> np.ndarray:
-		"""1 シャドー → (NUM_CLASSES,) logit 特徴。attack 本体とは独立。"""
-		preds, _ = MIA_Attack.get_predictions(model, loader)
-		return logit_scaling(preds).squeeze(0).detach().cpu().numpy()
-
-	def _collect_shadow_pair_features(
-		self, shadow_models: list[nn.Module]
+	def _collect_shadow_features(
+		self,
+		shadow_models: list[nn.Module],
+		probe: Callable[[nn.Module], torch.Tensor],
 	) -> tuple[np.ndarray, np.ndarray]:
-		"""IN/OUT シャドーペアのプローブ特徴 (n_pairs, NUM_CLASSES) を返す。"""
-		loader = self.dataset.get_attack_watermark_dataloader()
+		"""IN/OUT シャドーのプローブ特徴 (n_pairs, K, NUM_CLASSES) を返す。シャドーは IN, OUT の順で半々。"""
 		num_in = int(self.settings.num_shadow_models / 2)
-		in_feats, out_feats = [], []
-		for i in range(num_in):
-			in_feats.append(self._probe_shadow_feature(shadow_models[i], loader))
-			out_feats.append(
-				self._probe_shadow_feature(shadow_models[i + num_in], loader)
-			)
+
+		def extract(model: nn.Module) -> np.ndarray:
+			feats = probe(model).detach().cpu().numpy()
+			model.to("cpu")  # GPUメモリ節約
+			return feats
+
+		in_feats = [extract(shadow_models[i]) for i in range(num_in)]
+		out_feats = [extract(shadow_models[i + num_in]) for i in range(num_in)]
 		return np.stack(in_feats), np.stack(out_feats)
 
-	def _run_shadow_pair_effect_analysis(self, shadow_models: list[nn.Module]) -> None:
-		"""シャドー IN/OUT ペアのクラス別装飾効果量解析を実行する。"""
-		in_features, out_features = self._collect_shadow_pair_features(shadow_models)
+	def _run_shadow_pair_effect_analysis(
+		self, in_features: np.ndarray, out_features: np.ndarray
+	) -> None:
+		"""シャドー IN/OUT ペアのクラス別装飾効果量解析を実行する。特徴は (n_pairs, NUM_CLASSES)。"""
 		output_dir = os.path.join(self.MODEL_SAVE_DIR, cfg.SHADOW_PAIR_EFFECT_DIR)
 		result = analyze_shadow_pair_effects(
 			in_features,
@@ -333,75 +299,158 @@ class LF_MIA(MIA_Attack):
 	def attack(
 		self, shadow_models: list[nn.Module], target_model: list[nn.Module]
 	) -> tuple[list[float], list[float]]:
-		# 攻撃用透かし画像のデータローダー取得（黒背景に合成済みの1枚）
-		attack_watermark_loader = self.dataset.get_attack_watermark_dataloader()
-  
-		# 特徴量抽出
-		in_preds = []
-		for i in range(int(self.settings.num_shadow_models / 2)):
-			shadow_model = shadow_models[i]
-			preds, _ = MIA_Attack.get_predictions(shadow_model, attack_watermark_loader)
-			preds = logit_scaling(preds).float()	# なんとなくロジット変換 機械学習の時の前処理として変化は大きい方がいいかなと思って
-			in_preds.append(preds)
-			
-		out_preds = []
-		for i in range(int(self.settings.num_shadow_models / 2)):
-			shadow_model = shadow_models[i + int(self.settings.num_shadow_models / 2)]
-			preds, _ = MIA_Attack.get_predictions(shadow_model, attack_watermark_loader)
-			preds = logit_scaling(preds).float()	# なんとなくロジット変換 機械学習の時の前処理として変化は大きい方がいいかなと思って
-			out_preds.append(preds)
-			
-		# ラベル作成
-		in_labels = torch.ones(len(in_preds), dtype=torch.long)
-		out_labels = torch.zeros(len(out_preds), dtype=torch.long)
+		config = self._membership_scorer_config()
+		self.logger.info(f"Membership scorer={config.kind}")
+		probe = self._build_probe()
 
-		# 結合
-		attack_x = torch.cat(in_preds + out_preds)
-		attack_y = torch.cat([in_labels, out_labels])
-  
+		# 特徴量抽出: (n_pairs, K, C)
+		in_feats, out_feats = self._collect_shadow_features(shadow_models, probe)
+
 		# 攻撃モデルの訓練
-		attack_model = self._train_attack_model(attack_x, attack_y)
+		scorer = build_membership_scorer(
+			config,
+			save_dir=self.MODEL_SAVE_DIR,
+			logger=self.logger,
+			seed=int(self.settings.seed),
+		)
+		scorer.fit(in_feats, out_feats)
+		diagnostics = scorer.diagnostics()
+		self.logger.info(f"Membership scorer diagnostics -> {diagnostics}")
 
 		# ------------- 攻撃 -------------
-		attack_scores: list[float] = []
+		attack_scores: list[float] = []  # スコアラーが K 枚分を集約したスコア
+		attack_scores_vars: list[float] = []  # K 枚の画像ごとのスコアの標本分散（K=1 では 0）
+		attack_all_scores: list[list[float]] = []  # K 枚それぞれの画像ごとのスコア（ターゲットごと）
 		attack_fractions: list[float] = []
 		for fraction, single_target_model in zip(LF_MIA_TARGET_FRACTIONS, target_model, strict=True):
-			# ターゲットモデルの予測結果
-			target_preds, _ = MIA_Attack.get_predictions(
-				single_target_model, attack_watermark_loader
-			)
-			target_preds = logit_scaling(target_preds).float()	# データセットと同じ前処理
+			# ターゲットモデルの特徴量（シャドーと同じ前処理）
+			target_feats = probe(single_target_model).detach().cpu().numpy()
+			single_target_model.to("cpu")  # GPUメモリ節約
 
 			# 攻撃モデルで予測
-			with torch.no_grad():
-				attack_preds = attack_model(target_preds.to(cfg.DEVICE))
-				# (1: 画像1枚分, 2: OUT/IN) なので [:, 1] で IN のスコアを取得
-				# softmaxをとっているので IN のみで良い
-				score = torch.softmax(attack_preds, dim=1)[:, 1].cpu().item()
+			result = scorer.score(target_feats)
+			score, var, all_scores = LF_MIA.aggregate_scores(result) # 集約スコア, 画像ごとのスコアの標本分散, 全値のリスト
+			self.logger.info(
+				f"Target fraction={fraction} -> score={score:.4f}, var={var:.6f}"
+			)
 
 			attack_scores.append(score)
+			attack_scores_vars.append(var)
+			attack_all_scores.append(all_scores)
 			attack_fractions.append(fraction)
+
+		# attack_score / attack_fraction は comprehensive_evaluate が格納する
+		# attack_all_scores は値が多く DB に載せられないため、metrics ではなくファイルで出力する
+		self.metrics.update({
+			"membership_scorer": config.kind,
+			# attack_score や threshold_at_* の単位（probability / log_odds）
+			"membership_score_scale": scorer.score_scale.value,
+			**diagnostics,
+			"attack_scores_vars": attack_scores_vars,
+			**self._extra_attack_metrics(),
+		})
+
+		# ターゲットごとの K 枚分のスコア分布の可視化
+		score_entries = [
+			TargetScoreEntry(fraction=fraction, score=score, scores=np.asarray(all_scores))
+			for fraction, score, all_scores in zip(
+				attack_fractions, attack_scores, attack_all_scores, strict=True
+			)
+		]
+		self._output_attack_score_distribution(score_entries, scorer.score_scale)
+
+		# K 枚分のスコア全体での ROC（fraction>0 を IN、fraction=0 を OUT）
+		self._evaluate_all_scores_roc(score_entries)
 
 		# ターゲットモデルへの攻撃透かし入力結果の可視化
 		self._output_target_attack_sign_analysis(target_model)
 
 		# シャドー IN/OUT ペアのクラス別装飾効果量解析（既存攻撃結果には影響しない）
-		self._run_shadow_pair_effect_analysis(shadow_models)
+		# K 枚平均でペアあたり 1 ベクトルにする（再推論はしない）
+		self._run_shadow_pair_effect_analysis(in_feats.mean(axis=1), out_feats.mean(axis=1))
 
 		return attack_scores, attack_fractions
 
+	# K 枚分のスコアを集約
+	@staticmethod
+	def aggregate_scores(result: MembershipScore) -> tuple[float, float, list[float]]:
+		"""
+		スコアラーの出力から、集約スコア・画像ごとのスコアの分散・全値を取り出す。
+		集約方法（平均 / 和）はスコアラーの責務であり、ここでは再集約しない。
+		Args:
+				result: スコアラーの出力（value: 集約スコア, per_image: 画像ごとのスコア (K,)）
+		Returns:
+				score: 集約スコア（スケールは scorer.score_scale）
+				var: 画像ごとのスコアの標本分散（K=1 のときは 0.0）
+				all_scores: 画像ごとのスコアの全値のリスト（別の集約は事後計算する）
+		"""
+		# detach: 計算グラフから切り離す: メタデータ削除（per_image は numpy のため不要）
+		# float: 浮動小数点数に変換（np.float64 に変換）
+		# flatten: 1次元に平坦化
+		per_image = np.asarray(result.per_image, dtype=np.float64).flatten()
+		# K=1 では unbiased 分散が NaN になるため 0.0 とする（MembershipScore.per_image_var）
+		return float(result.value), result.per_image_var, per_image.tolist()
+
+	# ターゲットごとのスコア分布を可視化・保存
+	def _output_attack_score_distribution(
+		self, entries: list[TargetScoreEntry], scale: ScoreScale
+	) -> None:
+		output_dir = os.path.join(self.MODEL_SAVE_DIR, cfg.ATTACK_SCORE_DISTRIBUTION_DIR)
+		scores_path = analyze_attack_score_distribution(entries, output_dir, scale)
+		self.logger.info(f"Attack score distribution saved -> {output_dir}")
+		self.logger.info(f"Attack score raw data -> {scores_path}")
+
+	# K 枚分のスコア全体での ROC 評価
+	def _evaluate_all_scores_roc(self, entries: list[TargetScoreEntry]) -> None:
+		# 各ターゲットの K 個のスコアに、そのターゲットのラベル（fraction>0 なら IN=1）を付けて展開
+		scores = np.concatenate([entry.scores for entry in entries])
+		trues = np.concatenate([
+			np.full(entry.scores.size, 1 if entry.is_in else 0) for entry in entries
+		])
+		roc_metrics, fpr, tpr, roc_auc = MIA_Attack.compute_roc_metrics(trues, scores)
+
+		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, "roc_curve_all_scores.png")
+		MIA_Attack.plot_roc_curve(
+			fpr,
+			tpr,
+			roc_auc,
+			roc_plot_path,
+			"LF MIA ROC Curve over all per-image scores (Log-Log Scale)",
+		)
+		self.logger.info(f"Saved all-scores ROC curve plot to: {roc_plot_path}")
+		self.log_roc_metrics(roc_metrics, header="--- Results (all per-image scores) ---")
+
+		# global_auc -> all_scores_auc, tpr_at_1_fpr -> all_scores_tpr_at_1_fpr ...
+		self.metrics.update({
+			"all_scores_auc": roc_metrics["global_auc"],
+			**{
+				f"all_scores_{key}": value
+				for key, value in roc_metrics.items()
+				if key != "global_auc"
+			},
+		})
 
 	# モデルの総合評価 オーバーライド
 	def comprehensive_evaluate(self, scores: list[float], trues: list[float]):
+		# trues には fraction が入る。fraction>0 を IN(1)、fraction=0 を OUT(0) とする
+		labels = [1 if fraction > 0 else 0 for fraction in trues]
+		roc_metrics, fpr, tpr, roc_auc = MIA_Attack.compute_roc_metrics(labels, scores)
+
+		# ------------- ROC曲線描画 -------------
+		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, "roc_curve.png")
+		MIA_Attack.plot_roc_curve(
+			fpr,
+			tpr,
+			roc_auc,
+			roc_plot_path,
+			"LF MIA ROC Curve over targets (Log-Log Scale)",
+		)
+		self.logger.info(f"Saved ROC curve plot to: {roc_plot_path}")
+		self.log_roc_metrics(roc_metrics, header="--- Results (per-target mean scores) ---")
+
 		self.metrics.update({
 			"attack_score": scores,
 			"attack_fraction": trues,
-			"global_auc": None,
-			"tpr_at_001_fpr": None,
-			"threshold_at_001_fpr": None,
-			"tpr_at_01_fpr": None,
-			"threshold_at_01_fpr": None,
-			"tpr_at_1_fpr": None,
-			"threshold_at_1_fpr": None,
+			**roc_metrics,
 		})
 		return self.metrics
