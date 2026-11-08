@@ -38,6 +38,7 @@ class LabeledSamples:
 	学習・評価用に展開した画像単位のサンプル。
 	x: (n_groups * K, C), y: (n_groups * K,) IN=1 / OUT=0。
 	同じシャドー（グループ）の K 枚は連続して並ぶ。
+	images_per_group: シャドー1つの合成画像枚数, = K
 	"""
 
 	x: np.ndarray
@@ -50,10 +51,14 @@ class LabeledSamples:
 
 	def group_scores(self, probs: np.ndarray) -> np.ndarray:
 		"""画像ごとの IN 確率をシャドーごとに平均する（ターゲットの value と同じ集約）"""
-		return probs.reshape(-1, self.images_per_group).mean(axis=1)
+		# 画像方向平均
+		return probs.reshape(-1, self.images_per_group).mean(axis=1)	# (2*len(pair_idx)*K, ) -> (2*len(pair_idx), K) -> (2*len(pair_idx),)
 
 	def group_labels(self) -> np.ndarray:
-		return self.y.reshape(-1, self.images_per_group)[:, 0]
+		# [:, 0]: 2次元目の最初の要素のみ取り出す
+		# 各シャドーの最初の画像のラベルだけ取り出す
+		# そのシャドーの正解ラベルは1個あればいい(全部同じなので)ので代表として最初の1つとってる
+		return self.y.reshape(-1, self.images_per_group)[:, 0]	# (2*len(pair_idx)*K, ) -> (2*len(pair_idx), K) -> (2*len(pair_idx),)
 
 
 @dataclass(frozen=True)
@@ -74,6 +79,7 @@ class PairedShadowFeatures:
 	def n_pairs(self) -> int:
 		return int(self.in_feats.shape[0])
 
+	# 1shadowの合成画像枚数
 	@property
 	def images_per_shadow(self) -> int:
 		return int(self.in_feats.shape[1])
@@ -85,7 +91,7 @@ class PairedShadowFeatures:
 	def subset(self, pair_idx: np.ndarray) -> LabeledSamples:
 		"""指定ペアの IN シャドー群・OUT シャドー群を画像単位に展開する（IN, OUT の順）"""
 		c = self.num_classes
-		in_x = self.in_feats[pair_idx].reshape(-1, c)
+		in_x = self.in_feats[pair_idx].reshape(-1, c)	# (pair, K, C) -> (len(pair_idx), K, C) -> (len(pair_idx)*K, C)
 		out_x = self.out_feats[pair_idx].reshape(-1, c)
 		x = np.ascontiguousarray(np.concatenate([in_x, out_x]), dtype=np.float32)
 		y = np.concatenate([np.ones(in_x.shape[0]), np.zeros(out_x.shape[0])]).astype(np.float32)
@@ -107,12 +113,14 @@ class CvObjective(str, Enum):
 			return TPR_AT_1_FPR_MIN_OUT_IMAGES
 		return 1
 
+	# probs: (2*len(pair_idx)*K, )
+	# samples: テストデータ
 	def evaluate(self, probs: np.ndarray, samples: LabeledSamples) -> float:
 		"""probs: 画像ごとの IN 確率 (N,)。評価単位の違いはここに閉じ込める"""
 		if self is CvObjective.AUC:
-			return float(roc_auc_score(samples.group_labels(), samples.group_scores(probs)))
+			return float(roc_auc_score(samples.group_labels(), samples.group_scores(probs)))	# ROC-AUCスコア計算
 		fpr, tpr, thresholds = roc_curve(samples.y, probs)
-		tpr_at, _ = MIA_Attack.get_tpr_and_threshold(fpr, tpr, thresholds, TPR_AT_1_FPR_TARGET)
+		tpr_at, _ = MIA_Attack.get_tpr_and_threshold(fpr, tpr, thresholds, TPR_AT_1_FPR_TARGET)		# FPRか1%の時のTPR計算
 		return float(tpr_at)
 
 
@@ -192,6 +200,7 @@ class FeatureStandardizer:
 	mean: np.ndarray
 	std: np.ndarray
 
+	# x: (2*len(pair_idx)*K, C) 最初の次元方向へのz-score
 	@classmethod
 	def fit(cls, x: np.ndarray) -> "FeatureStandardizer":
 		mean = x.mean(axis=0)
@@ -199,6 +208,7 @@ class FeatureStandardizer:
 		std = np.where(std > 0, std, 1.0)
 		return cls(mean=mean.astype(np.float32), std=std.astype(np.float32))
 
+	# 計算したmeanとstdを使ってxを標準化
 	def transform(self, x: np.ndarray) -> np.ndarray:
 		return ((x - self.mean) / self.std).astype(np.float32)
 
@@ -235,42 +245,51 @@ def train_with_early_stopping(
 	torch.manual_seed(seed)
 	generator = torch.Generator().manual_seed(seed)
 
+	# z-score 標準化
 	standardizer = FeatureStandardizer.fit(train.x)
+
 	train_x = torch.from_numpy(standardizer.transform(train.x)).to(cfg.DEVICE)
 	train_y = torch.from_numpy(train.y).to(cfg.DEVICE)
 	val_x = torch.from_numpy(standardizer.transform(val.x)).to(cfg.DEVICE)
 	val_y = torch.from_numpy(val.y).to(cfg.DEVICE)
 
+	# モデル作成
 	model = BinaryAttackNet(
 		input_dim=train.x.shape[1], hidden_dim=params.hidden_dim, dropout=params.dropout
 	).to(cfg.DEVICE)
-	criterion = nn.BCEWithLogitsLoss()
-	optimizer = torch.optim.AdamW(model.parameters(), lr=params.lr, weight_decay=params.weight_decay)
+	criterion = nn.BCEWithLogitsLoss() # 損失関数 内部でシグモイド関数通したあとBCE(Binary Cross Entropy)計算する関数
+	optimizer = torch.optim.AdamW(model.parameters(), lr=params.lr, weight_decay=params.weight_decay)	# モデルパラメータの参照, 学習設定
 
-	n_train = train_x.shape[0]
+	n_train = train_x.shape[0] # 学習データ数: (2*len(pair_idx)*K, C) -> 2*len(pair_idx)*K
 	best_key: tuple[float, float] | None = None
 	best_state: dict[str, torch.Tensor] = {}
 	best_epoch = 0
 	epochs_without_improvement = 0
+	# 学習
 	for epoch in range(settings.max_epochs):
-		model.train()
-		# データが小さいため DataLoader を使わず、デバイス上でシャッフルしてミニバッチを切り出す
-		perm = torch.randperm(n_train, generator=generator).to(cfg.DEVICE)
-		for start in range(0, n_train, settings.batch_size):
-			batch = perm[start:start + settings.batch_size]
-			optimizer.zero_grad()
-			loss = criterion(model(train_x[batch]), train_y[batch])
-			loss.backward()
-			optimizer.step()
+		# 学習
+		model.train()	# 学習モード
+		# データが小さいため DataLoader を使わず、デバイス上でシャッフルしてミニバッチを切り出す、学習のデータ順をシャッフルする
+		perm = torch.randperm(n_train, generator=generator).to(cfg.DEVICE)	# randperm: 0～n_train-1までの整数をランダムに並べた配列作成
+		for start in range(0, n_train, settings.batch_size): 	# range(start, end, step)
+			batch = perm[start:start + settings.batch_size]		# batch_size分だけ使うデータのインデックスをとる
+			optimizer.zero_grad()	# 前回の勾配を消す
+			loss = criterion(model(train_x[batch]), train_y[batch]) # forwardの結果とラベルから損失計算
+			loss.backward()			# 損失から勾配計算
+			optimizer.step()		# 勾配から重み更新
 
-		model.eval()
+		# この学習の評価
+		model.eval()	# 評価モード
 		with torch.no_grad():
 			val_logits = model(val_x)
-			val_loss = float(criterion(val_logits, val_y).item())
+			val_loss = float(criterion(val_logits, val_y).item())	# 枚数分から平均した損失
 			val_probs = torch.sigmoid(val_logits).cpu().numpy().astype(np.float64)
+   
+		# スコア計算
 		val_metric = settings.objective.evaluate(val_probs, val)
+  
 		# 目的指標を主、validation BCE を副（小さいほど良いので符号反転）とした辞書式比較
-		key = (val_metric, -val_loss)
+		key = (val_metric, -val_loss)	# 1つ目が同じ場合は2つ目で比較
 		if best_key is None or key > best_key:
 			best_key = key
 			best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
@@ -278,9 +297,11 @@ def train_with_early_stopping(
 			epochs_without_improvement = 0
 		else:
 			epochs_without_improvement += 1
+			# early stopping
 			if epochs_without_improvement >= settings.patience:
 				break
 
+	# 最もよかったモデルを出力
 	model.load_state_dict(best_state)
 	model.eval()
 	return FoldModel(standardizer=standardizer, model=model, best_epoch=best_epoch)
@@ -351,20 +372,22 @@ class NeuralRegularizedMembershipScorer:
 	def fit(self, in_feats: np.ndarray, out_feats: np.ndarray) -> None:
 		"""in_feats, out_feats: (n_pairs, K, C)。K 枚それぞれを独立した学習サンプルとして展開する。"""
 		data = PairedShadowFeatures(in_feats=in_feats, out_feats=out_feats)
-		splits = self._make_splits(data)
+		splits = self._make_splits(data)	# K-fold用にpairを train/validation/testに分割
 		self._validate_splits(data, splits)
 
 		self._best = None
 		optuna.logging.set_verbosity(optuna.logging.WARNING)
 		study = optuna.create_study(
 			direction="maximize",
-			sampler=optuna.samplers.TPESampler(seed=self.seed),
-			pruner=optuna.pruners.MedianPruner(
+			sampler=optuna.samplers.TPESampler(seed=self.seed),	# 探し方
+			pruner=optuna.pruners.MedianPruner(					# 枝狩り これまで終了したtrialの中央値より悪ければその探索、trialは打ち切り
+                # 最初のPRUNER_N_STARTUP_TRIALS回のtrialは打ち切らない、trial内でPRUNER_N_WARMUP_STEPSステップは打ち切らない
 				n_startup_trials=PRUNER_N_STARTUP_TRIALS, n_warmup_steps=PRUNER_N_WARMUP_STEPS
 			),
 		)
+		# trialを変化させて _run_trialの戻り値で評価、探索
 		study.optimize(
-			lambda trial: self._run_trial(trial, data, splits), n_trials=self.settings.n_trials
+			lambda trial: self._run_trial(trial, data, splits), n_trials=self.settings.n_trials	# n_trials: 最大探索回数
 		)
 		if self._best is None:
 			raise RuntimeError("neural_regularized: no trial completed")
@@ -376,9 +399,11 @@ class NeuralRegularizedMembershipScorer:
 		"""feats: (K, C) → value: K 枚の IN 確率の平均, per_image: (K,) fold モデルのアンサンブル IN 確率"""
 		if self._best is None:
 			raise RuntimeError("NeuralRegularizedMembershipScorer.fit must be called before score")
-		x = np.ascontiguousarray(feats, dtype=np.float32)
+
+		x = np.ascontiguousarray(feats, dtype=np.float32)	# float32に変換、メモリ上の連続した位置に配置
+		# CV bagging: 最もスコアが良かったtrialのk-foldの複数のモデルをそのままアンサンブルして推論に使用
 		per_image = np.mean([m.predict_proba(x) for m in self._best.fold_models], axis=0)
-		# K 枚を独立に推定しているため、集約は IN 確率の平均とする
+		# スコアは平均とする
 		return MembershipScore(value=float(per_image.mean()), per_image=per_image)
 
 	def diagnostics(self) -> dict[str, Any]:
@@ -393,10 +418,13 @@ class NeuralRegularizedMembershipScorer:
 		# 同じペアの IN / OUT は同じ側に入るため、IN/OUT 比はどの集合でも 1:1（層化不要）
 		kfold = KFold(n_splits=self.settings.n_folds, shuffle=True, random_state=self.seed)
 		splits: list[PairSplit] = []
+		# ここにおけるindexはpairsのindex
+		# np.arrange: 0～n-1までの整数配列作成, 例: 4 -> [0, 1, 2, 3]
+		# Kfold.split: 配列を分割
 		for fold, (train_val_idx, test_idx) in enumerate(kfold.split(np.arange(data.n_pairs))):
-			rng = np.random.RandomState(self.seed + fold)
-			shuffled = rng.permutation(train_val_idx)
-			n_val = self.settings.num_val_pairs(len(train_val_idx))
+			rng = np.random.RandomState(self.seed + fold) 	# fold毎にシード変更 validations用シャッフルをfold間で独立に
+			shuffled = rng.permutation(train_val_idx)		# permutation: 配列内のエントリをランダムに入れ替える
+			n_val = self.settings.num_val_pairs(len(train_val_idx))	# validationに回す個数取得
 			splits.append(PairSplit(
 				fold=fold,
 				train_idx=np.sort(shuffled[n_val:]),
@@ -417,25 +445,30 @@ class NeuralRegularizedMembershipScorer:
 				f"({min_pairs} pairs x K={data.images_per_shadow})"
 			)
 
+	# 試行をしてスコアを返す
 	def _run_trial(
 		self, trial: optuna.Trial, data: PairedShadowFeatures, splits: list[PairSplit]
 	) -> float:
-		params = ArchitectureParams.from_trial(trial)
+		params = ArchitectureParams.from_trial(trial)	# optunaのサンプラーによってパラメータ決定
 		fold_scores: list[float] = []
 		fold_models: list[FoldModel] = []
+		# K-fold
 		for split in splits:
+			# 学習
 			fold_model = train_with_early_stopping(
 				params,
 				data.subset(split.train_idx),
 				data.subset(split.val_idx),
 				self.settings,
-				seed=self.seed + trial.number * self.settings.n_folds + split.fold,
+				seed=self.seed + trial.number * self.settings.n_folds + split.fold,	# 全てのtrailの全てのfoldで独立になるように
 			)
+			# 汎化性能評価
 			test = data.subset(split.test_idx)
 			fold_scores.append(self.settings.objective.evaluate(fold_model.predict_proba(test.x), test))
 			fold_models.append(fold_model)
 
-			trial.report(float(np.mean(fold_scores)), step=split.fold)
+			# trial途中打ち切り
+			trial.report(float(np.mean(fold_scores)), step=split.fold)	# 評価平均値報告
 			if trial.should_prune():
 				self.logger.info(
 					f"neural_regularized trial {trial.number} pruned at fold {split.fold} "
