@@ -132,6 +132,19 @@ def global_permutation_pvalue(
 	return float((count + 1) / (n_permutations + 1))
 
 
+def class_wilcoxon_pvalues(samples: np.ndarray) -> np.ndarray:
+	"""クラス別の両側 Wilcoxon 符号順位検定（0 に対する）の p 値 (n_classes,)。検定不能は NaN。
+
+	paired 検定ではペア差分を、1 標本検定では値そのものを (n, n_classes) で渡す。
+	"""
+	n, n_classes = samples.shape
+	p_values = np.full(n_classes, np.nan)
+	for c in range(n_classes):
+		p = _wilcoxon_pvalue(samples[:, c], n)
+		p_values[c] = p if p is not None else np.nan
+	return p_values
+
+
 def compute_class_stats(
 	in_features: np.ndarray,
 	out_features: np.ndarray,
@@ -139,16 +152,15 @@ def compute_class_stats(
 ) -> tuple[list[ClassEffectStats], np.ndarray, list[int], list[int]]:
 	"""クラス別統計量と有意クラス ID リストを返す。"""
 	diffs = _pair_diffs(in_features, out_features)
-	n_pairs, n_classes = diffs.shape
+	n_classes = diffs.shape[1]
 	mean_diffs = np.mean(diffs, axis=0)
 
 	stats: list[ClassEffectStats] = []
-	p_values = np.full(n_classes, np.nan)
+	p_values = class_wilcoxon_pvalues(diffs)
 
 	for c in range(n_classes):
 		col = diffs[:, c]
-		p = _wilcoxon_pvalue(col, n_pairs)
-		p_values[c] = p if p is not None else np.nan
+		p = float(p_values[c]) if np.isfinite(p_values[c]) else None
 		stats.append(
 			ClassEffectStats(
 				mean_diff=float(mean_diffs[c]),
@@ -186,12 +198,29 @@ def plot_wilcoxon_neglog10_p_bar(
 ) -> None:
 	"""Wilcoxon p 値の -log10 棒グラフ（Bonferroni / BH-FDR 閾値線付き）。"""
 	n_classes = len(mean_diffs)
+	fig, ax = plt.subplots(figsize=(16, 5))
+	draw_neglog10_p_bar(ax, mean_diffs, p_values, alpha, fdr_threshold_p)
+	ax.set_title(f"Wilcoxon signed-rank p-values (all {n_classes} classes, valid only)")
+	fig.tight_layout()
+	fig.savefig(output_path, dpi=300, bbox_inches="tight")
+	plt.close(fig)
+
+
+def draw_neglog10_p_bar(
+	ax: plt.Axes,
+	mean_diffs: np.ndarray,
+	p_values: np.ndarray,
+	alpha: float,
+	fdr_threshold_p: float | None,
+	ylabel: str = "-log10(wilcoxon_p)",
+) -> None:
+	"""ax に Wilcoxon p 値の -log10 棒（平均の符号で色分け）と Bonferroni / BH-FDR 閾値線を描く。"""
+	n_classes = len(mean_diffs)
 	class_ids = np.arange(n_classes)
 	neglog10 = _neglog10_p(p_values)
 	valid = np.isfinite(neglog10)
 	colors = np.where(mean_diffs >= 0, "indianred", "steelblue")
 
-	fig, ax = plt.subplots(figsize=(16, 5))
 	if valid.any():
 		ax.bar(class_ids[valid], neglog10[valid], width=0.8, color=colors[valid])
 	bonf_line = -np.log10(alpha / n_classes)
@@ -203,12 +232,8 @@ def plot_wilcoxon_neglog10_p_bar(
 	ax.set_xticks(class_ids[::10])
 	ax.set_xticklabels([str(i) for i in class_ids[::10]])
 	ax.set_xlabel("Class ID")
-	ax.set_ylabel("-log10(wilcoxon_p)")
-	ax.set_title(f"Wilcoxon signed-rank p-values (all {n_classes} classes, valid only)")
+	ax.set_ylabel(ylabel)
 	ax.legend(loc="upper right", fontsize=8)
-	fig.tight_layout()
-	fig.savefig(output_path, dpi=300, bbox_inches="tight")
-	plt.close(fig)
 
 
 def plot_volcano(

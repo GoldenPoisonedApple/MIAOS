@@ -17,6 +17,10 @@ from src.attacks.analysis.attack_score_distribution import (
 	analyze_attack_score_distribution,
 )
 from src.attacks.analysis.shadow_pair_effect_analysis import analyze_shadow_pair_effects
+from src.attacks.analysis.shadow_pair_violin import (
+	ShadowViolinPanel,
+	analyze_shadow_pair_violins,
+)
 from src.attacks.analysis.target_attack_sign_output import (
 	TargetAttackSignEntry,
 	analyze_target_attack_sign_output,
@@ -295,6 +299,59 @@ class LF_MIA(MIA_Attack):
 			"shadow_pair_num_significant_fdr": result.num_significant_fdr,
 		})
 
+	# バイオリン図の縦軸に表示するプローブ特徴の名前（サブクラスで差し替える）
+	def _probe_feature_label(self) -> str:
+		return "logit(p)"
+
+	# シャドー IN/OUT プローブ特徴のバイオリン図パネル構築（テンプレートメソッド。サブクラスで追加する）
+	def _shadow_pair_violin_panels(
+		self,
+		shadow_models: list[nn.Module],
+		in_feats: np.ndarray,
+		out_feats: np.ndarray,
+	) -> list[ShadowViolinPanel]:
+		"""
+		IN / OUT / IN-OUT の 3 パネルを返す。検定は IN-OUT（ペア差分の paired Wilcoxon）のみ。
+		Args:
+				shadow_models: シャドーモデル（IN, OUT の順で半々。本クラスでは未使用。追加推論のためのフック）
+				in_feats: IN シャドーのプローブ特徴 (n_pairs, K, NUM_CLASSES)
+				out_feats: OUT シャドーのプローブ特徴 (n_pairs, K, NUM_CLASSES)
+		"""
+		label = self._probe_feature_label()
+		return [
+			ShadowViolinPanel(
+				name="in",
+				title="Shadow IN probe features",
+				ylabel=label,
+				values=in_feats,
+			),
+			ShadowViolinPanel(
+				name="out",
+				title="Shadow OUT probe features",
+				ylabel=label,
+				values=out_feats,
+			),
+			ShadowViolinPanel(
+				name="in_minus_out",
+				title="Shadow pair diff IN-OUT",
+				ylabel=f"{label} IN - OUT",
+				values=in_feats - out_feats,
+				test_significance=True,
+			),
+		]
+
+	def _run_shadow_pair_violin_analysis(
+		self,
+		shadow_models: list[nn.Module],
+		in_feats: np.ndarray,
+		out_feats: np.ndarray,
+	) -> None:
+		"""シャドー IN/OUT プローブ特徴のクラス別バイオリン図を出力する。特徴は (n_pairs, K, NUM_CLASSES)。"""
+		panels = self._shadow_pair_violin_panels(shadow_models, in_feats, out_feats)
+		output_dir = os.path.join(self.MODEL_SAVE_DIR, cfg.SHADOW_PAIR_EFFECT_DIR)
+		analyze_shadow_pair_violins(panels, output_dir)
+		self.logger.info(f"Shadow pair violin plots saved -> {output_dir}")
+
 	# LF_MIA Attack
 	def attack(
 		self, shadow_models: list[nn.Module], target_model: list[nn.Module]
@@ -368,6 +425,8 @@ class LF_MIA(MIA_Attack):
 		# シャドー IN/OUT ペアのクラス別装飾効果量解析（既存攻撃結果には影響しない）
 		# K 枚平均でペアあたり 1 ベクトルにする（再推論はしない）
 		self._run_shadow_pair_effect_analysis(in_feats.mean(axis=1), out_feats.mean(axis=1))
+		# シャドー IN/OUT プローブ特徴のクラス別バイオリン図（全画像の分布 + モデル単位の検定）
+		self._run_shadow_pair_violin_analysis(shadow_models, in_feats, out_feats)
 
 		return attack_scores, attack_fractions
 

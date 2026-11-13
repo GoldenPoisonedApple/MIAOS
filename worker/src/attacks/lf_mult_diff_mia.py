@@ -1,7 +1,11 @@
+from dataclasses import replace
+
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
+from src.attacks.analysis.shadow_pair_violin import ShadowViolinPanel
 from src.attacks.lf_mult_mia import LF_Mult_MIA
 from src.attacks.mia_attack import MIA_Attack
 from src.attacks.mia_lira_common import logit_scaling
@@ -32,3 +36,52 @@ class LF_Mult_Diff_MIA(LF_Mult_MIA):
 		# log 空間で引き算し、画像固有の成分を打ち消す
 		diff = logit_scaling(decorated_preds) - logit_scaling(plain_preds)
 		return diff.float()
+
+	# バイオリン図の縦軸ラベル オーバーライド
+	def _probe_feature_label(self) -> str:
+		return "logit(decorated) - logit(plain)"
+
+	# バイオリン図パネル構築 オーバーライド
+	def _shadow_pair_violin_panels(
+		self,
+		shadow_models: list[nn.Module],
+		in_feats: np.ndarray,
+		out_feats: np.ndarray,
+	) -> list[ShadowViolinPanel]:
+		"""
+		IN / OUT（decorated - plain）を 0 に対する 1 標本 Wilcoxon の検定対象にし、
+		decorated / plain それぞれの IN / OUT パネルを追加する。
+		decorated / plain は攻撃経路に触れないよう、解析用に再推論して取得する
+		（get_attack_composite_dataloaders は seed で決定的なので攻撃と同じ K 枚になる）。
+		"""
+		panels = [
+			replace(panel, test_significance=True) if panel.name in ("in", "out") else panel
+			for panel in super()._shadow_pair_violin_panels(shadow_models, in_feats, out_feats)
+		]
+
+		decorated_loader, plain_loader = self.dataset.get_attack_composite_dataloaders(
+			self._num_images()
+		)
+
+		def logits(model: nn.Module, loader: DataLoader) -> np.ndarray:
+			preds, _ = MIA_Attack.get_predictions(model, loader)
+			model.to("cpu")  # GPUメモリ節約
+			return logit_scaling(preds).float().detach().cpu().numpy()
+
+		# シャドーは IN, OUT の順で半々
+		num_in = int(self.settings.num_shadow_models / 2)
+		groups = {
+			"in": shadow_models[:num_in],
+			"out": shadow_models[num_in : 2 * num_in],
+		}
+		for group, models in groups.items():
+			for kind, loader in (("decorated", decorated_loader), ("plain", plain_loader)):
+				panels.append(
+					ShadowViolinPanel(
+						name=f"{group}_{kind}",
+						title=f"Shadow {group.upper()} probe features ({kind})",
+						ylabel=f"logit({kind})",
+						values=np.stack([logits(model, loader) for model in models]),
+					)
+				)
+		return panels
