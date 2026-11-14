@@ -28,6 +28,7 @@ class FlatDiagonalLdaMembershipScorer:
 	diagonal_lda は全 k で重みを共有する（K 平均してから学習する）特殊ケースに当たる。
 	本クラスは画像 k ごとに「どのクラスがどれだけ安定して IN/OUT で動くか」を個別に重み付けする。
 	画像間の相関は無視するため |logit| は K に比例して大きくなる（順位付けにのみ用いる）。
+	分母の分散は variance で選ぶ（既定は within_class。none では分散で割らず平均差のみ）。
 	"""
 
 	name = "flat_diagonal_lda"

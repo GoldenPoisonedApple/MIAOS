@@ -26,7 +26,9 @@
 | `neural_regularized_stability_lambda` | float (>= 0) | `0.5` | 同上 | 同上 |
 | `neural_regularized_patience` | int (>= 1) | `20` | 同上 | 同上 |
 | `neural_regularized_max_epochs` | int (>= 1) | `500` | 同上 | 同上 |
+| `neural_regularized_standardize` | bool（`true` / `false`。文字列も可） | `true` | 同上 | 同上 |
 | `diagonal_lda_reg_lambda` | float | `1e-3` | LF_MIA 系（`diagonal_lda` / `flat_diagonal_lda`） | 同上 |
+| `diagonal_lda_variance` | str | `pair_diff` | LF_MIA 系（`diagonal_lda`） | 同上 |
 | `flat_diagonal_lda_variance` | str | `within_class` | LF_MIA 系（`flat_diagonal_lda`） | 同上 |
 | `gaussian_lr_variance` | str | `per_class` | LF_MIA 系（`gaussian_lr`） | 同上 |
 | `gaussian_lr_var_floor` | float (> 0) | `1e-3` | LF_MIA 系（`gaussian_lr`） | 同上 |
@@ -117,7 +119,7 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
 | ------------------- | ---- | ------------ | ---------------- |
 | `neural` | `AttackNet` で画像ごとに IN/OUT を分類し、IN 確率を平均する | `attack_model_batch_size`, `attack_model_epochs` | `probability` |
 | `neural_regularized` | 1 出力 MLP をペア単位 k-fold CV + 早期停止 + Optuna で探索し、最良 trial の fold モデルのアンサンブルで画像ごとの IN 確率を平均する | `attack_model_batch_size`, `neural_regularized_*` | `probability` |
-| `diagonal_lda` | K 枚を平均した特徴に対する対角 LDA（分母はペア差分の分散） | `diagonal_lda_reg_lambda` | `log_odds` |
+| `diagonal_lda` | K 枚を平均した特徴に対する対角 LDA（分母は既定でペア差分の分散） | `diagonal_lda_reg_lambda`, `diagonal_lda_variance` | `log_odds` |
 | `flat_diagonal_lda` | `(K·C)` に平坦化した対角 LDA | `diagonal_lda_reg_lambda`, `flat_diagonal_lda_variance` | `log_odds` |
 | `gaussian_lr` | (k, c) ごとの正規分布による尤度比検定 | `gaussian_lr_variance`, `gaussian_lr_var_floor` | `log_odds` |
 
@@ -125,6 +127,8 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
 | ---- | ---------- | ---- |
 | `flat_diagonal_lda_variance` | `within_class`（既定） | 重みの分母を IN / OUT のクラス内分散のプールにする。データの異なる単体モデルに汎化させる場合の標準 |
 | | `pair_diff` | 重みの分母をペア差分 IN−OUT の分散にする。データ分割由来の分散がペア内で相殺される |
+| | `none` | 分散で割らず、重みを IN / OUT の平均差そのものにする。`diagonal_lda_reg_lambda` は使わない |
+| `diagonal_lda_variance` | `pair_diff`（既定） / `within_class` / `none` | `flat_diagonal_lda_variance` と同じ意味（既定のみ異なる） |
 | `gaussian_lr_variance` | `per_class`（既定） | IN / OUT で別々の分散を使う |
 | | `pooled` | IN / OUT の分散の平均を共通に使う（シャドーが少ないとき向け） |
 | `neural_regularized_objective` | `auc`（既定） | シャドー単位（K 枚の IN 確率平均）の AUC。CV の fold 指標と早期停止の監視に使う |
@@ -139,6 +143,7 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
 | `neural_regularized_n_trials` | Optuna の試行回数（1 trial = k fold 分の学習。MedianPruner で枝刈りあり） |
 | `neural_regularized_stability_lambda` | trial のスコア `mean − λ·std`（fold 指標）の λ |
 | `neural_regularized_patience` / `neural_regularized_max_epochs` | 早期停止の猶予 epoch 数 / epoch 上限 |
+| `neural_regularized_standardize` | `true`（既定）で各 fold の学習側で fit した z-score 標準化を入力に適用する。`false` では標準化せず生の特徴を入力する（`true` / `false` 以外は `ValueError`） |
 
 探索空間（`lr`, `weight_decay`, 隠れ層数 0〜1, 隠れ層幅, `dropout`）はコード定数で固定。詳細は `SPECIFICATION.md` の「`neural_regularized`」を参照。
 

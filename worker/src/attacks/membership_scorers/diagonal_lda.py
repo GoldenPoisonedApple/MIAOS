@@ -23,6 +23,11 @@ class DiagonalVariance(str, Enum):
 	PAIR_DIFF = "pair_diff"
 	# クラス内分散（IN/OUT それぞれの分散のプール）。ペアを持たない単体モデルのノイズに対応する
 	WITHIN_CLASS = "within_class"
+	# 分散で割らない（重みは平均差のみ）。reg_lambda は無視する
+	NONE = "none"
+
+
+DEFAULT_DIAGONAL_LDA_VARIANCE = DiagonalVariance.PAIR_DIFF
 
 
 def fit_diagonal_linear(
@@ -56,7 +61,10 @@ def fit_diagonal_linear(
 	# reg_lambda: 正則化項 (L2正則化)
 	# n_pairs==1 のとき ddof=1 の分散は定義不能なので正則項のみとする
 	n_pairs = diffs.shape[0]
-	if n_pairs <= 1:
+	if variance == DiagonalVariance.NONE:
+		# 分散で割らない: 分母を 1 とし、重みは平均差そのものにする（n_pairs に依らない）
+		var = np.ones_like(mean_diff, dtype=np.float64)
+	elif n_pairs <= 1:
 		var = np.full_like(mean_diff, reg_lambda, dtype=np.float64)
 	elif variance == DiagonalVariance.PAIR_DIFF:
 		# ペア差分の分散
@@ -78,13 +86,19 @@ class DiagonalLdaMembershipScorer:
 	diff の次元ごとに平均/（分散+λ）で重みを取り、全ペアの中点平均を通る超平面上にバイアスを置く。
 	クラス間の相関は無視する（対角近似）。
 	K 枚は平均してから学習し、スコアは画像ごとの logit の平均とする。
+	分母の分散は variance で選ぶ（既定は pair_diff。none では分散で割らず平均差のみ）。
 	"""
 
 	name = "diagonal_lda"
 	score_scale = ScoreScale.LOG_ODDS
 
-	def __init__(self, reg_lambda: float = DEFAULT_DIAGONAL_LDA_REG_LAMBDA) -> None:
+	def __init__(
+		self,
+		reg_lambda: float = DEFAULT_DIAGONAL_LDA_REG_LAMBDA,
+		variance: DiagonalVariance = DEFAULT_DIAGONAL_LDA_VARIANCE,
+	) -> None:
 		self.reg_lambda = float(reg_lambda)
+		self.variance = DiagonalVariance(variance)
 		self._w: np.ndarray | None = None
 		self._b: float | None = None
 
@@ -98,9 +112,9 @@ class DiagonalLdaMembershipScorer:
 			raise ValueError("in_feats and out_feats must be 3D (n_pairs, K, C)")
 		in_pair = in_feats.mean(axis=1)		# 全合成画像平均 (n_pairs, C)
 		out_pair = out_feats.mean(axis=1)	# 全合成画像平均 (n_pairs, C)
-		# 重みとバイアス: ペア差分の分散を分母とする（従来どおり）
+		# 重みとバイアス: 既定はペア差分の分散を分母とする（従来どおり）
 		self._w, self._b = fit_diagonal_linear(
-			in_pair, out_pair, self.reg_lambda, DiagonalVariance.PAIR_DIFF
+			in_pair, out_pair, self.reg_lambda, self.variance
 		)
 
 	def score(self, feats: np.ndarray) -> MembershipScore:
@@ -125,6 +139,7 @@ class DiagonalLdaMembershipScorer:
 			return {}
 		return {
 			"diagonal_lda_reg_lambda": self.reg_lambda,
+			"diagonal_lda_variance": self.variance.value,
 			"diagonal_lda_w_norm": float(np.linalg.norm(self._w)),
 			"diagonal_lda_b": self._b,
 		}

@@ -138,6 +138,8 @@ class NeuralRegularizedSettings:
 	patience: int = 20
 	max_epochs: int = 500
 	batch_size: int = cfg.ATTACK_MODEL_BATCH_SIZE
+	# 入力を fold の学習側で z-score 標準化するか（False では恒等変換）
+	standardize: bool = True
 
 	def __post_init__(self) -> None:
 		if not isinstance(self.objective, CvObjective):
@@ -156,6 +158,8 @@ class NeuralRegularizedSettings:
 			raise ValueError(f"max_epochs must be >= 1, got {self.max_epochs}")
 		if self.batch_size < 1:
 			raise ValueError(f"batch_size must be >= 1, got {self.batch_size}")
+		if not isinstance(self.standardize, bool):
+			raise ValueError(f"standardize must be bool, got {self.standardize!r}")
 
 	def num_val_pairs(self, n_train_pairs: int) -> int:
 		"""学習側 n_train_pairs ペアのうち validation に回すペア数（学習・validation とも 1 ペア以上）"""
@@ -208,6 +212,14 @@ class FeatureStandardizer:
 		std = np.where(std > 0, std, 1.0)
 		return cls(mean=mean.astype(np.float32), std=std.astype(np.float32))
 
+	# 標準化しない場合の恒等変換（mean=0, std=1）。FoldModel と推論の経路を共通にするため
+	@classmethod
+	def identity(cls, num_features: int) -> "FeatureStandardizer":
+		return cls(
+			mean=np.zeros(num_features, dtype=np.float32),
+			std=np.ones(num_features, dtype=np.float32),
+		)
+
 	# 計算したmeanとstdを使ってxを標準化
 	def transform(self, x: np.ndarray) -> np.ndarray:
 		return ((x - self.mean) / self.std).astype(np.float32)
@@ -245,8 +257,12 @@ def train_with_early_stopping(
 	torch.manual_seed(seed)
 	generator = torch.Generator().manual_seed(seed)
 
-	# z-score 標準化
-	standardizer = FeatureStandardizer.fit(train.x)
+	# z-score 標準化（standardize=False では恒等変換）
+	standardizer = (
+		FeatureStandardizer.fit(train.x)
+		if settings.standardize
+		else FeatureStandardizer.identity(train.x.shape[1])
+	)
 
 	train_x = torch.from_numpy(standardizer.transform(train.x)).to(cfg.DEVICE)
 	train_y = torch.from_numpy(train.y).to(cfg.DEVICE)
@@ -507,6 +523,7 @@ class NeuralRegularizedMembershipScorer:
 				"trial_number": self._best.trial_number,
 				"objective": self.settings.objective.value,
 				"stability_lambda": self.settings.stability_lambda,
+				"standardize": self.settings.standardize,
 				"cv_score": self._best.score,
 				"cv_mean": self._best.mean,
 				"cv_std": self._best.std,
@@ -534,6 +551,7 @@ class NeuralRegularizedMembershipScorer:
 		best_params = self._best.params
 		return {
 			"cv_objective": self.settings.objective.value,
+			"standardize": self.settings.standardize,
 			"cv_score": self._best.score,
 			"cv_fold_mean": self._best.mean,
 			"cv_fold_std": self._best.std,

@@ -572,8 +572,8 @@ metrics には ROC 指標・`attack_score` / `attack_fraction` に加えて、`t
 | `membership_scorer` | キー |
 | ------------------- | ---- |
 | `neural` | `w1_relative_change`, `attack_model_train_acc` / `attack_model_train_loss` / `attack_model_train_in_acc` / `attack_model_train_out_acc` |
-| `neural_regularized` | `cv_objective`, `cv_score` / `cv_fold_mean` / `cv_fold_std`, `best_trial_number`, `best_lr` / `best_weight_decay` / `best_n_hidden` / `best_hidden_dim`（0 層時 `null`）/ `best_dropout`, `best_epoch_median`, `n_trials_completed` / `n_trials_pruned` |
-| `diagonal_lda` | `diagonal_lda_reg_lambda`, `diagonal_lda_w_norm`, `diagonal_lda_b` |
+| `neural_regularized` | `cv_objective`, `standardize`, `cv_score` / `cv_fold_mean` / `cv_fold_std`, `best_trial_number`, `best_lr` / `best_weight_decay` / `best_n_hidden` / `best_hidden_dim`（0 層時 `null`）/ `best_dropout`, `best_epoch_median`, `n_trials_completed` / `n_trials_pruned` |
+| `diagonal_lda` | `diagonal_lda_reg_lambda`, `diagonal_lda_variance`, `diagonal_lda_w_norm`, `diagonal_lda_b` |
 | `flat_diagonal_lda` | `flat_diagonal_lda_reg_lambda`, `flat_diagonal_lda_variance`, `flat_diagonal_lda_w_norm`, `flat_diagonal_lda_b`, `flat_diagonal_lda_w_norm_per_image`（K 要素リスト） |
 | `gaussian_lr` | `gaussian_lr_variance`, `gaussian_lr_var_floor`, `gaussian_lr_floored_ratio_in` / `gaussian_lr_floored_ratio_out` |
 
@@ -744,7 +744,7 @@ LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し�
 | ------------------- | ---- | ----------- | ------- | ------------- |
 | `neural`（既定） | `AttackNet` で画像ごとに IN/OUT 分類 | 画像ごとの IN 確率 | 平均 | `probability` |
 | `neural_regularized` | `BinaryAttackNet`（1 出力）をペア単位 k-fold CV + 早期停止 + Optuna で探索し、最良 trial の k 個の fold モデルをアンサンブル | 画像ごとの IN 確率（fold モデル平均） | 平均 | `probability` |
-| `diagonal_lda` | K 平均した特徴に対する対角 LDA（分母はペア差分の分散） | 画像ごとの logit | 平均 | `log_odds` |
+| `diagonal_lda` | K 平均した特徴に対する対角 LDA（分母は既定でペア差分の分散） | 画像ごとの logit | 平均 | `log_odds` |
 | `flat_diagonal_lda` | `(K·C)` に平坦化した対角 LDA（(k, c) ごとに独立な重み） | 画像ごとの寄与 `w_k·x_k + b/K` | 和 | `log_odds` |
 | `gaussian_lr` | (k, c) ごとに IN/OUT の正規分布を推定する尤度比検定（LiRA の拡張） | 画像ごとの対数尤度比の和 | 和 | `log_odds` |
 
@@ -752,18 +752,19 @@ LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し�
 
 | キー | 対象 | 既定値 | 用途 |
 | ---- | ---- | ------ | ---- |
-| `diagonal_lda_reg_lambda` | `diagonal_lda` / `flat_diagonal_lda` | `1e-3` | 分散に加える正則化項 |
-| `flat_diagonal_lda_variance` | `flat_diagonal_lda` | `within_class` | 重みの分母。`within_class`（IN/OUT の分散のプール）/ `pair_diff`（ペア差分の分散） |
+| `diagonal_lda_reg_lambda` | `diagonal_lda` / `flat_diagonal_lda` | `1e-3` | 分散に加える正則化項（`variance=none` では不使用） |
+| `diagonal_lda_variance` | `diagonal_lda` | `pair_diff` | 重みの分母。値は `flat_diagonal_lda_variance` と同じ |
+| `flat_diagonal_lda_variance` | `flat_diagonal_lda` | `within_class` | 重みの分母。`within_class`（IN/OUT の分散のプール）/ `pair_diff`（ペア差分の分散）/ `none`（分散で割らず、重みは IN/OUT の平均差） |
 | `gaussian_lr_variance` | `gaussian_lr` | `per_class` | `per_class`（IN/OUT 別々の分散）/ `pooled`（共通の分散） |
 | `gaussian_lr_var_floor` | `gaussian_lr` | `1e-3` | 分散の下限（logit 飽和で分散 0 になる次元への対策） |
 
-各クラスのシャドーが 1 本（`n_pairs=1`）のときは分散が定義できないため、分散を正則化項 / 下限のみとして動作する。
+各クラスのシャドーが 1 本（`n_pairs=1`）のときは分散が定義できないため、分散を正則化項 / 下限のみとして動作する（`variance=none` は分散を使わないため影響を受けない）。
 
 #### `neural_regularized`
 
 1. ペア index に `KFold(n_splits=k, shuffle=True, random_state=seed)` を適用する。同じペアの IN / OUT は同じ側に入るため IN/OUT 比は常に 1:1（層化しない）。各 fold の学習側ペアから `round(n × val_ratio)` ペア（1 以上、学習側に 1 以上残す）を `RandomState(seed + fold)` で validation に回す。分割は全 trial で共通。
 2. Optuna（`TPESampler(seed)`, `MedianPruner(n_startup_trials=5, n_warmup_steps=1)`）で `n_trials` 回探索する。探索空間（固定）: `lr` 1e-5〜1e-3（log）、`weight_decay` 1e-5〜1e-1（log）、`n_hidden` {0, 1}、`hidden_dim` 8〜128（log, `n_hidden=1` のみ）、`dropout` 0〜0.5（`n_hidden=1` のみ）。
-3. 各 fold: 学習側で fit した z-score 標準化 → `BinaryAttackNet` を `BCEWithLogitsLoss` + AdamW（スケジューラなし）で学習。毎 epoch validation の目的指標（同値時は validation BCE が小さい方）で best を更新し、`patience` epoch 改善しなければ停止して best の重みを復元する（上限 `max_epochs`）。テスト fold の目的指標を記録し、それまでの平均を `trial.report` して枝刈り判定する。
+3. 各 fold: 学習側で fit した z-score 標準化（`neural_regularized_standardize=false` では恒等変換）→ `BinaryAttackNet` を `BCEWithLogitsLoss` + AdamW（スケジューラなし）で学習。毎 epoch validation の目的指標（同値時は validation BCE が小さい方）で best を更新し、`patience` epoch 改善しなければ停止して best の重みを復元する（上限 `max_epochs`）。テスト fold の目的指標を記録し、それまでの平均を `trial.report` して枝刈り判定する。
 4. trial の値は `mean(fold 指標) − λ·std(fold 指標)`（std は母標準偏差）。最良値を更新した trial の k 個の fold モデルのみ保持する。
 5. `score(feats)`: k 個の fold モデルの画像ごとの IN 確率を平均して `per_image`、その平均を `value` とする。
 

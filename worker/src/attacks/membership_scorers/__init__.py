@@ -10,6 +10,7 @@ from src.attacks.membership_scorers.base import (
 )
 from src.attacks.membership_scorers.diagonal_lda import (
 	DEFAULT_DIAGONAL_LDA_REG_LAMBDA,
+	DEFAULT_DIAGONAL_LDA_VARIANCE,
 	DiagonalLdaMembershipScorer,
 	DiagonalVariance,
 )
@@ -54,6 +55,7 @@ class MembershipScorerConfig:
 	kind: str = MEMBERSHIP_SCORER_NEURAL
 	# diagonal_lda / flat_diagonal_lda で共用する正則化項
 	diagonal_lda_reg_lambda: float = DEFAULT_DIAGONAL_LDA_REG_LAMBDA
+	diagonal_lda_variance: DiagonalVariance = DEFAULT_DIAGONAL_LDA_VARIANCE
 	flat_diagonal_lda_variance: DiagonalVariance = DEFAULT_FLAT_DIAGONAL_LDA_VARIANCE
 	gaussian_lr_variance: GaussianVariance = DEFAULT_GAUSSIAN_LR_VARIANCE
 	gaussian_lr_var_floor: float = DEFAULT_GAUSSIAN_LR_VAR_FLOOR
@@ -69,6 +71,11 @@ class MembershipScorerConfig:
 				f"expected one of {sorted(VALID_MEMBERSHIP_SCORERS)}"
 			)
 		# 文字列で渡された場合も Enum に正規化する（不正値はここで ValueError）
+		object.__setattr__(
+			self,
+			"diagonal_lda_variance",
+			_parse_enum(DiagonalVariance, self.diagonal_lda_variance, "diagonal_lda_variance"),
+		)
 		object.__setattr__(
 			self,
 			"flat_diagonal_lda_variance",
@@ -89,12 +96,15 @@ class MembershipScorerConfig:
 		"""
 		membership_scorer: neural（デフォルト）| neural_regularized | diagonal_lda | flat_diagonal_lda | gaussian_lr
 		diagonal_lda_reg_lambda: diagonal_lda / flat_diagonal_lda 用。未指定時 DEFAULT_DIAGONAL_LDA_REG_LAMBDA
-		flat_diagonal_lda_variance: within_class（デフォルト）| pair_diff
+		diagonal_lda_variance: pair_diff（デフォルト）| within_class | none
+		flat_diagonal_lda_variance: within_class（デフォルト）| pair_diff | none
+			（none は分散で割らず、重みを IN/OUT の平均差とする。reg_lambda は無視）
 		gaussian_lr_variance: per_class（デフォルト）| pooled
 		gaussian_lr_var_floor: gaussian_lr の分散の下限。未指定時 DEFAULT_GAUSSIAN_LR_VAR_FLOOR
 		attack_model_batch_size / attack_model_epochs: neural 用。未指定時 cfg の既定値
 			（attack_model_batch_size は neural_regularized でも使用）
 		neural_regularized_*: neural_regularized 用。未指定時 NeuralRegularizedSettings の既定値
+			（neural_regularized_standardize: true（デフォルト）| false。入力の z-score 標準化の有無）
 		"""
 		if not hp:
 			return cls()
@@ -115,12 +125,17 @@ class MembershipScorerConfig:
 			patience=int(hp.get("neural_regularized_patience", defaults.patience)),
 			max_epochs=int(hp.get("neural_regularized_max_epochs", defaults.max_epochs)),
 			batch_size=batch_size,
+			standardize=_parse_bool(
+				hp.get("neural_regularized_standardize", defaults.standardize),
+				"neural_regularized_standardize",
+			),
 		)
 		return cls(
 			kind=str(hp.get("membership_scorer", MEMBERSHIP_SCORER_NEURAL)).strip().lower(),
 			diagonal_lda_reg_lambda=float(
 				hp.get("diagonal_lda_reg_lambda", DEFAULT_DIAGONAL_LDA_REG_LAMBDA)
 			),
+			diagonal_lda_variance=hp.get("diagonal_lda_variance", DEFAULT_DIAGONAL_LDA_VARIANCE),
 			flat_diagonal_lda_variance=hp.get(
 				"flat_diagonal_lda_variance", DEFAULT_FLAT_DIAGONAL_LDA_VARIANCE
 			),
@@ -147,6 +162,18 @@ def _parse_enum(enum_cls: type, value: Any, key: str):
 		) from e
 
 
+def _parse_bool(value: Any, key: str) -> bool:
+	"""bool または "true" / "false"（大文字小文字は問わない）を bool に変換する。"""
+	if isinstance(value, bool):
+		return value
+	normalized = str(value).strip().lower()
+	if normalized == "true":
+		return True
+	if normalized == "false":
+		return False
+	raise ValueError(f"Invalid {key}={value!r}; expected true or false")
+
+
 def build_membership_scorer(
 	config: MembershipScorerConfig,
 	*,
@@ -162,7 +189,10 @@ def build_membership_scorer(
 			logger=logger,
 		)
 	if config.kind == MEMBERSHIP_SCORER_DIAGONAL_LDA:
-		return DiagonalLdaMembershipScorer(reg_lambda=config.diagonal_lda_reg_lambda)
+		return DiagonalLdaMembershipScorer(
+			reg_lambda=config.diagonal_lda_reg_lambda,
+			variance=config.diagonal_lda_variance,
+		)
 	if config.kind == MEMBERSHIP_SCORER_FLAT_DIAGONAL_LDA:
 		return FlatDiagonalLdaMembershipScorer(
 			reg_lambda=config.diagonal_lda_reg_lambda,
