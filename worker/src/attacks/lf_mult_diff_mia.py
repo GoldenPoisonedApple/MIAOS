@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from src.attacks.analysis.shadow_pair_violin import ShadowViolinPanel
+from src.attacks.analysis.probe_violin import ProbeViolinPanel, SignificanceTest
 from src.attacks.lf_mult_mia import LF_Mult_MIA
 from src.attacks.mia_attack import MIA_Attack
 from src.attacks.mia_lira_common import logit_scaling
@@ -47,7 +47,7 @@ class LF_Mult_Diff_MIA(LF_Mult_MIA):
 		shadow_models: list[nn.Module],
 		in_feats: np.ndarray,
 		out_feats: np.ndarray,
-	) -> list[ShadowViolinPanel]:
+	) -> list[ProbeViolinPanel]:
 		"""
 		IN / OUT（decorated - plain）を 0 に対する 1 標本 Wilcoxon の検定対象にし、
 		decorated / plain それぞれの IN / OUT パネルを追加する。
@@ -55,7 +55,9 @@ class LF_Mult_Diff_MIA(LF_Mult_MIA):
 		（get_attack_composite_dataloaders は seed で決定的なので攻撃と同じ K 枚になる）。
 		"""
 		panels = [
-			replace(panel, test_significance=True) if panel.name in ("in", "out") else panel
+			replace(panel, significance=SignificanceTest.MODEL_LEVEL)
+			if panel.name in ("in", "out")
+			else panel
 			for panel in super()._shadow_pair_violin_panels(shadow_models, in_feats, out_feats)
 		]
 
@@ -77,7 +79,7 @@ class LF_Mult_Diff_MIA(LF_Mult_MIA):
 		for group, models in groups.items():
 			for kind, loader in (("decorated", decorated_loader), ("plain", plain_loader)):
 				panels.append(
-					ShadowViolinPanel(
+					ProbeViolinPanel(
 						name=f"{group}_{kind}",
 						title=f"Shadow {group.upper()} probe features ({kind})",
 						ylabel=f"logit({kind})",
@@ -85,3 +87,26 @@ class LF_Mult_Diff_MIA(LF_Mult_MIA):
 					)
 				)
 		return panels
+
+	# ターゲットのバイオリン図パネル構築 オーバーライド
+	def _target_probe_violin_panels(
+		self,
+		fractions: list[float],
+		target_feats: list[np.ndarray],
+	) -> list[ProbeViolinPanel]:
+		"""
+		攻撃特徴（decorated - plain）を 0 に対する 1 標本 Wilcoxon の検定対象にする。
+		単一ターゲットはモデル単位の検定ができないため画像単位（1 モデルを固定した条件付き検定）、
+		fraction=0 の統合パネルは複数モデルなのでモデル単位で検定する。
+		"""
+		return [
+			replace(
+				panel,
+				significance=(
+					SignificanceTest.IMAGE_LEVEL
+					if panel.n_models == 1
+					else SignificanceTest.MODEL_LEVEL
+				),
+			)
+			for panel in super()._target_probe_violin_panels(fractions, target_feats)
+		]

@@ -17,13 +17,15 @@ from src.attacks.analysis.attack_score_distribution import (
 	analyze_attack_score_distribution,
 )
 from src.attacks.analysis.shadow_pair_effect_analysis import analyze_shadow_pair_effects
-from src.attacks.analysis.shadow_pair_violin import (
-	ShadowViolinPanel,
-	analyze_shadow_pair_violins,
+from src.attacks.analysis.probe_violin import (
+	ProbeViolinPanel,
+	SignificanceTest,
+	save_violin_panels,
 )
 from src.attacks.analysis.target_attack_sign_output import (
 	TargetAttackSignEntry,
 	analyze_target_attack_sign_output,
+	fraction_to_filename,
 )
 from src.attacks.membership_scorers import (
 	MembershipScore,
@@ -309,7 +311,7 @@ class LF_MIA(MIA_Attack):
 		shadow_models: list[nn.Module],
 		in_feats: np.ndarray,
 		out_feats: np.ndarray,
-	) -> list[ShadowViolinPanel]:
+	) -> list[ProbeViolinPanel]:
 		"""
 		IN / OUT / IN-OUT の 3 パネルを返す。検定は IN-OUT（ペア差分の paired Wilcoxon）のみ。
 		Args:
@@ -319,24 +321,24 @@ class LF_MIA(MIA_Attack):
 		"""
 		label = self._probe_feature_label()
 		return [
-			ShadowViolinPanel(
+			ProbeViolinPanel(
 				name="in",
 				title="Shadow IN probe features",
 				ylabel=label,
 				values=in_feats,
 			),
-			ShadowViolinPanel(
+			ProbeViolinPanel(
 				name="out",
 				title="Shadow OUT probe features",
 				ylabel=label,
 				values=out_feats,
 			),
-			ShadowViolinPanel(
+			ProbeViolinPanel(
 				name="in_minus_out",
 				title="Shadow pair diff IN-OUT",
 				ylabel=f"{label} IN - OUT",
 				values=in_feats - out_feats,
-				test_significance=True,
+				significance=SignificanceTest.MODEL_LEVEL,
 			),
 		]
 
@@ -349,8 +351,59 @@ class LF_MIA(MIA_Attack):
 		"""シャドー IN/OUT プローブ特徴のクラス別バイオリン図を出力する。特徴は (n_pairs, K, NUM_CLASSES)。"""
 		panels = self._shadow_pair_violin_panels(shadow_models, in_feats, out_feats)
 		output_dir = os.path.join(self.MODEL_SAVE_DIR, cfg.SHADOW_PAIR_EFFECT_DIR)
-		analyze_shadow_pair_violins(panels, output_dir)
+		save_violin_panels(panels, output_dir)
 		self.logger.info(f"Shadow pair violin plots saved -> {output_dir}")
+
+	# ターゲットのプローブ特徴のバイオリン図パネル構築（テンプレートメソッド。サブクラスで検定を付与する）
+	def _target_probe_violin_panels(
+		self,
+		fractions: list[float],
+		target_feats: list[np.ndarray],
+	) -> list[ProbeViolinPanel]:
+		"""
+		fraction>0 のターゲットは 1 体ずつ、fraction=0 のターゲットはまとめて 1 パネルにする。
+		K<2 では 1 体あたりクラスごとに 1 点しかなくバイオリンにならないため、空リストを返す。
+		Args:
+				fractions: ターゲットの装飾適用率（target_feats と同順）
+				target_feats: ターゲットごとのプローブ特徴 (K, NUM_CLASSES)
+		"""
+		if target_feats[0].shape[0] < 2:
+			return []
+
+		label = self._probe_feature_label()
+
+		def panel(fraction: float, values: np.ndarray) -> ProbeViolinPanel:
+			return ProbeViolinPanel(
+				name=f"probe_fraction_{fraction_to_filename(fraction)}",
+				title=f"Target probe features (fraction={fraction})",
+				ylabel=label,
+				values=values,
+			)
+
+		panels = [
+			panel(fraction, feats[None])
+			for fraction, feats in zip(fractions, target_feats, strict=True)
+			if fraction > 0
+		]
+		zero_feats = [
+			feats for fraction, feats in zip(fractions, target_feats, strict=True) if fraction == 0
+		]
+		if zero_feats:
+			panels.append(panel(0.0, np.stack(zero_feats)))
+		return panels
+
+	def _run_target_probe_violin_analysis(
+		self,
+		fractions: list[float],
+		target_feats: list[np.ndarray],
+	) -> None:
+		"""ターゲットのプローブ特徴のクラス別バイオリン図を出力する。特徴はターゲットごとに (K, NUM_CLASSES)。"""
+		panels = self._target_probe_violin_panels(fractions, target_feats)
+		if not panels:
+			return
+		output_dir = os.path.join(self.MODEL_SAVE_DIR, cfg.TARGET_ATTACKSIGN_OUTPUT_DIR)
+		save_violin_panels(panels, output_dir)
+		self.logger.info(f"Target probe violin plots saved -> {output_dir}")
 
 	# LF_MIA Attack
 	def attack(
@@ -379,10 +432,12 @@ class LF_MIA(MIA_Attack):
 		attack_scores_vars: list[float] = []  # K 枚の画像ごとのスコアの標本分散（K=1 では 0）
 		attack_all_scores: list[list[float]] = []  # K 枚それぞれの画像ごとのスコア（ターゲットごと）
 		attack_fractions: list[float] = []
+		target_feats_list: list[np.ndarray] = []  # ターゲットごとのプローブ特徴 (K, C)（バイオリン図用）
 		for fraction, single_target_model in zip(LF_MIA_TARGET_FRACTIONS, target_model, strict=True):
 			# ターゲットモデルの特徴量（シャドーと同じ前処理）
 			target_feats = probe(single_target_model).detach().cpu().numpy()
 			single_target_model.to("cpu")  # GPUメモリ節約
+			target_feats_list.append(target_feats)
 
 			# 攻撃モデルで予測
 			result = scorer.score(target_feats)
@@ -421,6 +476,8 @@ class LF_MIA(MIA_Attack):
 
 		# ターゲットモデルへの攻撃透かし入力結果の可視化
 		self._output_target_attack_sign_analysis(target_model)
+		# ターゲットのプローブ特徴のクラス別バイオリン図（攻撃時の特徴を流用し、再推論はしない）
+		self._run_target_probe_violin_analysis(attack_fractions, target_feats_list)
 
 		# シャドー IN/OUT ペアのクラス別装飾効果量解析（既存攻撃結果には影響しない）
 		# K 枚平均でペアあたり 1 ベクトルにする（再推論はしない）

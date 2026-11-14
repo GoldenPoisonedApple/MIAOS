@@ -445,6 +445,7 @@ classDiagram
         _output_target_attack_sign_analysis
         _run_shadow_pair_effect_analysis
         _shadow_pair_violin_panels フック
+        _target_probe_violin_panels フック
     }
     MIA_Attack <|-- MIA_OfflineLiRA
     MIA_Attack <|-- MIA_OnlineLiRA
@@ -541,7 +542,7 @@ flowchart LR
    - `attack_scores_vars`: `per_image` の標本分散（K=1 のときは 0.0）
    - `attack_fraction`: `LF_MIA_TARGET_FRACTIONS` の対応値（装飾適用率。評価時に fraction>0 を IN とみなす）
 5. `per_image` を `attack_score_distribution/` に出力し（下記）、全ターゲットの `per_image` を展開した ROC（各値にそのターゲットのラベルを付与）を `roc_curve_all_scores.png` と `all_scores_*` metrics に出力する。
-6. `_output_target_attack_sign_analysis` で 24 体のターゲットそれぞれに `get_attack_watermark_dataloader` の透かし 1 枚を再入力し、softmax 確率を `target_attacksign_output/` に保存する（下記）。LF_MIA 系全手法で同一。
+6. `_output_target_attack_sign_analysis` で 24 体のターゲットそれぞれに `get_attack_watermark_dataloader` の透かし 1 枚を再入力し、softmax 確率を `target_attacksign_output/` に保存する（下記）。LF_MIA 系全手法で同一。続けて `_run_target_probe_violin_analysis` で、手順 4 のターゲット特徴のクラス別バイオリン図を同じディレクトリに出力する（K>=2 のみ。下記）。
 7. `attack()` 最末尾で `_run_shadow_pair_effect_analysis` を呼び、シャドー IN/OUT ペアのクラス別装飾効果量を `shadow_pair_effect/` に出力する（下記）。続けて `_run_shadow_pair_violin_analysis` でプローブ特徴のクラス別バイオリン図を同じディレクトリに出力する（下記）。いずれも攻撃スコアには影響しない。
 
 Phase 5 の `comprehensive_evaluate` は `attack_score` と「fraction>0 を IN（1）、fraction=0 を OUT（0）」としたラベルで ROC を計算し、`roc_curve.png` と `global_auc` / `tpr_at_*_fpr` / `threshold_at_*_fpr` を出力する。閾値の単位は `membership_score_scale` に従う。
@@ -561,7 +562,7 @@ Phase 5 の `comprehensive_evaluate` は `attack_score` と「fraction>0 を IN�
 | `roc_curve.png` | ターゲット単位（`attack_score`）の ROC |
 | `roc_curve_all_scores.png` | 画像ごとのスコア（`per_image`）全体の ROC |
 | `attack_score_distribution/` | `scores.json`（全ターゲット）。K>=2 のときのみ `histogram_overlay.png` / `histogram_facet.png` / `violin.png` |
-| `target_attacksign_output/` | ターゲットモデルへの攻撃透かし入力時のクラス別確率棒グラフ + `summary.json` |
+| `target_attacksign_output/` | ターゲットモデルへの攻撃透かし入力時のクラス別確率棒グラフ + `summary.json`。K>=2 ではターゲットのプローブ特徴バイオリン図（`probe_fraction_*_violin.png`、13 枚）も含む |
 | `shadow_pair_effect/` | シャドー IN/OUT ペア効果量解析（PNG 4 枚 + `summary.json`）とクラス別バイオリン図（`*_violin.png`。`LF_MIA` / `LF_Mult_MIA` は 3 枚、`LF_Mult_Diff_MIA` は 7 枚）。下記 |
 
 metrics には ROC 指標・`attack_score` / `attack_fraction` に加えて、`target_train_accs` / `target_test_accs` / `target_acc_gaps`、`shadow_train_accs` / `shadow_test_accs` / `shadow_acc_gaps`、`membership_scorer` / `membership_score_scale`、スコアラーの diagnostics、`attack_scores_vars`、`all_scores_auc` / `all_scores_tpr_at_*_fpr` / `all_scores_threshold_at_*_fpr`、シャドー IN/OUT ペア効果量解析由来の `shadow_pair_global_permutation_pvalue` / `shadow_pair_num_significant_fdr` を格納する。
@@ -602,6 +603,20 @@ metrics には ROC 指標・`attack_score` / `attack_fraction` に加えて、`t
 - PNG: `class_probabilities_fraction_{fraction}.png`（fraction の `.` を `_` に置換。例: `1.0` → `1_0`）。ファイル名は fraction のみで決まるため、fraction=0 の 12 体は同じ `class_probabilities_fraction_0_0.png` に上書きされ、最後の 1 体分だけが残る（PNG は計 13 枚）
 - `summary.json`: 24 体分の `fraction` / `probs`（100 要素）/ `argmax_class` / `argmax_value` / `top_classes`（上位 10 クラス）/ `plot_path`
 - 描画スタイルは `attack_model_analysis.plot_class_importance` を再利用（`figsize=(16,5)`, `dpi=300`）
+
+#### ターゲットのプローブ特徴のバイオリン図
+
+`LF_MIA._run_target_probe_violin_analysis` が `_output_target_attack_sign_analysis` の直後に呼ばれる。出力先は同じ `MODEL_SAVE_DIR/target_attacksign_output/` で、描画は `analysis/probe_violin.py`（後述）。
+
+- 入力は攻撃ループで得たターゲットごとのプローブ特徴 `(K, NUM_CLASSES)`（攻撃特徴そのもの。再推論はしない）
+- K>=2 の手法のみ（`LF_Mult_MIA` / `LF_Mult_Diff_MIA`）。`LF_MIA`（K=1）では出力しない
+- パネル構成はテンプレートメソッド `_target_probe_violin_panels(fractions, target_feats) -> list[ProbeViolinPanel]` で決まる。fraction>0 は 1 体ずつ `(1, K, C)`、fraction=0 の 12 体はまとめて `(12, K, C)` の 1 枚（計 13 枚）
+- PNG: `probe_fraction_{fraction}_violin.png`（fraction の表記は `class_probabilities_fraction_*` と同じ `fraction_to_filename`）
+
+| 手法 | 値 | 下段 |
+| ---- | -- | ---- |
+| `LF_Mult_MIA` | `logit(decorated)` | なし |
+| `LF_Mult_Diff_MIA` | `logit(decorated) − logit(plain)` | 0 に対する 1 標本 Wilcoxon。fraction>0 は `IMAGE_LEVEL`（K 点）、fraction=0 は `MODEL_LEVEL`（12 点） |
 
 #### シャドー IN/OUT ペア効果量解析（`analysis/shadow_pair_effect_analysis.py`）
 
@@ -670,14 +685,21 @@ Wilcoxon 等の統計単位は `n_pairs = num_shadow_models / 2` とする。
 
 クラス別の詳細数値・`n_pairs`・`top_class_cohens_d`・Bonferroni 有意クラス一覧は `summary.json` のみ（metrics には載せない）。
 
-#### シャドー IN/OUT プローブ特徴のバイオリン図（`analysis/shadow_pair_violin.py`）
+#### プローブ特徴のクラス別バイオリン図（`analysis/probe_violin.py`）
 
-`LF_MIA._run_shadow_pair_violin_analysis` が `_run_shadow_pair_effect_analysis` の直後に呼ばれる。出力先は効果量解析と同じ `MODEL_SAVE_DIR/shadow_pair_effect/`（`config.SHADOW_PAIR_EFFECT_DIR`）で、ファイル名は `{name}_violin.png`。metrics には何も載せない。
+シャドー IN/OUT（下記）とターゲット（後述）で共用する描画。`save_violin_panels(panels, output_dir, alpha=0.05)` が各パネルを `{name}_violin.png` として保存する。metrics には何も載せない。
 
-- パネル構成はテンプレートメソッド `_shadow_pair_violin_panels(shadow_models, in_feats, out_feats) -> list[ShadowViolinPanel]` で決まる。縦軸ラベルは `_probe_feature_label()`（既定 `logit(p)`）。
-- `ShadowViolinPanel`（frozen）: `name` / `title` / `ylabel` / `values (n_models, K, NUM_CLASSES)` / `test_significance`。`per_image()` は `(n_models × K, NUM_CLASSES)`、`per_model()` は K 枚平均の `(n_models, NUM_CLASSES)` を返す。
+- `ProbeViolinPanel`（frozen）: `name` / `title` / `ylabel` / `values (n_models, K, NUM_CLASSES)` / `significance: SignificanceTest`。`per_image()` は `(n_models × K, NUM_CLASSES)`、`per_model()` は K 枚平均の `(n_models, NUM_CLASSES)`、`test_samples()` は `significance` に応じた検定用標本を返す。
+- `SignificanceTest`: `NONE`（下段なし）/ `MODEL_LEVEL`（`per_model`。同一モデル内の K 枚は独立でないため、複数モデルではこちら）/ `IMAGE_LEVEL`（`per_image`。1 モデルを固定した条件付き検定。単一ターゲット用）。
 - 上段: 100 クラスのバイオリンを 1 枚に描く。分布は全画像の値（`per_image`）。各クラスの平均を短い横線で示す（正=赤、負=青）。
-- 下段（`test_significance=True` のパネルのみ。x 軸共有）: `per_model` の各クラスに対する両側 Wilcoxon 符号順位検定（0 に対する）の `-log10(p)` 棒グラフ。Bonferroni（`alpha / n_classes`）実線と BH-FDR 閾値破線（`alpha=0.05`）付き。同一モデル内の K 枚は独立でないため、検定は全画像ではなくモデル単位で行う。`n_pairs < 6` または全ゼロのクラスは非表示（効果量解析と同じ `class_wilcoxon_pvalues` を使用）。
+- 下段（`significance` が `NONE` 以外のパネルのみ。x 軸共有）: `test_samples()` の各クラスに対する両側 Wilcoxon 符号順位検定（0 に対する）の `-log10(p)` 棒グラフ。Bonferroni（`alpha / n_classes`）実線と BH-FDR 閾値破線（`alpha=0.05`）付き。y ラベルに検定単位（`model-level (K-mean)` / `image-level (K images)`）を明記する。標本数 6 未満または全ゼロのクラスは非表示（効果量解析と同じ `class_wilcoxon_pvalues` を使用）。
+
+#### シャドー IN/OUT プローブ特徴のバイオリン図
+
+`LF_MIA._run_shadow_pair_violin_analysis` が `_run_shadow_pair_effect_analysis` の直後に呼ばれる。出力先は効果量解析と同じ `MODEL_SAVE_DIR/shadow_pair_effect/`（`config.SHADOW_PAIR_EFFECT_DIR`）。
+
+- パネル構成はテンプレートメソッド `_shadow_pair_violin_panels(shadow_models, in_feats, out_feats) -> list[ProbeViolinPanel]` で決まる。縦軸ラベルは `_probe_feature_label()`（既定 `logit(p)`）。
+- 検定はすべて `MODEL_LEVEL`（`n_pairs` 点）。
 
 | `name` | 値 | 下段 | `LF_MIA` / `LF_Mult_MIA` | `LF_Mult_Diff_MIA` |
 | ------ | -- | ---- | ------------------------ | ------------------ |
@@ -691,7 +713,7 @@ Wilcoxon 等の統計単位は `n_pairs = num_shadow_models / 2` とする。
 
 ### LF_Mult_MIA / LF_Mult_Diff_MIA（`lf_mult_mia.py` / `lf_mult_diff_mia.py`）
 
-`LF_MIA` を継承し、Phase 2 / 3 と `attack()` 本体はそのまま再利用する。`_build_probe`（プローブ = 入力画像の作り方）と `_extra_attack_metrics` のみ置き換える（`LF_Mult_Diff_MIA` は加えて解析用の `_probe_feature_label` / `_shadow_pair_violin_panels` をオーバーライドする。上記バイオリン図参照）。
+`LF_MIA` を継承し、Phase 2 / 3 と `attack()` 本体はそのまま再利用する。`_build_probe`（プローブ = 入力画像の作り方）と `_extra_attack_metrics` のみ置き換える（`LF_Mult_Diff_MIA` は加えて解析用の `_probe_feature_label` / `_shadow_pair_violin_panels` / `_target_probe_violin_panels` をオーバーライドする。上記バイオリン図参照）。
 
 1. `_build_probe` で `get_attack_composite_dataloaders(K)` から透かし合成済み / 素の画像 K 枚の loader を取得する（K は `hyperparameters.attack_num_images`。**必須**）。
 2. `_extract_features(model, decorated_loader, plain_loader)` でモデル 1 体から `(K, NUM_CLASSES)` の特徴を得る。
@@ -879,7 +901,7 @@ LF_MIA 系で参照する主な定数（抜粋）:
 | 定数 | 値 | 用途 |
 | ---- | -- | ---- |
 | `ATTACK_MODEL_ANALYSIS_DIR` | `analyze_attack_model` | 攻撃モデル解析 PNG / `summary.json` の出力先 |
-| `TARGET_ATTACKSIGN_OUTPUT_DIR` | `target_attacksign_output` | ターゲット透かし確率棒グラフ / `summary.json` の出力先 |
+| `TARGET_ATTACKSIGN_OUTPUT_DIR` | `target_attacksign_output` | ターゲット透かし確率棒グラフ / `summary.json` とターゲットのプローブ特徴バイオリン図の出力先 |
 | `SHADOW_PAIR_EFFECT_DIR` | `shadow_pair_effect` | シャドー IN/OUT ペア効果量解析 PNG / `summary.json` とクラス別バイオリン図 `*_violin.png` の出力先 |
 | `ATTACK_SCORE_DISTRIBUTION_DIR` | `attack_score_distribution` | ターゲットごとの画像ごとのスコア分布 PNG / `scores.json` の出力先 |
 | `NEURAL_REGULARIZED_CV_DIR` | `neural_regularized_cv` | `neural_regularized` の CV・探索結果の出力先 |
@@ -933,7 +955,7 @@ attacks/
 │   ├── attack_score_distribution.py
 │   ├── target_attack_sign_output.py
 │   ├── shadow_pair_effect_analysis.py
-│   └── shadow_pair_violin.py
+│   └── probe_violin.py
 └── membership_scorers/
     ├── __init__.py
     ├── base.py
