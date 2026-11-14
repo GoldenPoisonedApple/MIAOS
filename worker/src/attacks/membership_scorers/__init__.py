@@ -8,6 +8,10 @@ from src.attacks.membership_scorers.base import (
 	MembershipScorer,
 	ScoreScale,
 )
+from src.attacks.membership_scorers.class_selection import (
+	DEFAULT_SIGNIFICANT_CLASS_SELECTION,
+	SignificantClassSelection,
+)
 from src.attacks.membership_scorers.diagonal_lda import (
 	DEFAULT_DIAGONAL_LDA_REG_LAMBDA,
 	DEFAULT_DIAGONAL_LDA_VARIANCE,
@@ -53,6 +57,8 @@ class MembershipScorerConfig:
 	"""攻撃モデルの種別とハイパーパラメータ。"""
 
 	kind: str = MEMBERSHIP_SCORER_NEURAL
+	# diagonal_lda / flat_diagonal_lda / gaussian_lr で共用するクラス選択
+	significant_class_selection: SignificantClassSelection = DEFAULT_SIGNIFICANT_CLASS_SELECTION
 	# diagonal_lda / flat_diagonal_lda で共用する正則化項
 	diagonal_lda_reg_lambda: float = DEFAULT_DIAGONAL_LDA_REG_LAMBDA
 	diagonal_lda_variance: DiagonalVariance = DEFAULT_DIAGONAL_LDA_VARIANCE
@@ -71,6 +77,15 @@ class MembershipScorerConfig:
 				f"expected one of {sorted(VALID_MEMBERSHIP_SCORERS)}"
 			)
 		# 文字列で渡された場合も Enum に正規化する（不正値はここで ValueError）
+		object.__setattr__(
+			self,
+			"significant_class_selection",
+			_parse_enum(
+				SignificantClassSelection,
+				self.significant_class_selection,
+				"significant_class_selection",
+			),
+		)
 		object.__setattr__(
 			self,
 			"diagonal_lda_variance",
@@ -95,6 +110,8 @@ class MembershipScorerConfig:
 	def from_hyperparameters(cls, hp: dict[str, Any] | None) -> "MembershipScorerConfig":
 		"""
 		membership_scorer: neural（デフォルト）| neural_regularized | diagonal_lda | flat_diagonal_lda | gaussian_lr
+		significant_class_selection: none（デフォルト）| bh_fdr | bonferroni
+			diagonal_lda / flat_diagonal_lda / gaussian_lr 共通。shadow_pair 分析で有意なクラスのみ使う
 		diagonal_lda_reg_lambda: diagonal_lda / flat_diagonal_lda 用。未指定時 DEFAULT_DIAGONAL_LDA_REG_LAMBDA
 		diagonal_lda_variance: pair_diff（デフォルト）| within_class | none
 		flat_diagonal_lda_variance: within_class（デフォルト）| pair_diff | none
@@ -132,6 +149,9 @@ class MembershipScorerConfig:
 		)
 		return cls(
 			kind=str(hp.get("membership_scorer", MEMBERSHIP_SCORER_NEURAL)).strip().lower(),
+			significant_class_selection=hp.get(
+				"significant_class_selection", DEFAULT_SIGNIFICANT_CLASS_SELECTION
+			),
 			diagonal_lda_reg_lambda=float(
 				hp.get("diagonal_lda_reg_lambda", DEFAULT_DIAGONAL_LDA_REG_LAMBDA)
 			),
@@ -192,16 +212,19 @@ def build_membership_scorer(
 		return DiagonalLdaMembershipScorer(
 			reg_lambda=config.diagonal_lda_reg_lambda,
 			variance=config.diagonal_lda_variance,
+			class_selection=config.significant_class_selection,
 		)
 	if config.kind == MEMBERSHIP_SCORER_FLAT_DIAGONAL_LDA:
 		return FlatDiagonalLdaMembershipScorer(
 			reg_lambda=config.diagonal_lda_reg_lambda,
 			variance=config.flat_diagonal_lda_variance,
+			class_selection=config.significant_class_selection,
 		)
 	if config.kind == MEMBERSHIP_SCORER_GAUSSIAN_LR:
 		return GaussianLrMembershipScorer(
 			variance=config.gaussian_lr_variance,
 			var_floor=config.gaussian_lr_var_floor,
+			class_selection=config.significant_class_selection,
 		)
 	return NeuralMembershipScorer(
 		save_dir=save_dir,

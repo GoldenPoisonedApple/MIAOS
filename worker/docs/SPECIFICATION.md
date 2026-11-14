@@ -573,9 +573,11 @@ metrics には ROC 指標・`attack_score` / `attack_fraction` に加えて、`t
 | ------------------- | ---- |
 | `neural` | `w1_relative_change`, `attack_model_train_acc` / `attack_model_train_loss` / `attack_model_train_in_acc` / `attack_model_train_out_acc` |
 | `neural_regularized` | `cv_objective`, `standardize`, `cv_score` / `cv_fold_mean` / `cv_fold_std`, `best_trial_number`, `best_lr` / `best_weight_decay` / `best_n_hidden` / `best_hidden_dim`（0 層時 `null`）/ `best_dropout`, `best_epoch_median`, `n_trials_completed` / `n_trials_pruned` |
-| `diagonal_lda` | `diagonal_lda_reg_lambda`, `diagonal_lda_variance`, `diagonal_lda_w_norm`, `diagonal_lda_b` |
-| `flat_diagonal_lda` | `flat_diagonal_lda_reg_lambda`, `flat_diagonal_lda_variance`, `flat_diagonal_lda_w_norm`, `flat_diagonal_lda_b`, `flat_diagonal_lda_w_norm_per_image`（K 要素リスト） |
-| `gaussian_lr` | `gaussian_lr_variance`, `gaussian_lr_var_floor`, `gaussian_lr_floored_ratio_in` / `gaussian_lr_floored_ratio_out` |
+| `diagonal_lda` | `diagonal_lda_reg_lambda`, `diagonal_lda_variance`, `diagonal_lda_w_norm`, `diagonal_lda_b`, クラス選択共通キー |
+| `flat_diagonal_lda` | `flat_diagonal_lda_reg_lambda`, `flat_diagonal_lda_variance`, `flat_diagonal_lda_w_norm`, `flat_diagonal_lda_b`, `flat_diagonal_lda_w_norm_per_image`（K 要素リスト）, クラス選択共通キー |
+| `gaussian_lr` | `gaussian_lr_variance`, `gaussian_lr_var_floor`, `gaussian_lr_floored_ratio_in` / `gaussian_lr_floored_ratio_out`（クラス選択に依らず全次元で算出）, クラス選択共通キー |
+
+クラス選択共通キー: `significant_class_selection`, `num_selected_classes`, `class_selection_fallback`（有意クラス 0 件で全クラスに戻したか）。
 
 #### 攻撃スコア分布（`analysis/attack_score_distribution.py`）
 
@@ -738,6 +740,7 @@ LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し�
 | `diagonal_lda.py` | `DiagonalLdaMembershipScorer`, 共通推定関数 `fit_diagonal_linear`, `DiagonalVariance` |
 | `flat_diagonal_lda.py` | `FlatDiagonalLdaMembershipScorer` |
 | `gaussian_lr.py` | `GaussianLrMembershipScorer`, `GaussianVariance` |
+| `class_selection.py` | `SignificantClassSelection`, `ClassMask`, `select_significant_classes`（統計系スコアラー共通の有意クラス選択） |
 | `__init__.py` | `MembershipScorerConfig`（hyperparameters のパース・検証）, `build_membership_scorer` |
 
 | `membership_scorer` | 手法 | `per_image` | `value` | `score_scale` |
@@ -757,6 +760,15 @@ LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し�
 | `flat_diagonal_lda_variance` | `flat_diagonal_lda` | `within_class` | 重みの分母。`within_class`（IN/OUT の分散のプール）/ `pair_diff`（ペア差分の分散）/ `none`（分散で割らず、重みは IN/OUT の平均差） |
 | `gaussian_lr_variance` | `gaussian_lr` | `per_class` | `per_class`（IN/OUT 別々の分散）/ `pooled`（共通の分散） |
 | `gaussian_lr_var_floor` | `gaussian_lr` | `1e-3` | 分散の下限（logit 飽和で分散 0 になる次元への対策） |
+| `significant_class_selection` | `diagonal_lda` / `flat_diagonal_lda` / `gaussian_lr` | `none` | 使うクラスの選択。`none`（全クラス）/ `bh_fdr` / `bonferroni`（下記） |
+
+**有意クラス選択**（`class_selection.py`）: `fit` の冒頭で、K 枚平均したペア差分 `(n_pairs, C)` にクラス別の両側 Wilcoxon 検定をかけ、`alpha=0.05` の BH-FDR または Bonferroni で有意なクラスのマスク `(C,)` を作る。判定はシャドー IN/OUT ペア効果量解析と同じ関数（`class_wilcoxon_pvalues` / `bh_fdr_significant` / `bonferroni_significant`）を使うため、選ばれるクラスは `shadow_pair_effect/summary.json` の `significant_class_ids_fdr` / `significant_class_ids_bonferroni` と一致する。
+
+- `diagonal_lda`: 非有意クラスの重みを 0 にし、マスク後の重みでバイアスを計算する
+- `flat_diagonal_lda`: クラス c が有意なら全画像 k の `(k, c)` を使い、それ以外の重みを 0 にする
+- `gaussian_lr`: 非有意クラスの `(k, c)` の対数尤度比を足し合わせない
+- 有意クラスが 0 件（`n_pairs < 6` で p 値が出ない場合を含む）なら警告ログを出して全クラスを使う（`class_selection_fallback=True`）
+- 選択は学習と同じシャドー特徴で行う（学習データ上の判別性能は楽観側に偏る）
 
 各クラスのシャドーが 1 本（`n_pairs=1`）のときは分散が定義できないため、分散を正則化項 / 下限のみとして動作する（`variance=none` は分散を使わないため影響を受けない）。
 

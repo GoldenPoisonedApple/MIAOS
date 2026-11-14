@@ -17,6 +17,7 @@
 | `attack_decoration` | 装飾オブジェクト（`watermark` のみ） | なし | LF_MIA 系（**必須**） | `dataset.get_attack_watermark_dataloader` / `get_attack_composite_dataloaders` |
 | `attack_num_images` | int (>= 1) | なし | `LfMultMia` / `LfMultDiffMia`（**必須**） | `LF_Mult_MIA._num_images` |
 | `membership_scorer` | str | `neural` | LF_MIA 系 | `attacks/membership_scorers/__init__.py` |
+| `significant_class_selection` | str | `none` | LF_MIA 系（`diagonal_lda` / `flat_diagonal_lda` / `gaussian_lr`） | `attacks/membership_scorers/class_selection.py` |
 | `attack_model_batch_size` | int | `16`（`cfg.ATTACK_MODEL_BATCH_SIZE`） | LF_MIA 系（`membership_scorer=neural` / `neural_regularized`） | 同上 |
 | `attack_model_epochs` | int | `100`（`cfg.ATTACK_MODEL_EPOCHS`） | LF_MIA 系（`membership_scorer=neural`） | 同上 |
 | `neural_regularized_objective` | str | `auc` | LF_MIA 系（`neural_regularized`） | `attacks/membership_scorers/neural_regularized.py` |
@@ -119,12 +120,15 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
 | ------------------- | ---- | ------------ | ---------------- |
 | `neural` | `AttackNet` で画像ごとに IN/OUT を分類し、IN 確率を平均する | `attack_model_batch_size`, `attack_model_epochs` | `probability` |
 | `neural_regularized` | 1 出力 MLP をペア単位 k-fold CV + 早期停止 + Optuna で探索し、最良 trial の fold モデルのアンサンブルで画像ごとの IN 確率を平均する | `attack_model_batch_size`, `neural_regularized_*` | `probability` |
-| `diagonal_lda` | K 枚を平均した特徴に対する対角 LDA（分母は既定でペア差分の分散） | `diagonal_lda_reg_lambda`, `diagonal_lda_variance` | `log_odds` |
-| `flat_diagonal_lda` | `(K·C)` に平坦化した対角 LDA | `diagonal_lda_reg_lambda`, `flat_diagonal_lda_variance` | `log_odds` |
-| `gaussian_lr` | (k, c) ごとの正規分布による尤度比検定 | `gaussian_lr_variance`, `gaussian_lr_var_floor` | `log_odds` |
+| `diagonal_lda` | K 枚を平均した特徴に対する対角 LDA（分母は既定でペア差分の分散） | `diagonal_lda_reg_lambda`, `diagonal_lda_variance`, `significant_class_selection` | `log_odds` |
+| `flat_diagonal_lda` | `(K·C)` に平坦化した対角 LDA | `diagonal_lda_reg_lambda`, `flat_diagonal_lda_variance`, `significant_class_selection` | `log_odds` |
+| `gaussian_lr` | (k, c) ごとの正規分布による尤度比検定 | `gaussian_lr_variance`, `gaussian_lr_var_floor`, `significant_class_selection` | `log_odds` |
 
 | キー | 取り得る値 | 意味 |
 | ---- | ---------- | ---- |
+| `significant_class_selection` | `none`（既定） | 全クラスを使う |
+| | `bh_fdr` | shadow_pair 分析で BH-FDR 有意なクラスのみ使う（`alpha=0.05`）。`flat_diagonal_lda` / `gaussian_lr` ではクラス c が有意なら全画像 k の `(k, c)` を使う。有意クラスが 0 件なら警告を出して全クラスを使う |
+| | `bonferroni` | 同上で、判定を Bonferroni にする |
 | `flat_diagonal_lda_variance` | `within_class`（既定） | 重みの分母を IN / OUT のクラス内分散のプールにする。データの異なる単体モデルに汎化させる場合の標準 |
 | | `pair_diff` | 重みの分母をペア差分 IN−OUT の分散にする。データ分割由来の分散がペア内で相殺される |
 | | `none` | 分散で割らず、重みを IN / OUT の平均差そのものにする。`diagonal_lda_reg_lambda` は使わない |

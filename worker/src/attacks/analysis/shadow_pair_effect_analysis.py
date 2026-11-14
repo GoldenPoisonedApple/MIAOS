@@ -94,6 +94,15 @@ def bh_fdr_significant(p_values: np.ndarray, alpha: float) -> np.ndarray:
 	return significant
 
 
+def bonferroni_significant(p_values: np.ndarray, alpha: float) -> np.ndarray:
+	"""Bonferroni 補正。p * n < alpha を満たすクラスの boolean マスクを返す（NaN は非有意）。"""
+	n = len(p_values)
+	valid = np.isfinite(p_values)
+	significant = np.zeros(n, dtype=bool)
+	significant[valid] = p_values[valid] * n < alpha
+	return significant
+
+
 def bh_fdr_threshold_p(p_values: np.ndarray, alpha: float) -> float | None:
 	"""BH-FDR で有意と判定される最大の生 p 値（プロット用閾値線）。"""
 	n = len(p_values)
@@ -169,12 +178,8 @@ def compute_class_stats(
 			)
 		)
 
-	valid_p = np.isfinite(p_values)
-	bonferroni_ids = [
-		int(c)
-		for c in range(n_classes)
-		if valid_p[c] and p_values[c] * n_classes < alpha
-	]
+	bonferroni_mask = bonferroni_significant(p_values, alpha)
+	bonferroni_ids = [int(c) for c in range(n_classes) if bonferroni_mask[c]]
 	fdr_mask = bh_fdr_significant(p_values, alpha)
 	fdr_ids = [int(c) for c in range(n_classes) if fdr_mask[c]]
 
