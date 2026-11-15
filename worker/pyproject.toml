@@ -18,6 +18,7 @@ dependencies = [
   "requests",
   "python-dotenv",
   "optuna>=5.0.0",
+  "lightgbm>=4.7.0",
 ]
 
 # --extraで指定

@@ -18,16 +18,18 @@
 | `attack_num_images` | int (>= 1) | なし | `LfMultMia` / `LfMultDiffMia`（**必須**） | `LF_Mult_MIA._num_images` |
 | `membership_scorer` | str | `neural` | LF_MIA 系 | `attacks/membership_scorers/__init__.py` |
 | `significant_class_selection` | str | `none` | LF_MIA 系（`diagonal_lda` / `flat_diagonal_lda` / `gaussian_lr`） | `attacks/membership_scorers/class_selection.py` |
-| `attack_model_batch_size` | int | `16`（`cfg.ATTACK_MODEL_BATCH_SIZE`） | LF_MIA 系（`membership_scorer=neural` / `neural_regularized`） | 同上 |
+| `attack_model_batch_size` | int | `64`（`cfg.ATTACK_MODEL_BATCH_SIZE`） | LF_MIA 系（`membership_scorer=neural` / `neural_regularized`） | 同上 |
 | `attack_model_epochs` | int | `100`（`cfg.ATTACK_MODEL_EPOCHS`） | LF_MIA 系（`membership_scorer=neural`） | 同上 |
-| `neural_regularized_objective` | str | `auc` | LF_MIA 系（`neural_regularized`） | `attacks/membership_scorers/neural_regularized.py` |
-| `neural_regularized_n_folds` | int (>= 2, <= n_pairs) | `10` | 同上 | 同上 |
-| `neural_regularized_val_ratio` | float (0 < x < 1) | `0.2` | 同上 | 同上 |
-| `neural_regularized_n_trials` | int (>= 1) | `50` | 同上 | 同上 |
-| `neural_regularized_stability_lambda` | float (>= 0) | `0.5` | 同上 | 同上 |
-| `neural_regularized_patience` | int (>= 1) | `20` | 同上 | 同上 |
+| `cv_objective` | str | `auc` | LF_MIA 系（`neural_regularized` / `lightgbm`） | `attacks/membership_scorers/pair_cv.py` |
+| `cv_n_folds` | int (>= 2, <= n_pairs) | `10` | 同上 | 同上 |
+| `cv_val_ratio` | float (0 < x < 1) | `0.2` | 同上 | 同上 |
+| `cv_n_trials` | int (>= 1) | `50` | 同上 | 同上 |
+| `cv_stability_lambda` | float (>= 0) | `0.5` | 同上 | 同上 |
+| `neural_regularized_patience` | int (>= 1) | `20` | LF_MIA 系（`neural_regularized`） | `attacks/membership_scorers/neural_regularized.py` |
 | `neural_regularized_max_epochs` | int (>= 1) | `500` | 同上 | 同上 |
 | `neural_regularized_standardize` | bool（`true` / `false`。文字列も可） | `true` | 同上 | 同上 |
+| `lightgbm_patience` | int (>= 1) | `50` | LF_MIA 系（`lightgbm`） | `attacks/membership_scorers/lightgbm_scorer.py` |
+| `lightgbm_max_rounds` | int (>= 1) | `1000` | 同上 | 同上 |
 | `diagonal_lda_reg_lambda` | float | `1e-3` | LF_MIA 系（`diagonal_lda` / `flat_diagonal_lda`） | 同上 |
 | `diagonal_lda_variance` | str | `pair_diff` | LF_MIA 系（`diagonal_lda`） | 同上 |
 | `flat_diagonal_lda_variance` | str | `within_class` | LF_MIA 系（`flat_diagonal_lda`） | 同上 |
@@ -119,7 +121,8 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
 | `membership_scorer` | 手法 | 使用するキー | スコアのスケール |
 | ------------------- | ---- | ------------ | ---------------- |
 | `neural` | `AttackNet` で画像ごとに IN/OUT を分類し、IN 確率を平均する | `attack_model_batch_size`, `attack_model_epochs` | `probability` |
-| `neural_regularized` | 1 出力 MLP をペア単位 k-fold CV + 早期停止 + Optuna で探索し、最良 trial の fold モデルのアンサンブルで画像ごとの IN 確率を平均する | `attack_model_batch_size`, `neural_regularized_*` | `probability` |
+| `neural_regularized` | 1 出力 MLP をペア単位 k-fold CV + 早期停止 + Optuna で探索し、最良 trial の fold モデルのアンサンブルで画像ごとの IN 確率を平均する | `attack_model_batch_size`, `cv_*`, `neural_regularized_*` | `probability` |
+| `lightgbm` | 画像単位の LightGBM をペア単位 k-fold CV + 早期停止 + Optuna で探索し、最良 trial の fold モデルのアンサンブルで画像ごとの IN 確率を平均する | `cv_*`, `lightgbm_*` | `probability` |
 | `diagonal_lda` | K 枚を平均した特徴に対する対角 LDA（分母は既定でペア差分の分散） | `diagonal_lda_reg_lambda`, `diagonal_lda_variance`, `significant_class_selection` | `log_odds` |
 | `flat_diagonal_lda` | `(K·C)` に平坦化した対角 LDA | `diagonal_lda_reg_lambda`, `flat_diagonal_lda_variance`, `significant_class_selection` | `log_odds` |
 | `gaussian_lr` | (k, c) ごとの正規分布による尤度比検定 | `gaussian_lr_variance`, `gaussian_lr_var_floor`, `significant_class_selection` | `log_odds` |
@@ -135,24 +138,188 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
 | `diagonal_lda_variance` | `pair_diff`（既定） / `within_class` / `none` | `flat_diagonal_lda_variance` と同じ意味（既定のみ異なる） |
 | `gaussian_lr_variance` | `per_class`（既定） | IN / OUT で別々の分散を使う |
 | | `pooled` | IN / OUT の分散の平均を共通に使う（シャドーが少ないとき向け） |
-| `neural_regularized_objective` | `auc`（既定） | シャドー単位（K 枚の IN 確率平均）の AUC。CV の fold 指標と早期停止の監視に使う |
+| `cv_objective` | `auc`（既定） | シャドー単位（K 枚の IN 確率平均）の AUC。CV の fold 指標と早期停止の監視に使う |
 | | `tpr_at_1_fpr` | 画像単位の TPR@FPR=0.01。テスト fold・validation の OUT 画像数（ペア数 × K）が 100 以上必要（満たさない場合 `ValueError`） |
-
-`neural_regularized` の各キー:
-
-| キー | 意味 |
-| ---- | ---- |
-| `neural_regularized_n_folds` | シャドーペア単位の k-fold の k。`n_pairs`（`num_shadow_models / 2`）を超えると `ValueError` |
-| `neural_regularized_val_ratio` | 各 fold の学習側ペアのうち早期停止用 validation に回す割合（最低 1 ペア） |
-| `neural_regularized_n_trials` | Optuna の試行回数（1 trial = k fold 分の学習。MedianPruner で枝刈りあり） |
-| `neural_regularized_stability_lambda` | trial のスコア `mean − λ·std`（fold 指標）の λ |
-| `neural_regularized_patience` / `neural_regularized_max_epochs` | 早期停止の猶予 epoch 数 / epoch 上限 |
-| `neural_regularized_standardize` | `true`（既定）で各 fold の学習側で fit した z-score 標準化を入力に適用する。`false` では標準化せず生の特徴を入力する（`true` / `false` 以外は `ValueError`） |
-
-探索空間（`lr`, `weight_decay`, 隠れ層数 0〜1, 隠れ層幅, `dropout`）はコード定数で固定。詳細は `SPECIFICATION.md` の「`neural_regularized`」を参照。
 
 - 文字列の値は前後の空白を除き、小文字に正規化してから解釈する。取り得る値以外は `ValueError`。
 - スコアのスケールは metrics の `membership_score_scale` に出力され、`attack_score` / `threshold_at_*` の単位を表す。
+- 以下の「metrics」は、各 scorer が metrics に追加するキー（スコアラーの diagnostics）。全 scorer 共通で `membership_scorer`（scorer 名）と `membership_score_scale` も出力される。
+
+#### CV 探索の共通設定（`neural_regularized` / `lightgbm`）
+
+シャドー IN/OUT ペアを単位に k-fold CV を行い、fold 指標の `mean − λ·std` を Optuna（TPE + MedianPruner）で最大化する。各 fold の学習側ペアの一部を validation に回して早期停止し、最良 trial の k 個の fold モデルの IN 確率の平均でターゲットを推論する。
+
+ハイパーパラメータ:
+
+| キー | 既定値 | 意味・解説 |
+| ---- | ------ | ---------- |
+| `cv_objective` | `auc` | fold 指標・早期停止で最大化する指標（上表）。ターゲットの評価で重視する指標に合わせる |
+| `cv_n_folds` | `10` | シャドーペア単位の k-fold の k。`n_pairs`（`num_shadow_models / 2`）を超えると `ValueError`。大きいほど学習側が増えるが、テスト fold が小さくなり fold 指標の分散が増える |
+| `cv_val_ratio` | `0.2` | 各 fold の学習側ペアのうち早期停止用 validation に回す割合（最低 1 ペア、学習側に最低 1 ペア残す） |
+| `cv_n_trials` | `50` | Optuna の試行回数。1 trial = k fold 分の学習。途中の fold 平均が過去 trial の中央値を下回ると枝刈りされる（最初の 5 trial と fold 0 は対象外） |
+| `cv_stability_lambda` | `0.5` | trial のスコア `mean − λ·std` の λ。大きいほど fold 間のばらつきが小さい（未知のターゲットに安定な）設定を優先する |
+
+metrics:
+
+| キー | 意味・解説 |
+| ---- | ---------- |
+| `cv_objective` | 使用した目的指標 |
+| `cv_score` | 最良 trial の `mean − λ·std`。最良 trial を選んだ値そのものなので選択バイアスで楽観側に偏る（診断値として扱う） |
+| `cv_fold_mean` / `cv_fold_std` | 最良 trial の fold 指標の平均 / 母標準偏差 |
+| `best_trial_number` | 最良 trial の番号（`trials.csv` の行と対応） |
+| `n_trials_completed` / `n_trials_pruned` | 完了した trial 数 / 枝刈りされた trial 数 |
+
+#### `neural`
+
+`AttackNet`（C → 64 → 2）で画像ごとに IN/OUT を分類し、K 枚の IN 確率を平均する。全シャドーで学習し、検証データを持たない。
+
+ハイパーパラメータ:
+
+| キー | 既定値 | 意味・解説 |
+| ---- | ------ | ---------- |
+| `attack_model_batch_size` | `64` | ミニバッチサイズ |
+| `attack_model_epochs` | `100` | 学習 epoch 数（早期停止なし） |
+
+metrics:
+
+| キー | 意味・解説 |
+| ---- | ---------- |
+| `w1_relative_change` | 第 1 層重みの相対変化量 `‖ΔW1‖ / ‖W1_init‖`。1 を大きく下回るなら、学習で得た成分が初期化ノイズに埋もれている |
+| `attack_model_train_acc` / `attack_model_train_loss` | 学習データ上の正解率 / 平均 cross entropy。学習データでの値なので汎化性能ではない |
+| `attack_model_train_in_acc` / `attack_model_train_out_acc` | 学習データ上の IN / OUT 別の正解率。片方だけ高い場合は一方のクラスへの偏りを示す |
+
+#### `neural_regularized`
+
+1 出力 MLP（`BinaryAttackNet`）を CV 探索の共通設定（上記）で探索する。各 fold は AdamW + `BCEWithLogitsLoss` で学習し、validation の目的指標（同値時は validation BCE が小さい方）で早期停止して best の重みを復元する。
+
+ハイパーパラメータ（`cv_*` に加えて）:
+
+| キー | 既定値 | 意味・解説 |
+| ---- | ------ | ---------- |
+| `attack_model_batch_size` | `64` | ミニバッチサイズ |
+| `neural_regularized_patience` | `20` | validation の目的指標が改善しないまま許容する epoch 数 |
+| `neural_regularized_max_epochs` | `500` | epoch の上限 |
+| `neural_regularized_standardize` | `true` | `true` で各 fold の学習側で fit した z-score 標準化を入力に適用する。`false` では生の特徴を入力する（`true` / `false` 以外は `ValueError`） |
+
+探索空間（コード定数で固定）:
+
+| パラメータ | 範囲 | 意味 |
+| ---------- | ---- | ---- |
+| `lr` | 1e-5〜1e-3（log） | AdamW の学習率 |
+| `weight_decay` | 1e-5〜1e-1（log） | AdamW の重み減衰（L2 正則化） |
+| `n_hidden` | {0, 1} | 隠れ層数。0 はロジスティック回帰と同じ線形モデル |
+| `hidden_dim` | 8〜128（log） | 隠れ層の幅（`n_hidden=1` のみ） |
+| `dropout` | 0〜0.5 | 隠れ層の dropout 率（`n_hidden=1` のみ） |
+
+metrics（CV 共通の metrics に加えて）:
+
+| キー | 意味・解説 |
+| ---- | ---------- |
+| `standardize` | 標準化の有無 |
+| `best_lr` / `best_weight_decay` / `best_n_hidden` / `best_hidden_dim` / `best_dropout` | 最良 trial のハイパーパラメータ。`best_hidden_dim` は 0 層時 `null` |
+| `best_epoch_median` | 最良 trial の各 fold で早期停止が採用した epoch 数の中央値。`neural_regularized_max_epochs` に近いなら上限で打ち切られており、上限か学習率を上げる余地がある |
+
+#### `lightgbm`
+
+画像単位（特徴 C 次元）の LightGBM 二値分類を CV 探索の共通設定（上記）で探索する。各 fold は validation の目的指標（同値時は validation logloss が小さい方）で早期停止し、best のラウンドまでの木で推論する。木モデルは特徴の単調変換で分割が変わらないため、標準化は行わない。
+
+ハイパーパラメータ（`cv_*` に加えて）:
+
+| キー | 既定値 | 意味・解説 |
+| ---- | ------ | ---------- |
+| `lightgbm_patience` | `50` | validation の目的指標が改善しないまま許容するブースティングラウンド数 |
+| `lightgbm_max_rounds` | `1000` | ブースティングラウンド（木の本数）の上限。実際の本数は早期停止で決まるため、`n_estimators` は探索しない |
+
+探索空間（コード定数で固定）:
+
+| パラメータ | 範囲 | 意味 |
+| ---------- | ---- | ---- |
+| `learning_rate` | 1e-3〜0.3（log） | 各木の寄与の縮小率。小さいほど必要なラウンド数が増え、汎化しやすい |
+| `num_leaves` | 4〜64（log） | 1 本の木の葉の数の上限。モデルの複雑さを決める主要パラメータ |
+| `limit_depth` / `max_depth` | {False, True} / 3〜8 | 木の深さを制限するか / 制限時の深さ上限。False では無制限（`-1`） |
+| `min_child_samples` | 5〜100（log） | 1 つの葉に必要な最小サンプル（画像）数。大きいほど過学習を抑える。同一シャドーの K 枚は独立でないため、実効サンプル数より楽観的に効く点に注意 |
+| `feature_fraction` | 0.3〜1.0 | 各木で使う特徴（クラス次元）の割合 |
+| `bagging_fraction` | 0.5〜1.0 | 各ラウンドで使うサンプルの割合（非復元抽出）。`bagging_freq=1` 固定で毎ラウンド再抽出する |
+| `lambda_l1` / `lambda_l2` | 1e-8〜10（log） | 葉の値に対する L1 / L2 正則化 |
+
+固定値: `objective=binary`, `bagging_freq=1`, `deterministic=True`, `force_col_wise=True`（同じ seed で結果を再現させるため）。
+
+metrics（CV 共通の metrics に加えて）:
+
+| キー | 意味・解説 |
+| ---- | ---------- |
+| `best_learning_rate` / `best_num_leaves` / `best_max_depth` / `best_min_child_samples` / `best_feature_fraction` / `best_bagging_fraction` / `best_lambda_l1` / `best_lambda_l2` | 最良 trial のハイパーパラメータ。`best_max_depth` は深さ無制限のとき `-1` |
+| `best_iteration_median` | 最良 trial の各 fold で早期停止が採用したラウンド数の中央値。`lightgbm_max_rounds` に近いなら上限で打ち切られている。極端に小さい（数ラウンド）なら、少数の木ですぐ validation に過適合している |
+
+#### `diagonal_lda`
+
+K 枚を平均した特徴 `(C,)` に対する対角 LDA。クラス次元間の相関を無視し、次元ごとに `(IN 平均 − OUT 平均) / 分散` を重みとする線形判別。
+
+ハイパーパラメータ:
+
+| キー | 既定値 | 意味・解説 |
+| ---- | ------ | ---------- |
+| `diagonal_lda_variance` | `pair_diff` | 重みの分母（取り得る値は上表） |
+| `diagonal_lda_reg_lambda` | `1e-3` | 分散に加える正則化項。分散が 0 に近い次元で重みが発散するのを防ぐ（`variance=none` では不使用） |
+| `significant_class_selection` | `none` | 使うクラスの選択（上表） |
+
+metrics:
+
+| キー | 意味・解説 |
+| ---- | ---------- |
+| `diagonal_lda_reg_lambda` / `diagonal_lda_variance` | 使用した設定 |
+| `diagonal_lda_w_norm` | 重みベクトルの L2 ノルム。IN/OUT の平均差が分散に対して大きいほど大きい |
+| `diagonal_lda_b` | バイアス。IN/OUT の平均の中点で logit が 0 になるように決まる |
+| クラス選択の共通キー | 下記 |
+
+#### `flat_diagonal_lda`
+
+`(K·C)` に平坦化した特徴に対する対角 LDA。画像 k ごと・クラス c ごとに独立な重みを持ち、画像ごとの寄与 `w_k·x_k + b/K` の和をスコアとする。
+
+ハイパーパラメータ:
+
+| キー | 既定値 | 意味・解説 |
+| ---- | ------ | ---------- |
+| `flat_diagonal_lda_variance` | `within_class` | 重みの分母（取り得る値は上表） |
+| `diagonal_lda_reg_lambda` | `1e-3` | `diagonal_lda` と共用の正則化項 |
+| `significant_class_selection` | `none` | 使うクラスの選択（上表） |
+
+metrics:
+
+| キー | 意味・解説 |
+| ---- | ---------- |
+| `flat_diagonal_lda_reg_lambda` / `flat_diagonal_lda_variance` | 使用した設定 |
+| `flat_diagonal_lda_w_norm` / `flat_diagonal_lda_b` | 重み全体の L2 ノルム / バイアス |
+| `flat_diagonal_lda_w_norm_per_image` | 画像ごとの重みノルム（K 要素のリスト）。どの画像の特徴がスコアに効いているかを示す |
+| クラス選択の共通キー | 下記 |
+
+#### `gaussian_lr`
+
+(k, c) ごとに IN / OUT の特徴を正規分布で近似し、対数尤度比の和をスコアとする（LiRA の拡張）。次元間の相関を無視するため、`|value|` は K·C に比例して大きくなる（順位付けにのみ用いる）。
+
+ハイパーパラメータ:
+
+| キー | 既定値 | 意味・解説 |
+| ---- | ------ | ---------- |
+| `gaussian_lr_variance` | `per_class` | IN/OUT で分散を分けるか（取り得る値は上表） |
+| `gaussian_lr_var_floor` | `1e-3` | 分散の下限。logit が全モデルで飽和して分散 0 になる次元で尤度比が発散するのを防ぐ |
+| `significant_class_selection` | `none` | 使うクラスの選択（上表） |
+
+metrics:
+
+| キー | 意味・解説 |
+| ---- | ---------- |
+| `gaussian_lr_variance` / `gaussian_lr_var_floor` | 使用した設定 |
+| `gaussian_lr_floored_ratio_in` / `gaussian_lr_floored_ratio_out` | IN / OUT の分散が下限に張り付いた次元の割合（クラス選択に依らず全次元で算出）。高いと特徴が飽和しており、尤度比が下限値に支配される |
+| クラス選択の共通キー | 下記 |
+
+#### クラス選択の共通 metrics（`diagonal_lda` / `flat_diagonal_lda` / `gaussian_lr`）
+
+| キー | 意味・解説 |
+| ---- | ---------- |
+| `significant_class_selection` | 使用した選択方法 |
+| `num_selected_classes` | 使ったクラス数 |
+| `class_selection_fallback` | 有意クラスが 0 件だったため全クラスに戻したか（`n_pairs < 6` で p 値が出ない場合を含む） |
 
 ---
 
@@ -181,9 +348,25 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
   "attack_decoration": {"type": "watermark", "filter_id": "circle"},
   "attack_num_images": 100,
   "membership_scorer": "neural_regularized",
-  "neural_regularized_objective": "tpr_at_1_fpr",
-  "neural_regularized_n_trials": 50,
-  "neural_regularized_stability_lambda": 0.5
+  "cv_objective": "tpr_at_1_fpr",
+  "cv_n_trials": 50,
+  "cv_stability_lambda": 0.5
+}
+```
+
+### `LfMultMia` + `lightgbm`
+
+```json
+{
+  "target_train_decoration": {"type": "watermark", "filter_id": "circle"},
+  "shadow_decoration": {"type": "watermark", "filter_id": "circle", "fraction": 1.0},
+  "attack_decoration": {"type": "watermark", "filter_id": "circle"},
+  "attack_num_images": 100,
+  "membership_scorer": "lightgbm",
+  "cv_objective": "auc",
+  "cv_n_trials": 50,
+  "lightgbm_patience": 50,
+  "lightgbm_max_rounds": 1000
 }
 ```
 

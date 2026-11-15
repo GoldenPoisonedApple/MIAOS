@@ -28,17 +28,22 @@ from src.attacks.membership_scorers.gaussian_lr import (
 	GaussianLrMembershipScorer,
 	GaussianVariance,
 )
+from src.attacks.membership_scorers.lightgbm_scorer import (
+	LightGbmMembershipScorer,
+	LightGbmSettings,
+)
 from src.attacks.membership_scorers.neural import NeuralMembershipScorer
 from src.attacks.membership_scorers.neural_regularized import (
-	CvObjective,
 	NeuralRegularizedMembershipScorer,
 	NeuralRegularizedSettings,
 )
+from src.attacks.membership_scorers.pair_cv import CvObjective, CvSettings
 
 
 # hyperparameters.membership_scorer で指定する値
 MEMBERSHIP_SCORER_NEURAL = NeuralMembershipScorer.name
 MEMBERSHIP_SCORER_NEURAL_REGULARIZED = NeuralRegularizedMembershipScorer.name
+MEMBERSHIP_SCORER_LIGHTGBM = LightGbmMembershipScorer.name
 MEMBERSHIP_SCORER_DIAGONAL_LDA = DiagonalLdaMembershipScorer.name
 MEMBERSHIP_SCORER_FLAT_DIAGONAL_LDA = FlatDiagonalLdaMembershipScorer.name
 MEMBERSHIP_SCORER_GAUSSIAN_LR = GaussianLrMembershipScorer.name
@@ -46,6 +51,7 @@ MEMBERSHIP_SCORER_GAUSSIAN_LR = GaussianLrMembershipScorer.name
 VALID_MEMBERSHIP_SCORERS = frozenset({
 	MEMBERSHIP_SCORER_NEURAL,
 	MEMBERSHIP_SCORER_NEURAL_REGULARIZED,
+	MEMBERSHIP_SCORER_LIGHTGBM,
 	MEMBERSHIP_SCORER_DIAGONAL_LDA,
 	MEMBERSHIP_SCORER_FLAT_DIAGONAL_LDA,
 	MEMBERSHIP_SCORER_GAUSSIAN_LR,
@@ -67,8 +73,12 @@ class MembershipScorerConfig:
 	gaussian_lr_var_floor: float = DEFAULT_GAUSSIAN_LR_VAR_FLOOR
 	attack_model_batch_size: int = cfg.ATTACK_MODEL_BATCH_SIZE
 	attack_model_epochs: int = cfg.ATTACK_MODEL_EPOCHS
+	# neural_regularized / lightgbm で共用する CV・探索の設定（不変条件は CvSettings 側で検証）
+	cv: CvSettings = field(default_factory=CvSettings)
 	# neural_regularized 用（不変条件は NeuralRegularizedSettings 側で検証）
 	neural_regularized: NeuralRegularizedSettings = field(default_factory=NeuralRegularizedSettings)
+	# lightgbm 用（不変条件は LightGbmSettings 側で検証）
+	lightgbm: LightGbmSettings = field(default_factory=LightGbmSettings)
 
 	def __post_init__(self) -> None:
 		if self.kind not in VALID_MEMBERSHIP_SCORERS:
@@ -109,7 +119,7 @@ class MembershipScorerConfig:
 	@classmethod
 	def from_hyperparameters(cls, hp: dict[str, Any] | None) -> "MembershipScorerConfig":
 		"""
-		membership_scorer: neural（デフォルト）| neural_regularized | diagonal_lda | flat_diagonal_lda | gaussian_lr
+		membership_scorer: neural（デフォルト）| neural_regularized | lightgbm | diagonal_lda | flat_diagonal_lda | gaussian_lr
 		significant_class_selection: none（デフォルト）| bh_fdr | bonferroni
 			diagonal_lda / flat_diagonal_lda / gaussian_lr 共通。shadow_pair 分析で有意なクラスのみ使う
 		diagonal_lda_reg_lambda: diagonal_lda / flat_diagonal_lda 用。未指定時 DEFAULT_DIAGONAL_LDA_REG_LAMBDA
@@ -120,25 +130,29 @@ class MembershipScorerConfig:
 		gaussian_lr_var_floor: gaussian_lr の分散の下限。未指定時 DEFAULT_GAUSSIAN_LR_VAR_FLOOR
 		attack_model_batch_size / attack_model_epochs: neural 用。未指定時 cfg の既定値
 			（attack_model_batch_size は neural_regularized でも使用）
+		cv_*: neural_regularized / lightgbm 共通の CV・探索の設定。未指定時 CvSettings の既定値
+			（cv_objective / cv_n_folds / cv_val_ratio / cv_n_trials / cv_stability_lambda）
 		neural_regularized_*: neural_regularized 用。未指定時 NeuralRegularizedSettings の既定値
-			（neural_regularized_standardize: true（デフォルト）| false。入力の z-score 標準化の有無）
+			（neural_regularized_patience / neural_regularized_max_epochs /
+			neural_regularized_standardize: true（デフォルト）| false。入力の z-score 標準化の有無）
+		lightgbm_*: lightgbm 用。未指定時 LightGbmSettings の既定値
+			（lightgbm_patience / lightgbm_max_rounds）
 		"""
 		if not hp:
 			return cls()
 		batch_size = int(hp.get("attack_model_batch_size", cfg.ATTACK_MODEL_BATCH_SIZE))
+		cv_defaults = CvSettings()
+		cv = CvSettings(
+			objective=_parse_enum(
+				CvObjective, hp.get("cv_objective", cv_defaults.objective), "cv_objective"
+			),
+			n_folds=int(hp.get("cv_n_folds", cv_defaults.n_folds)),
+			val_ratio=float(hp.get("cv_val_ratio", cv_defaults.val_ratio)),
+			n_trials=int(hp.get("cv_n_trials", cv_defaults.n_trials)),
+			stability_lambda=float(hp.get("cv_stability_lambda", cv_defaults.stability_lambda)),
+		)
 		defaults = NeuralRegularizedSettings()
 		neural_regularized = NeuralRegularizedSettings(
-			objective=_parse_enum(
-				CvObjective,
-				hp.get("neural_regularized_objective", defaults.objective),
-				"neural_regularized_objective",
-			),
-			n_folds=int(hp.get("neural_regularized_n_folds", defaults.n_folds)),
-			val_ratio=float(hp.get("neural_regularized_val_ratio", defaults.val_ratio)),
-			n_trials=int(hp.get("neural_regularized_n_trials", defaults.n_trials)),
-			stability_lambda=float(
-				hp.get("neural_regularized_stability_lambda", defaults.stability_lambda)
-			),
 			patience=int(hp.get("neural_regularized_patience", defaults.patience)),
 			max_epochs=int(hp.get("neural_regularized_max_epochs", defaults.max_epochs)),
 			batch_size=batch_size,
@@ -146,6 +160,11 @@ class MembershipScorerConfig:
 				hp.get("neural_regularized_standardize", defaults.standardize),
 				"neural_regularized_standardize",
 			),
+		)
+		lgb_defaults = LightGbmSettings()
+		lightgbm = LightGbmSettings(
+			patience=int(hp.get("lightgbm_patience", lgb_defaults.patience)),
+			max_rounds=int(hp.get("lightgbm_max_rounds", lgb_defaults.max_rounds)),
 		)
 		return cls(
 			kind=str(hp.get("membership_scorer", MEMBERSHIP_SCORER_NEURAL)).strip().lower(),
@@ -165,7 +184,9 @@ class MembershipScorerConfig:
 			),
 			attack_model_batch_size=batch_size,
 			attack_model_epochs=int(hp.get("attack_model_epochs", cfg.ATTACK_MODEL_EPOCHS)),
+			cv=cv,
 			neural_regularized=neural_regularized,
+			lightgbm=lightgbm,
 		)
 
 
@@ -203,7 +224,16 @@ def build_membership_scorer(
 ) -> MembershipScorer:
 	if config.kind == MEMBERSHIP_SCORER_NEURAL_REGULARIZED:
 		return NeuralRegularizedMembershipScorer(
+			cv_settings=config.cv,
 			settings=config.neural_regularized,
+			seed=seed,
+			save_dir=save_dir,
+			logger=logger,
+		)
+	if config.kind == MEMBERSHIP_SCORER_LIGHTGBM:
+		return LightGbmMembershipScorer(
+			cv_settings=config.cv,
+			settings=config.lightgbm,
 			seed=seed,
 			save_dir=save_dir,
 			logger=logger,
@@ -238,6 +268,7 @@ __all__ = [
 	"MEMBERSHIP_SCORER_DIAGONAL_LDA",
 	"MEMBERSHIP_SCORER_FLAT_DIAGONAL_LDA",
 	"MEMBERSHIP_SCORER_GAUSSIAN_LR",
+	"MEMBERSHIP_SCORER_LIGHTGBM",
 	"MEMBERSHIP_SCORER_NEURAL",
 	"MEMBERSHIP_SCORER_NEURAL_REGULARIZED",
 	"MembershipScore",
