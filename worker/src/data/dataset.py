@@ -388,7 +388,8 @@ class dataset:
 			len(shadow_test_idx),
 		)
 
-	def get_shadow_dataloader(self, seed, is_decoration: bool = False):
+	def get_shadow_dataloader(self, seed, decoration_spec: DecorationSpec | None = None):
+		"""decoration_spec: 学習・テストデータに適用する装飾（None は装飾なし）"""
 		# 毎回新しくシャドーモデルの学習用とテスト用のインデックスを分割
 		shadow_train_idx, remaining_idx = train_test_split(
 			self.shadow_pool_indices,
@@ -404,12 +405,12 @@ class dataset:
 		shadow_train_dataset = self._make_subset(
 			shadow_train_idx,
 			self.transform_train,
-			decoration_spec=self.decoration_config.shadow_decoration if is_decoration else None,
+			decoration_spec=decoration_spec,
 		)
 		shadow_test_dataset = self._make_subset(
 			shadow_test_idx,
 			self.transform_test,
-			decoration_spec=self.decoration_config.shadow_decoration if is_decoration else None,
+			decoration_spec=decoration_spec,
 		)
 
 		# シャドーモデルの学習用とテスト用のDataLoaderを作成

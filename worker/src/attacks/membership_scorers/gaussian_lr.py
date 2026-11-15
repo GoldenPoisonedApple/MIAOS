@@ -12,7 +12,13 @@ from typing import Any
 
 import numpy as np
 
-from src.attacks.membership_scorers.base import MembershipScore, ScoreScale
+from src.attacks.membership_scorers.base import MembershipScore, ScoreScale, ShadowPairFeatures
+from src.attacks.membership_scorers.class_selection import (
+	DEFAULT_SIGNIFICANT_CLASS_SELECTION,
+	ClassMask,
+	SignificantClassSelection,
+	select_significant_classes,
+)
 
 
 DEFAULT_GAUSSIAN_LR_VAR_FLOOR = 1e-3
@@ -36,6 +42,7 @@ class GaussianLrMembershipScorer:
 
 	ペア構造は使わず、IN 群・OUT 群それぞれの分布を推定する（ターゲットもペアを持たない単体モデル）。
 	次元間の相関は無視するため |score| は K*C に比例して大きくなる（順位付けにのみ用いる）。
+	class_selection で shadow_pair 分析で有意なクラス c の (k, c) のみ対数尤度比を足し合わせられる（既定は全クラス）。
 	"""
 
 	name = "gaussian_lr"
@@ -45,9 +52,13 @@ class GaussianLrMembershipScorer:
 		self,
 		variance: GaussianVariance = DEFAULT_GAUSSIAN_LR_VARIANCE,
 		var_floor: float = DEFAULT_GAUSSIAN_LR_VAR_FLOOR,
+		class_selection: SignificantClassSelection = DEFAULT_SIGNIFICANT_CLASS_SELECTION,
 	) -> None:
 		self.variance = GaussianVariance(variance)
 		self.var_floor = float(var_floor)
+		self.class_selection = SignificantClassSelection(class_selection)
+		# 対数尤度比を足し合わせるクラス (C,)
+		self._class_mask: ClassMask | None = None
 		# (K, C) ごとの平均・分散
 		self._mu_in: np.ndarray | None = None
 		self._mu_out: np.ndarray | None = None
@@ -57,14 +68,16 @@ class GaussianLrMembershipScorer:
 		self._floored_ratio_in: float | None = None
 		self._floored_ratio_out: float | None = None
 
-	def fit(self, in_feats: np.ndarray, out_feats: np.ndarray) -> None:
+	def fit(self, features: ShadowPairFeatures) -> None:
 		"""in_feats, out_feats: (n_pairs, K, C)"""
-		in_feats = np.asarray(in_feats, dtype=np.float64)
-		out_feats = np.asarray(out_feats, dtype=np.float64)
+		in_feats = np.asarray(features.in_feats, dtype=np.float64)
+		out_feats = np.asarray(features.out_feats, dtype=np.float64)
 		if in_feats.shape != out_feats.shape:
 			raise ValueError("in_feats and out_feats must have the same shape")
 		if in_feats.ndim != 3:
 			raise ValueError("in_feats and out_feats must be 3D (n_pairs, K, C)")
+		# 使うクラスの選択（既定は全クラス）
+		self._class_mask = select_significant_classes(in_feats, out_feats, self.class_selection)
 		# (K, C) ごとの平均
 		self._mu_in = in_feats.mean(axis=0)
 		self._mu_out = out_feats.mean(axis=0)
@@ -93,6 +106,7 @@ class GaussianLrMembershipScorer:
 			or self._mu_out is None
 			or self._var_in is None
 			or self._var_out is None
+			or self._class_mask is None
 		):
 			raise RuntimeError("GaussianLrMembershipScorer.fit must be called before score")
 		x = np.asarray(feats, dtype=np.float64)
@@ -102,18 +116,20 @@ class GaussianLrMembershipScorer:
 		# 正規分布の対数尤度（定数項 -0.5*log(2π) は IN/OUT で相殺されるため省略）
 		ll_in = -0.5 * (np.log(self._var_in) + (x - self._mu_in) ** 2 / self._var_in)
 		ll_out = -0.5 * (np.log(self._var_out) + (x - self._mu_out) ** 2 / self._var_out)
-		# 対数尤度比 (K, C)
-		llr = ll_in - ll_out
+		# 対数尤度比 (K, C)。選択外のクラスは足し合わせない
+		llr = (ll_in - ll_out) * self._class_mask.mask[None, :]
 		# 画像ごとの対数尤度比の和 (K,)
 		per_image = llr.sum(axis=1)
 		return MembershipScore(value=float(per_image.sum()), per_image=per_image)
 
 	def diagnostics(self) -> dict[str, Any]:
-		if self._var_in is None or self._var_out is None:
+		if self._var_in is None or self._var_out is None or self._class_mask is None:
 			return {}
 		return {
 			"gaussian_lr_variance": self.variance.value,
 			"gaussian_lr_var_floor": self.var_floor,
+			# floored_ratio はクラス選択に依らず全次元で算出する
 			"gaussian_lr_floored_ratio_in": self._floored_ratio_in,
 			"gaussian_lr_floored_ratio_out": self._floored_ratio_out,
+			**self._class_mask.diagnostics(),
 		}

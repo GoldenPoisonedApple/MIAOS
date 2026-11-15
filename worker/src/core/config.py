@@ -35,9 +35,11 @@ ATTACK_MODEL_INIT_NAME: str = "attack_model_init.pth"
 ATTACK_MODEL_ANALYSIS_DIR: str = "analyze_attack_model"
 # neural_regularized スコアラーの交差検証・ハイパーパラメータ探索結果の出力ディレクトリ名
 NEURAL_REGULARIZED_CV_DIR: str = "neural_regularized_cv"
+# lightgbm スコアラーの交差検証・ハイパーパラメータ探索結果の出力ディレクトリ名
+LIGHTGBM_CV_DIR: str = "lightgbm_cv"
 # ターゲットモデルへの攻撃透かし入力時のクラス別確率出力の保存ディレクトリ名
 TARGET_ATTACKSIGN_OUTPUT_DIR: str = "target_attacksign_output"
-# シャドー IN/OUT ペア効果量解析結果の出力ディレクトリ名
+# シャドー IN/OUT ペア効果量解析結果（クラス別バイオリン図を含む）の出力ディレクトリ名
 SHADOW_PAIR_EFFECT_DIR: str = "shadow_pair_effect"
 # LF_MIA 系ターゲットごとの攻撃スコア分布（K 枚分）の出力ディレクトリ名
 ATTACK_SCORE_DISTRIBUTION_DIR: str = "attack_score_distribution"

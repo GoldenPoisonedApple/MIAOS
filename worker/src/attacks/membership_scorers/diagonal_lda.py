@@ -10,7 +10,13 @@ from typing import Any
 
 import numpy as np
 
-from src.attacks.membership_scorers.base import MembershipScore, ScoreScale
+from src.attacks.membership_scorers.base import MembershipScore, ScoreScale, ShadowPairFeatures
+from src.attacks.membership_scorers.class_selection import (
+	DEFAULT_SIGNIFICANT_CLASS_SELECTION,
+	ClassMask,
+	SignificantClassSelection,
+	select_significant_classes,
+)
 
 
 DEFAULT_DIAGONAL_LDA_REG_LAMBDA = 1e-3
@@ -23,6 +29,11 @@ class DiagonalVariance(str, Enum):
 	PAIR_DIFF = "pair_diff"
 	# クラス内分散（IN/OUT それぞれの分散のプール）。ペアを持たない単体モデルのノイズに対応する
 	WITHIN_CLASS = "within_class"
+	# 分散で割らない（重みは平均差のみ）。reg_lambda は無視する
+	NONE = "none"
+
+
+DEFAULT_DIAGONAL_LDA_VARIANCE = DiagonalVariance.PAIR_DIFF
 
 
 def fit_diagonal_linear(
@@ -30,6 +41,7 @@ def fit_diagonal_linear(
 	out_x: np.ndarray,
 	reg_lambda: float,
 	variance: DiagonalVariance,
+	mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, float]:
 	"""
 	シャドー IN/OUT ペアの特徴から対角 LDA 風の重みとバイアスを推定する。
@@ -40,6 +52,7 @@ def fit_diagonal_linear(
 			in_x, out_x: (n_pairs, D)。同じ行が同じペア
 			reg_lambda: 分散に加える正則化項
 			variance: 分母に使う分散の種類
+			mask: (D,) bool。False の次元の重みを 0 にする（None なら全次元を使う）
 	Returns:
 			w: (D,) 重み
 			b: バイアス（スカラー）
@@ -56,7 +69,10 @@ def fit_diagonal_linear(
 	# reg_lambda: 正則化項 (L2正則化)
 	# n_pairs==1 のとき ddof=1 の分散は定義不能なので正則項のみとする
 	n_pairs = diffs.shape[0]
-	if n_pairs <= 1:
+	if variance == DiagonalVariance.NONE:
+		# 分散で割らない: 分母を 1 とし、重みは平均差そのものにする（n_pairs に依らない）
+		var = np.ones_like(mean_diff, dtype=np.float64)
+	elif n_pairs <= 1:
 		var = np.full_like(mean_diff, reg_lambda, dtype=np.float64)
 	elif variance == DiagonalVariance.PAIR_DIFF:
 		# ペア差分の分散
@@ -66,6 +82,9 @@ def fit_diagonal_linear(
 		var = 0.5 * (in_x.var(axis=0, ddof=1) + out_x.var(axis=0, ddof=1)) + reg_lambda
 	# 重み (D,)
 	w = mean_diff / var
+	if mask is not None:
+		# 使わない次元の重みを 0 にする（バイアスはマスク後の重みで計算する）
+		w = w * mask
 	# バイアス: IN/OUT境界(ペア中点)を通る超平面の切片(スカラー), wm + b = 0 より b = -wm
 	b = -float(np.dot(w, mean_midpoints))
 	return w, b
@@ -78,29 +97,41 @@ class DiagonalLdaMembershipScorer:
 	diff の次元ごとに平均/（分散+λ）で重みを取り、全ペアの中点平均を通る超平面上にバイアスを置く。
 	クラス間の相関は無視する（対角近似）。
 	K 枚は平均してから学習し、スコアは画像ごとの logit の平均とする。
+	分母の分散は variance で選ぶ（既定は pair_diff。none では分散で割らず平均差のみ）。
+	class_selection で shadow_pair 分析で有意なクラスのみに重みを持たせられる（既定は全クラス）。
 	"""
 
 	name = "diagonal_lda"
 	score_scale = ScoreScale.LOG_ODDS
 
-	def __init__(self, reg_lambda: float = DEFAULT_DIAGONAL_LDA_REG_LAMBDA) -> None:
+	def __init__(
+		self,
+		reg_lambda: float = DEFAULT_DIAGONAL_LDA_REG_LAMBDA,
+		variance: DiagonalVariance = DEFAULT_DIAGONAL_LDA_VARIANCE,
+		class_selection: SignificantClassSelection = DEFAULT_SIGNIFICANT_CLASS_SELECTION,
+	) -> None:
 		self.reg_lambda = float(reg_lambda)
+		self.variance = DiagonalVariance(variance)
+		self.class_selection = SignificantClassSelection(class_selection)
 		self._w: np.ndarray | None = None
 		self._b: float | None = None
+		self._class_mask: ClassMask | None = None
 
-	def fit(self, in_feats: np.ndarray, out_feats: np.ndarray) -> None:
+	def fit(self, features: ShadowPairFeatures) -> None:
 		"""in_feats, out_feats: (n_pairs, K, C)。K 方向に平均してペアあたり 1 ベクトルにする。"""
-		in_feats = np.asarray(in_feats, dtype=np.float64)
-		out_feats = np.asarray(out_feats, dtype=np.float64)
+		in_feats = np.asarray(features.in_feats, dtype=np.float64)
+		out_feats = np.asarray(features.out_feats, dtype=np.float64)
 		if in_feats.shape != out_feats.shape:
 			raise ValueError("in_feats and out_feats must have the same shape")
 		if in_feats.ndim != 3:
 			raise ValueError("in_feats and out_feats must be 3D (n_pairs, K, C)")
 		in_pair = in_feats.mean(axis=1)		# 全合成画像平均 (n_pairs, C)
 		out_pair = out_feats.mean(axis=1)	# 全合成画像平均 (n_pairs, C)
-		# 重みとバイアス: ペア差分の分散を分母とする（従来どおり）
+		# 使うクラスの選択（既定は全クラス）
+		self._class_mask = select_significant_classes(in_feats, out_feats, self.class_selection)
+		# 重みとバイアス: 既定はペア差分の分散を分母とする（従来どおり）
 		self._w, self._b = fit_diagonal_linear(
-			in_pair, out_pair, self.reg_lambda, DiagonalVariance.PAIR_DIFF
+			in_pair, out_pair, self.reg_lambda, self.variance, self._class_mask.mask
 		)
 
 	def score(self, feats: np.ndarray) -> MembershipScore:
@@ -121,10 +152,12 @@ class DiagonalLdaMembershipScorer:
 		return MembershipScore(value=float(logits.mean()), per_image=logits)
 
 	def diagnostics(self) -> dict[str, Any]:
-		if self._w is None or self._b is None:
+		if self._w is None or self._b is None or self._class_mask is None:
 			return {}
 		return {
 			"diagonal_lda_reg_lambda": self.reg_lambda,
+			"diagonal_lda_variance": self.variance.value,
 			"diagonal_lda_w_norm": float(np.linalg.norm(self._w)),
 			"diagonal_lda_b": self._b,
+			**self._class_mask.diagnostics(),
 		}

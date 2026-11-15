@@ -17,16 +17,24 @@ from src.attacks.analysis.attack_score_distribution import (
 	analyze_attack_score_distribution,
 )
 from src.attacks.analysis.shadow_pair_effect_analysis import analyze_shadow_pair_effects
+from src.attacks.analysis.probe_violin import (
+	ProbeViolinPanel,
+	SignificanceTest,
+	save_violin_panels,
+)
 from src.attacks.analysis.target_attack_sign_output import (
 	TargetAttackSignEntry,
 	analyze_target_attack_sign_output,
+	fraction_to_filename,
 )
 from src.attacks.membership_scorers import (
 	MembershipScore,
 	MembershipScorerConfig,
 	ScoreScale,
+	ShadowPairFeatures,
 	build_membership_scorer,
 )
+from src.attacks.shadow_fraction_sweep import ShadowFractionSweep
 from src.data.dataset import dataset
 from src.data.decorations.config import with_fraction
 from src.server_client.models import CreateExperimentRequest
@@ -73,10 +81,15 @@ class LF_MIA(MIA_Attack):
 		state_dicts = []
 		train_accs = []
 		test_accs = []
+		base_spec = self.dataset.decoration_config.shadow_decoration
+		in_fractions = self._shadow_in_fractions()
+		self.logger.info(f"Shadow IN decoration fractions -> {in_fractions.tolist()}")
 		# INモデルの訓練
 		for i in trange(int(self.settings.num_shadow_models / 2), desc="Shadow IN Models"):
+			# IN シャドーごとの適用率で装飾する（スイープ無効時は shadow_decoration.fraction のまま）
+			decoration_spec = None if base_spec is None else with_fraction(base_spec, float(in_fractions[i]))
 			shadow_train_loader, shadow_test_loader, _, _ = (
-				self.dataset.get_shadow_dataloader(seed=i, is_decoration=True)
+				self.dataset.get_shadow_dataloader(seed=i, decoration_spec=decoration_spec)
 			)
 			# モデルを作成
 			shadow_model = model_factory().to(cfg.DEVICE)
@@ -99,7 +112,7 @@ class LF_MIA(MIA_Attack):
 		# OUTモデルの訓練
 		for i in trange(int(self.settings.num_shadow_models / 2), desc="Shadow OUT Models"):
 			shadow_train_loader, shadow_test_loader, _, _ = (
-				self.dataset.get_shadow_dataloader(seed=i, is_decoration=False)
+				self.dataset.get_shadow_dataloader(seed=i)
 			)
 			# モデルを作成
 			shadow_model = model_factory().to(cfg.DEVICE)
@@ -206,6 +219,20 @@ class LF_MIA(MIA_Attack):
 
 		return target_models
 
+	def _shadow_fraction_sweep(self) -> ShadowFractionSweep:
+		hyperparameters = self.settings.hyperparameters
+		if hyperparameters is UNSET or hyperparameters is None:
+			return ShadowFractionSweep()
+		return ShadowFractionSweep.from_hyperparameters(hyperparameters.to_dict())
+
+	# シャドーの読み込み時も同じ値になるよう、保持せず設定から決定的に求める
+	def _shadow_in_fractions(self) -> np.ndarray:
+		"""ペアごとの IN シャドーの装飾適用率 (n_pairs,)"""
+		return self._shadow_fraction_sweep().in_fractions(
+			int(self.settings.num_shadow_models / 2),
+			self.dataset.decoration_config.shadow_decoration,
+		)
+
 	# 攻撃モデル（メンバシップ推定器）の設定取得
 	def _membership_scorer_config(self) -> MembershipScorerConfig:
 		hyperparameters = self.settings.hyperparameters
@@ -264,8 +291,8 @@ class LF_MIA(MIA_Attack):
 		self,
 		shadow_models: list[nn.Module],
 		probe: Callable[[nn.Module], torch.Tensor],
-	) -> tuple[np.ndarray, np.ndarray]:
-		"""IN/OUT シャドーのプローブ特徴 (n_pairs, K, NUM_CLASSES) を返す。シャドーは IN, OUT の順で半々。"""
+	) -> ShadowPairFeatures:
+		"""IN/OUT シャドーのプローブ特徴 (n_pairs, K, NUM_CLASSES) と IN の適用率を返す。シャドーは IN, OUT の順で半々。"""
 		num_in = int(self.settings.num_shadow_models / 2)
 
 		def extract(model: nn.Module) -> np.ndarray:
@@ -275,7 +302,11 @@ class LF_MIA(MIA_Attack):
 
 		in_feats = [extract(shadow_models[i]) for i in range(num_in)]
 		out_feats = [extract(shadow_models[i + num_in]) for i in range(num_in)]
-		return np.stack(in_feats), np.stack(out_feats)
+		return ShadowPairFeatures(
+			in_feats=np.stack(in_feats),
+			out_feats=np.stack(out_feats),
+			in_fractions=self._shadow_in_fractions(),
+		)
 
 	def _run_shadow_pair_effect_analysis(
 		self, in_features: np.ndarray, out_features: np.ndarray
@@ -295,6 +326,110 @@ class LF_MIA(MIA_Attack):
 			"shadow_pair_num_significant_fdr": result.num_significant_fdr,
 		})
 
+	# バイオリン図の縦軸に表示するプローブ特徴の名前（サブクラスで差し替える）
+	def _probe_feature_label(self) -> str:
+		return "logit(p)"
+
+	# シャドー IN/OUT プローブ特徴のバイオリン図パネル構築（テンプレートメソッド。サブクラスで追加する）
+	def _shadow_pair_violin_panels(
+		self,
+		shadow_models: list[nn.Module],
+		in_feats: np.ndarray,
+		out_feats: np.ndarray,
+	) -> list[ProbeViolinPanel]:
+		"""
+		IN / OUT / IN-OUT の 3 パネルを返す。検定は IN-OUT（ペア差分の paired Wilcoxon）のみ。
+		Args:
+				shadow_models: シャドーモデル（IN, OUT の順で半々。本クラスでは未使用。追加推論のためのフック）
+				in_feats: IN シャドーのプローブ特徴 (n_pairs, K, NUM_CLASSES)
+				out_feats: OUT シャドーのプローブ特徴 (n_pairs, K, NUM_CLASSES)
+		"""
+		label = self._probe_feature_label()
+		return [
+			ProbeViolinPanel(
+				name="in",
+				title="Shadow IN probe features",
+				ylabel=label,
+				values=in_feats,
+			),
+			ProbeViolinPanel(
+				name="out",
+				title="Shadow OUT probe features",
+				ylabel=label,
+				values=out_feats,
+			),
+			ProbeViolinPanel(
+				name="in_minus_out",
+				title="Shadow pair diff IN-OUT",
+				ylabel=f"{label} IN - OUT",
+				values=in_feats - out_feats,
+				significance=SignificanceTest.MODEL_LEVEL,
+			),
+		]
+
+	def _run_shadow_pair_violin_analysis(
+		self,
+		shadow_models: list[nn.Module],
+		in_feats: np.ndarray,
+		out_feats: np.ndarray,
+	) -> None:
+		"""シャドー IN/OUT プローブ特徴のクラス別バイオリン図を出力する。特徴は (n_pairs, K, NUM_CLASSES)。"""
+		panels = self._shadow_pair_violin_panels(shadow_models, in_feats, out_feats)
+		output_dir = os.path.join(self.MODEL_SAVE_DIR, cfg.SHADOW_PAIR_EFFECT_DIR)
+		save_violin_panels(panels, output_dir)
+		self.logger.info(f"Shadow pair violin plots saved -> {output_dir}")
+
+	# ターゲットのプローブ特徴のバイオリン図パネル構築（テンプレートメソッド。サブクラスで検定を付与する）
+	def _target_probe_violin_panels(
+		self,
+		fractions: list[float],
+		target_feats: list[np.ndarray],
+	) -> list[ProbeViolinPanel]:
+		"""
+		fraction>0 のターゲットは 1 体ずつ、fraction=0 のターゲットはまとめて 1 パネルにする。
+		K<2 では 1 体あたりクラスごとに 1 点しかなくバイオリンにならないため、空リストを返す。
+		Args:
+				fractions: ターゲットの装飾適用率（target_feats と同順）
+				target_feats: ターゲットごとのプローブ特徴 (K, NUM_CLASSES)
+		"""
+		if target_feats[0].shape[0] < 2:
+			return []
+
+		label = self._probe_feature_label()
+
+		def panel(fraction: float, values: np.ndarray) -> ProbeViolinPanel:
+			return ProbeViolinPanel(
+				name=f"probe_fraction_{fraction_to_filename(fraction)}",
+				title=f"Target probe features (fraction={fraction})",
+				ylabel=label,
+				values=values,
+			)
+
+		panels = [
+			panel(fraction, feats[None])
+			for fraction, feats in zip(fractions, target_feats, strict=True)
+			if fraction > 0
+		]
+		zero_feats = [
+			feats for fraction, feats in zip(fractions, target_feats, strict=True) if fraction == 0
+		]
+		if zero_feats:
+			panels.append(panel(0.0, np.stack(zero_feats)))
+		return panels
+
+	def _run_target_probe_violin_analysis(
+		self,
+		fractions: list[float],
+		target_feats: list[np.ndarray],
+	) -> None:
+		"""ターゲットのプローブ特徴のクラス別バイオリン図を出力する。特徴はターゲットごとに (K, NUM_CLASSES)。"""
+		panels = self._target_probe_violin_panels(fractions, target_feats)
+		if not panels:
+			return
+		output_dir = os.path.join(self.MODEL_SAVE_DIR, cfg.TARGET_ATTACKSIGN_OUTPUT_DIR)
+		save_violin_panels(panels, output_dir)
+		self.logger.info(f"Target probe violin plots saved -> {output_dir}")
+
 	# LF_MIA Attack
 	def attack(
 		self, shadow_models: list[nn.Module], target_model: list[nn.Module]
@@ -304,7 +439,8 @@ class LF_MIA(MIA_Attack):
 		probe = self._build_probe()
 
 		# 特徴量抽出: (n_pairs, K, C)
-		in_feats, out_feats = self._collect_shadow_features(shadow_models, probe)
+		features = self._collect_shadow_features(shadow_models, probe)
+		in_feats, out_feats = features.in_feats, features.out_feats
 
 		# 攻撃モデルの訓練
 		scorer = build_membership_scorer(
@@ -313,7 +449,7 @@ class LF_MIA(MIA_Attack):
 			logger=self.logger,
 			seed=int(self.settings.seed),
 		)
-		scorer.fit(in_feats, out_feats)
+		scorer.fit(features)
 		diagnostics = scorer.diagnostics()
 		self.logger.info(f"Membership scorer diagnostics -> {diagnostics}")
 
@@ -322,10 +458,12 @@ class LF_MIA(MIA_Attack):
 		attack_scores_vars: list[float] = []  # K 枚の画像ごとのスコアの標本分散（K=1 では 0）
 		attack_all_scores: list[list[float]] = []  # K 枚それぞれの画像ごとのスコア（ターゲットごと）
 		attack_fractions: list[float] = []
+		target_feats_list: list[np.ndarray] = []  # ターゲットごとのプローブ特徴 (K, C)（バイオリン図用）
 		for fraction, single_target_model in zip(LF_MIA_TARGET_FRACTIONS, target_model, strict=True):
 			# ターゲットモデルの特徴量（シャドーと同じ前処理）
 			target_feats = probe(single_target_model).detach().cpu().numpy()
 			single_target_model.to("cpu")  # GPUメモリ節約
+			target_feats_list.append(target_feats)
 
 			# 攻撃モデルで予測
 			result = scorer.score(target_feats)
@@ -345,6 +483,9 @@ class LF_MIA(MIA_Attack):
 			"membership_scorer": config.kind,
 			# attack_score や threshold_at_* の単位（probability / log_odds）
 			"membership_score_scale": scorer.score_scale.value,
+			# IN シャドーの装飾適用率スイープの有無と、IN シャドーごとの適用率
+			"shadow_fraction_sweep": self._shadow_fraction_sweep().enabled,
+			"shadow_in_fractions": features.in_fractions.tolist(),
 			**diagnostics,
 			"attack_scores_vars": attack_scores_vars,
 			**self._extra_attack_metrics(),
@@ -364,10 +505,14 @@ class LF_MIA(MIA_Attack):
 
 		# ターゲットモデルへの攻撃透かし入力結果の可視化
 		self._output_target_attack_sign_analysis(target_model)
+		# ターゲットのプローブ特徴のクラス別バイオリン図（攻撃時の特徴を流用し、再推論はしない）
+		self._run_target_probe_violin_analysis(attack_fractions, target_feats_list)
 
 		# シャドー IN/OUT ペアのクラス別装飾効果量解析（既存攻撃結果には影響しない）
 		# K 枚平均でペアあたり 1 ベクトルにする（再推論はしない）
 		self._run_shadow_pair_effect_analysis(in_feats.mean(axis=1), out_feats.mean(axis=1))
+		# シャドー IN/OUT プローブ特徴のクラス別バイオリン図（全画像の分布 + モデル単位の検定）
+		self._run_shadow_pair_violin_analysis(shadow_models, in_feats, out_feats)
 
 		return attack_scores, attack_fractions
 

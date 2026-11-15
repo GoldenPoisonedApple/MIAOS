@@ -25,7 +25,7 @@ class TargetAttackSignEntry:
 	probs: np.ndarray
 
 
-def _fraction_to_filename(fraction: float) -> str:
+def fraction_to_filename(fraction: float) -> str:
 	"""fraction をファイル名安全な文字列に変換する (例: 0.001 -> 0_001, 1.0 -> 1_0)。"""
 	return str(fraction).replace(".", "_")
 
@@ -64,7 +64,7 @@ def analyze_target_attack_sign_output(
 
 	summary_entries: list[dict] = []
 	for entry in entries:
-		fraction_label = _fraction_to_filename(entry.fraction)
+		fraction_label = fraction_to_filename(entry.fraction)
 		title_suffix = f"fraction={entry.fraction}"
 
 		plot_path = model_dir / f"class_probabilities_fraction_{fraction_label}.png"
