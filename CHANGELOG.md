@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.1](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.9.0...v0.9.1) (2026-11-15)
+
+
+### Features
+
+* add scorer: lightGBM ([41c7053](https://github.com/GoldenPoisonedApple/MIAOS/commit/41c7053c7b77edf41ac1a7fa48ef8429f83b3502))
+* IN側の適応割合グラデーションモード追加 ([2054ea4](https://github.com/GoldenPoisonedApple/MIAOS/commit/2054ea426ccd613f19a206acc2738745bf6d9d00))
+* L1正規化モード追加 ([1574763](https://github.com/GoldenPoisonedApple/MIAOS/commit/157476353dc3ee63bb950faaf2838b454f12010c))
+* shadow pair のバイオリンプロット追加 ([6f695d9](https://github.com/GoldenPoisonedApple/MIAOS/commit/6f695d949a5c7f34e093ce310de9ab7a45160eec))
+* ターゲット単位のバイオリンプロット作成 ([61e50ca](https://github.com/GoldenPoisonedApple/MIAOS/commit/61e50ca179fcd95e190a257847616de303812ece))
+* 分散を加味しないモードをlda系と汎化neural(z-scoreにしない)に追加 ([73d5578](https://github.com/GoldenPoisonedApple/MIAOS/commit/73d5578e1cbde75b4756039dd11212b37c52f46e))
+
 ## [0.9.0](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.8.0...v0.9.0) (2026-11-07)
 
 
