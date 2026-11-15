@@ -232,7 +232,7 @@ flowchart LR
 | メソッド | 用途 | transform | shuffle |
 | -------- | ---- | --------- | ------- |
 | `get_target_dataloaders(decoration_spec=None)` | ターゲット学習。`decoration_spec` 省略時は `target_train_decoration` | `transform_train` / `transform_test` | train のみ `True` |
-| `get_shadow_dataloader(seed, is_decoration)` | シャドー学習（Offline LiRA / Shokri / LF_MIA 系）。`is_decoration` で `shadow_decoration` 適用可否（LF_MIA の IN/OUT 分岐） | 同上 | train のみ `True` |
+| `get_shadow_dataloader(seed, decoration_spec=None)` | シャドー学習（Offline LiRA / Shokri / LF_MIA 系）。`decoration_spec` を train / test に適用する（`None` は装飾なし。LF_MIA の IN シャドーのみ指定） | 同上 | train のみ `True` |
 | `get_online_lira_shadow_dataloader(seed, query_indices, query_keep)` | Online LiRA シャドー学習。shadow pool 分割に keep=True のクエリサンプルを加える（装飾なし） | 同上 | train のみ `True` |
 | `get_eval_target_dataloaders` / `get_eval_shadow_dataloader` | 攻撃評価（Shokri / LiRA）。`eval_decoration` を適用 | `transform_test` | `False` |
 | `get_attack_watermark_dataloader` | LF_MIA 攻撃用透かし 1 枚 | `transform_test` | `False`（`batch_size=1`） |
@@ -365,7 +365,7 @@ flowchart LR
 | ------------------------- | ------------------------------------------------------------ |
 | `eval_decoration`         | `get_eval_target_dataloaders` / `get_eval_shadow_dataloader` / `get_eval_decorated_sample`（LiRA / Shokri。LF_MIA 系では不使用） |
 | `target_train_decoration` | `get_target_dataloaders` の train（全手法）。LF_MIA 系では装飾種別（`filter_id` 等）のベース spec。`apply.fraction` は固定リストで上書き（下記 LF_MIA） |
-| `shadow_decoration`       | LF_MIA: `get_shadow_dataloader(..., is_decoration=True)` の IN シャドー学習データ |
+| `shadow_decoration`       | LF_MIA: IN シャドーの学習・テストデータ（`get_shadow_dataloader(..., decoration_spec=)`）。`shadow_fraction_sweep=true` では `apply.fraction` を IN シャドーごとの適用率で上書き（下記） |
 | `attack_decoration`       | `get_attack_watermark_dataloader`（LF_MIA の攻撃用透かし 1 枚。`watermark` のみ）/ `get_attack_composite_dataloaders`（LF_Mult_MIA 系の合成透かし。`watermark` のみ） |
 
 ### `get_attack_watermark_dataloader`（`dataset.py`）
@@ -387,10 +387,19 @@ target test はターゲット・シャドー双方の訓練データと重複�
 
 | 群       | 件数                      | データ取得                                              |
 | ------- | ----------------------- | -------------------------------------------------- |
-| IN シャドー | `num_shadow_models / 2` | `get_shadow_dataloader(seed=i, is_decoration=True)`  |
-| OUT シャドー | 同上                      | `get_shadow_dataloader(seed=i, is_decoration=False)` |
+| IN シャドー | `num_shadow_models / 2` | `get_shadow_dataloader(seed=i, decoration_spec=with_fraction(shadow_decoration, f_i))`  |
+| OUT シャドー | 同上                      | `get_shadow_dataloader(seed=i)` |
 
-`is_decoration=True` のときのみ `shadow_decoration` が train / test 双方に適用される。IN シャドー i と OUT シャドー i は同じ `seed=i` でデータ分割を共有し、違いは装飾の有無と初期化・SGD の乱数のみ（ペア設計）。
+IN シャドーのみ `shadow_decoration` が train / test 双方に適用される。IN シャドー i と OUT シャドー i は同じ `seed=i` でデータ分割を共有し、違いは装飾の有無と初期化・SGD の乱数のみ（ペア設計）。
+
+IN シャドー i の適用率 `f_i` は `ShadowFractionSweep`（`attacks/shadow_fraction_sweep.py`。`hyperparameters.shadow_fraction_sweep`）が決める。
+
+| `shadow_fraction_sweep` | `f_i` |
+| ----------------------- | ----- |
+| `false`（既定） | `shadow_decoration.fraction`（全ペア共通。従来どおり） |
+| `true` | `SHADOW_IN_FRACTIONS[i % 10]`（`1.0, 0.9, ..., 0.1`）。`n_pairs` が 10 の倍数でない場合と `shadow_decoration` 未指定の場合は `ValueError` |
+
+`f_i` はインスタンスに保持せず `LF_MIA._shadow_in_fractions()` が設定から決定的に求める（`load_shadow_model` でシャドーを読み込む場合も同じ値になる）。`_collect_shadow_features` は特徴と `f_i` を `ShadowPairFeatures(in_feats, out_feats, in_fractions)` にまとめて scorer に渡す。
 
 LiRA / Shokri のシャドー学習データには装飾を適用しない（`get_shadow_dataloader(seed)` / `get_online_lira_shadow_dataloader`）。
 
@@ -535,8 +544,8 @@ flowchart LR
 ```
 
 1. `_build_probe()` がモデル 1 体から特徴 `(K, NUM_CLASSES)` を返す callable を作る。`LF_MIA` は `get_attack_watermark_dataloader`（黒背景透かし 1 枚, K=1）の softmax に `logit_scaling` を適用する。Mult 系は下記。
-2. `_collect_shadow_features` で IN / OUT シャドーの特徴 `(n_pairs, K, NUM_CLASSES)` を得る（シャドーは IN, OUT の順で半々。`n_pairs = num_shadow_models / 2`）。
-3. `hyperparameters.membership_scorer` で選んだ membership scorer（下記）を **1 回** `fit` する。`neural` の場合のみ `analyze_attack_model/` と `attack_models.pth` / `attack_model_init.pth` を出力する。
+2. `_collect_shadow_features` で IN / OUT シャドーの特徴 `(n_pairs, K, NUM_CLASSES)` と IN シャドーの適用率 `(n_pairs,)` を `ShadowPairFeatures` として得る（シャドーは IN, OUT の順で半々。`n_pairs = num_shadow_models / 2`）。
+3. `hyperparameters.membership_scorer` で選んだ membership scorer（下記）を **1 回** `fit(features)` する。`neural` の場合のみ `analyze_attack_model/` と `attack_models.pth` / `attack_model_init.pth` を出力する。
 4. 24 体のターゲットそれぞれで同じプローブの特徴を取り、`scorer.score(feats)` が `MembershipScore(value, per_image)` を返す。
    - `attack_score`: `value`（スコアラーが K 枚分を集約したスコア。長さ 24 のリスト）
    - `attack_scores_vars`: `per_image` の標本分散（K=1 のときは 0.0）
@@ -558,7 +567,7 @@ Phase 5 の `comprehensive_evaluate` は `attack_score` と「fraction>0 を IN�
 | `attack_models.pth` | （`neural` のみ）攻撃モデル 1 体の `state_dict` |
 | `attack_model_init.pth` | （`neural` のみ）攻撃モデル訓練前の初期重み（`analyze_attack_model` の差分ベースライン） |
 | `analyze_attack_model/` | （`neural` のみ）攻撃モデル解析結果（重みヒートマップ・クラス重要度・入力感度等の PNG + `summary.json`） |
-| `neural_regularized_cv/` | （`neural_regularized` のみ）`trials.csv`（Optuna 全 trial）、`best_params.json`（最良 trial のハイパーパラメータと CV スコア）、`folds.json`（最良 trial の fold ごとのスコア・best epoch・ペア分割） |
+| `neural_regularized_cv/` | （`neural_regularized` のみ）`trials.csv`（Optuna 全 trial）、`best_params.json`（最良 trial のハイパーパラメータと CV スコア）、`folds.json`（最良 trial の fold ごとのスコア・best epoch・ペア分割と各ペアの IN 適用率 `train_fractions` / `val_fractions` / `test_fractions`） |
 | `lightgbm_cv/` | （`lightgbm` のみ）`neural_regularized_cv/` と同じ構成。`best_params.json` には `patience` / `max_rounds` も含み、`folds.json` の反復数キーは `best_iteration`（採用したブースティングラウンド数） |
 | `roc_curve.png` | ターゲット単位（`attack_score`）の ROC |
 | `roc_curve_all_scores.png` | 画像ごとのスコア（`per_image`）全体の ROC |
@@ -566,7 +575,7 @@ Phase 5 の `comprehensive_evaluate` は `attack_score` と「fraction>0 を IN�
 | `target_attacksign_output/` | ターゲットモデルへの攻撃透かし入力時のクラス別確率棒グラフ + `summary.json`。K>=2 ではターゲットのプローブ特徴バイオリン図（`probe_fraction_*_violin.png`、13 枚）も含む |
 | `shadow_pair_effect/` | シャドー IN/OUT ペア効果量解析（PNG 4 枚 + `summary.json`）とクラス別バイオリン図（`*_violin.png`。`LF_MIA` / `LF_Mult_MIA` は 3 枚、`LF_Mult_Diff_MIA` は 7 枚）。下記 |
 
-metrics には ROC 指標・`attack_score` / `attack_fraction` に加えて、`target_train_accs` / `target_test_accs` / `target_acc_gaps`、`shadow_train_accs` / `shadow_test_accs` / `shadow_acc_gaps`、`membership_scorer` / `membership_score_scale`、スコアラーの diagnostics、`attack_scores_vars`、`all_scores_auc` / `all_scores_tpr_at_*_fpr` / `all_scores_threshold_at_*_fpr`、シャドー IN/OUT ペア効果量解析由来の `shadow_pair_global_permutation_pvalue` / `shadow_pair_num_significant_fdr` を格納する。
+metrics には ROC 指標・`attack_score` / `attack_fraction` に加えて、`target_train_accs` / `target_test_accs` / `target_acc_gaps`、`shadow_train_accs` / `shadow_test_accs` / `shadow_acc_gaps`、`membership_scorer` / `membership_score_scale`、`shadow_fraction_sweep` / `shadow_in_fractions`（IN シャドーごとの装飾適用率）、スコアラーの diagnostics、`attack_scores_vars`、`all_scores_auc` / `all_scores_tpr_at_*_fpr` / `all_scores_threshold_at_*_fpr`、シャドー IN/OUT ペア効果量解析由来の `shadow_pair_global_permutation_pvalue` / `shadow_pair_num_significant_fdr` を格納する。
 
 スコアラーの diagnostics:
 
@@ -732,13 +741,13 @@ Wilcoxon 等の統計単位は `n_pairs = num_shadow_models / 2` とする。
 
 ### Membership scorer（`attacks/membership_scorers/`）
 
-LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し、`build_membership_scorer(MembershipScorerConfig, save_dir=, logger=, seed=)` で生成する（`seed` は `settings.seed`。`neural_regularized` / `lightgbm` の分割・探索・初期化に使う）。`fit(in_feats, out_feats)` は `(n_pairs, K, C)`、`score(feats)` は `(K, C)` を受け取り `MembershipScore(value: float, per_image: (K,))` を返す。`score_scale`（`ScoreScale.PROBABILITY` / `LOG_ODDS`）は metrics の `membership_score_scale` として出力され、`attack_score` / `threshold_at_*` の単位を表す。
+LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し、`build_membership_scorer(MembershipScorerConfig, save_dir=, logger=, seed=)` で生成する（`seed` は `settings.seed`。`neural_regularized` / `lightgbm` の分割・探索・初期化に使う）。`fit(features: ShadowPairFeatures)` は `in_feats` / `out_feats` が `(n_pairs, K, C)`、`in_fractions` が `(n_pairs,)`（層化に使うのは `neural_regularized` / `lightgbm` のみ）、`score(feats)` は `(K, C)` を受け取り `MembershipScore(value: float, per_image: (K,))` を返す。`score_scale`（`ScoreScale.PROBABILITY` / `LOG_ODDS`）は metrics の `membership_score_scale` として出力され、`attack_score` / `threshold_at_*` の単位を表す。
 
 | モジュール | 内容 |
 | ---------- | ---- |
-| `base.py` | `MembershipScorer`（Protocol）, `MembershipScore`, `ScoreScale` |
+| `base.py` | `MembershipScorer`（Protocol）, `MembershipScore`, `ScoreScale`, `ShadowPairFeatures`（`fit` の入力。IN/OUT 特徴と IN の適用率） |
 | `neural.py` | `NeuralMembershipScorer` |
-| `pair_cv.py` | CV で探索する scorer 共通の基盤: `CvSettings`, `CvObjective`, `PairedShadowFeatures`, `LabeledSamples`, `make_pair_splits`, `FoldTrainer`（Protocol）, `PairCvSearch` |
+| `pair_cv.py` | CV で探索する scorer 共通の基盤: `CvSettings`, `CvObjective`, `LabeledSamples`, `to_labeled_samples`, `make_pair_splits`（適用率での層化を含む）, `FoldTrainer`（Protocol）, `PairCvSearch` |
 | `neural_regularized.py` | `NeuralRegularizedMembershipScorer`, `NeuralRegularizedSettings`, `NeuralFoldTrainer`, `train_with_early_stopping` |
 | `lightgbm_scorer.py` | `LightGbmMembershipScorer`, `LightGbmSettings`, `LightGbmFoldTrainer`, `LexicographicEarlyStopping` |
 | `diagonal_lda.py` | `DiagonalLdaMembershipScorer`, 共通推定関数 `fit_diagonal_linear`, `DiagonalVariance` |
@@ -781,7 +790,9 @@ LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し�
 
 設定は `CvSettings`（`hyperparameters` の `cv_*`）。モデル固有の探索空間と 1 fold 分の学習は `FoldTrainer`（`params_from_trial` / `train`）に委譲する。
 
-1. ペア index に `KFold(n_splits=k, shuffle=True, random_state=seed)` を適用する（ペアをグループとした GroupKFold と等価）。同じペアの IN / OUT は同じ側に入るため IN/OUT 比は常に 1:1（層化しない）。各 fold の学習側ペアから `round(n × val_ratio)` ペア（1 以上、学習側に 1 以上残す）を `RandomState(seed + fold)` で validation に回す。分割は全 trial で共通。
+1. ペア単位で分割する。同じペアの IN / OUT は同じ側に入るため IN/OUT 比は常に 1:1。validation のペア数は各 fold の学習側 n ペアの `round(n × val_ratio)`（1 以上、学習側に 1 以上残す）。分割は全 trial で共通。
+   - IN の適用率が 1 種類（`ShadowPairFeatures.is_stratified=False`）: ペア index に `KFold(n_splits=k, shuffle=True, random_state=seed)` を適用する（ペアをグループとした GroupKFold と等価）。validation は学習側ペアを `RandomState(seed + fold)` でシャッフルした先頭から取る。
+   - IN の適用率が複数（`shadow_fraction_sweep=true`）: 適用率で層化する。全ペアを適用率の降順に並べ（同じ適用率の中は `RandomState(seed)` でシャッフル）、j 番目のペアを fold `j % k` のテストに割り当てる。validation は学習側ペアを同様に並べ（`RandomState(seed + fold)`）、等間隔の位置 `floor((i + u) · n / n_val)`（`u` は同じ乱数列からの一様乱数）から取る。段階ごとのペア数が k 未満でもエラーにせず、各 fold に段階が散らばる。
 2. Optuna（`TPESampler(seed)`, `MedianPruner(n_startup_trials=5, n_warmup_steps=1)`）で `n_trials` 回探索する。
 3. 各 fold: `FoldTrainer.train` が学習側で学習し、validation の目的指標で早期停止する（seed は `seed + trial番号 × k + fold`）。テスト fold の目的指標を記録し、それまでの平均を `trial.report` して枝刈り判定する。
 4. trial の値は `mean(fold 指標) − λ·std(fold 指標)`（std は母標準偏差）。最良値を更新した trial の k 個の fold モデルのみ保持する。
@@ -983,6 +994,7 @@ attacks/
 ├── lf_mia.py
 ├── lf_mult_mia.py
 ├── lf_mult_diff_mia.py
+├── shadow_fraction_sweep.py
 ├── analysis/
 │   ├── attack_model_analysis.py
 │   ├── attack_score_distribution.py

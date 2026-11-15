@@ -7,6 +7,7 @@ from src.attacks.membership_scorers.base import (
 	MembershipScore,
 	MembershipScorer,
 	ScoreScale,
+	ShadowPairFeatures,
 )
 from src.attacks.membership_scorers.class_selection import (
 	DEFAULT_SIGNIFICANT_CLASS_SELECTION,
@@ -38,6 +39,7 @@ from src.attacks.membership_scorers.neural_regularized import (
 	NeuralRegularizedSettings,
 )
 from src.attacks.membership_scorers.pair_cv import CvObjective, CvSettings
+from src.utils.hp_parsing import parse_bool
 
 
 # hyperparameters.membership_scorer で指定する値
@@ -156,7 +158,7 @@ class MembershipScorerConfig:
 			patience=int(hp.get("neural_regularized_patience", defaults.patience)),
 			max_epochs=int(hp.get("neural_regularized_max_epochs", defaults.max_epochs)),
 			batch_size=batch_size,
-			standardize=_parse_bool(
+			standardize=parse_bool(
 				hp.get("neural_regularized_standardize", defaults.standardize),
 				"neural_regularized_standardize",
 			),
@@ -201,18 +203,6 @@ def _parse_enum(enum_cls: type, value: Any, key: str):
 		raise ValueError(
 			f"Invalid {key}={value!r}; expected one of {sorted(m.value for m in enum_cls)}"
 		) from e
-
-
-def _parse_bool(value: Any, key: str) -> bool:
-	"""bool または "true" / "false"（大文字小文字は問わない）を bool に変換する。"""
-	if isinstance(value, bool):
-		return value
-	normalized = str(value).strip().lower()
-	if normalized == "true":
-		return True
-	if normalized == "false":
-		return False
-	raise ValueError(f"Invalid {key}={value!r}; expected true or false")
 
 
 def build_membership_scorer(
@@ -275,5 +265,6 @@ __all__ = [
 	"MembershipScorer",
 	"MembershipScorerConfig",
 	"ScoreScale",
+	"ShadowPairFeatures",
 	"build_membership_scorer",
 ]

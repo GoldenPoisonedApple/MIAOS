@@ -31,8 +31,10 @@ from src.attacks.membership_scorers import (
 	MembershipScore,
 	MembershipScorerConfig,
 	ScoreScale,
+	ShadowPairFeatures,
 	build_membership_scorer,
 )
+from src.attacks.shadow_fraction_sweep import ShadowFractionSweep
 from src.data.dataset import dataset
 from src.data.decorations.config import with_fraction
 from src.server_client.models import CreateExperimentRequest
@@ -79,10 +81,15 @@ class LF_MIA(MIA_Attack):
 		state_dicts = []
 		train_accs = []
 		test_accs = []
+		base_spec = self.dataset.decoration_config.shadow_decoration
+		in_fractions = self._shadow_in_fractions()
+		self.logger.info(f"Shadow IN decoration fractions -> {in_fractions.tolist()}")
 		# INモデルの訓練
 		for i in trange(int(self.settings.num_shadow_models / 2), desc="Shadow IN Models"):
+			# IN シャドーごとの適用率で装飾する（スイープ無効時は shadow_decoration.fraction のまま）
+			decoration_spec = None if base_spec is None else with_fraction(base_spec, float(in_fractions[i]))
 			shadow_train_loader, shadow_test_loader, _, _ = (
-				self.dataset.get_shadow_dataloader(seed=i, is_decoration=True)
+				self.dataset.get_shadow_dataloader(seed=i, decoration_spec=decoration_spec)
 			)
 			# モデルを作成
 			shadow_model = model_factory().to(cfg.DEVICE)
@@ -105,7 +112,7 @@ class LF_MIA(MIA_Attack):
 		# OUTモデルの訓練
 		for i in trange(int(self.settings.num_shadow_models / 2), desc="Shadow OUT Models"):
 			shadow_train_loader, shadow_test_loader, _, _ = (
-				self.dataset.get_shadow_dataloader(seed=i, is_decoration=False)
+				self.dataset.get_shadow_dataloader(seed=i)
 			)
 			# モデルを作成
 			shadow_model = model_factory().to(cfg.DEVICE)
@@ -212,6 +219,20 @@ class LF_MIA(MIA_Attack):
 
 		return target_models
 
+	def _shadow_fraction_sweep(self) -> ShadowFractionSweep:
+		hyperparameters = self.settings.hyperparameters
+		if hyperparameters is UNSET or hyperparameters is None:
+			return ShadowFractionSweep()
+		return ShadowFractionSweep.from_hyperparameters(hyperparameters.to_dict())
+
+	# シャドーの読み込み時も同じ値になるよう、保持せず設定から決定的に求める
+	def _shadow_in_fractions(self) -> np.ndarray:
+		"""ペアごとの IN シャドーの装飾適用率 (n_pairs,)"""
+		return self._shadow_fraction_sweep().in_fractions(
+			int(self.settings.num_shadow_models / 2),
+			self.dataset.decoration_config.shadow_decoration,
+		)
+
 	# 攻撃モデル（メンバシップ推定器）の設定取得
 	def _membership_scorer_config(self) -> MembershipScorerConfig:
 		hyperparameters = self.settings.hyperparameters
@@ -270,8 +291,8 @@ class LF_MIA(MIA_Attack):
 		self,
 		shadow_models: list[nn.Module],
 		probe: Callable[[nn.Module], torch.Tensor],
-	) -> tuple[np.ndarray, np.ndarray]:
-		"""IN/OUT シャドーのプローブ特徴 (n_pairs, K, NUM_CLASSES) を返す。シャドーは IN, OUT の順で半々。"""
+	) -> ShadowPairFeatures:
+		"""IN/OUT シャドーのプローブ特徴 (n_pairs, K, NUM_CLASSES) と IN の適用率を返す。シャドーは IN, OUT の順で半々。"""
 		num_in = int(self.settings.num_shadow_models / 2)
 
 		def extract(model: nn.Module) -> np.ndarray:
@@ -281,7 +302,11 @@ class LF_MIA(MIA_Attack):
 
 		in_feats = [extract(shadow_models[i]) for i in range(num_in)]
 		out_feats = [extract(shadow_models[i + num_in]) for i in range(num_in)]
-		return np.stack(in_feats), np.stack(out_feats)
+		return ShadowPairFeatures(
+			in_feats=np.stack(in_feats),
+			out_feats=np.stack(out_feats),
+			in_fractions=self._shadow_in_fractions(),
+		)
 
 	def _run_shadow_pair_effect_analysis(
 		self, in_features: np.ndarray, out_features: np.ndarray
@@ -414,7 +439,8 @@ class LF_MIA(MIA_Attack):
 		probe = self._build_probe()
 
 		# 特徴量抽出: (n_pairs, K, C)
-		in_feats, out_feats = self._collect_shadow_features(shadow_models, probe)
+		features = self._collect_shadow_features(shadow_models, probe)
+		in_feats, out_feats = features.in_feats, features.out_feats
 
 		# 攻撃モデルの訓練
 		scorer = build_membership_scorer(
@@ -423,7 +449,7 @@ class LF_MIA(MIA_Attack):
 			logger=self.logger,
 			seed=int(self.settings.seed),
 		)
-		scorer.fit(in_feats, out_feats)
+		scorer.fit(features)
 		diagnostics = scorer.diagnostics()
 		self.logger.info(f"Membership scorer diagnostics -> {diagnostics}")
 
@@ -457,6 +483,9 @@ class LF_MIA(MIA_Attack):
 			"membership_scorer": config.kind,
 			# attack_score や threshold_at_* の単位（probability / log_odds）
 			"membership_score_scale": scorer.score_scale.value,
+			# IN シャドーの装飾適用率スイープの有無と、IN シャドーごとの適用率
+			"shadow_fraction_sweep": self._shadow_fraction_sweep().enabled,
+			"shadow_in_fractions": features.in_fractions.tolist(),
 			**diagnostics,
 			"attack_scores_vars": attack_scores_vars,
 			**self._extra_attack_metrics(),

@@ -10,6 +10,7 @@ import optuna
 from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.model_selection import KFold
 
+from src.attacks.membership_scorers.base import ShadowPairFeatures
 from src.attacks.mia_attack import MIA_Attack
 
 # 枝刈り: 最初の数 trial は比較対象が無いため枝刈りしない。fold 0 の時点の値でも枝刈りしない
@@ -50,41 +51,14 @@ class LabeledSamples:
 		return self.y.reshape(-1, self.images_per_group)[:, 0]	# (2*len(pair_idx)*K, ) -> (2*len(pair_idx), K) -> (2*len(pair_idx),)
 
 
-@dataclass(frozen=True)
-class PairedShadowFeatures:
-	"""シャドー IN/OUT ペアの特徴。in_feats, out_feats: (n_pairs, K, C)。分割はペア単位で行う。"""
-
-	in_feats: np.ndarray
-	out_feats: np.ndarray
-
-	def __post_init__(self) -> None:
-		if self.in_feats.ndim != 3 or self.in_feats.shape != self.out_feats.shape:
-			raise ValueError(
-				f"in_feats / out_feats must have the same (n_pairs, K, C) shape, "
-				f"got {self.in_feats.shape} / {self.out_feats.shape}"
-			)
-
-	@property
-	def n_pairs(self) -> int:
-		return int(self.in_feats.shape[0])
-
-	# 1shadowの合成画像枚数
-	@property
-	def images_per_shadow(self) -> int:
-		return int(self.in_feats.shape[1])
-
-	@property
-	def num_classes(self) -> int:
-		return int(self.in_feats.shape[2])
-
-	def subset(self, pair_idx: np.ndarray) -> LabeledSamples:
-		"""指定ペアの IN シャドー群・OUT シャドー群を画像単位に展開する（IN, OUT の順）"""
-		c = self.num_classes
-		in_x = self.in_feats[pair_idx].reshape(-1, c)	# (pair, K, C) -> (len(pair_idx), K, C) -> (len(pair_idx)*K, C)
-		out_x = self.out_feats[pair_idx].reshape(-1, c)
-		x = np.ascontiguousarray(np.concatenate([in_x, out_x]), dtype=np.float32)
-		y = np.concatenate([np.ones(in_x.shape[0]), np.zeros(out_x.shape[0])]).astype(np.float32)
-		return LabeledSamples(x=x, y=y, images_per_group=self.images_per_shadow)
+def to_labeled_samples(data: ShadowPairFeatures, pair_idx: np.ndarray) -> LabeledSamples:
+	"""指定ペアの IN シャドー群・OUT シャドー群を画像単位に展開する（IN, OUT の順）"""
+	c = data.num_classes
+	in_x = data.in_feats[pair_idx].reshape(-1, c)	# (pair, K, C) -> (len(pair_idx), K, C) -> (len(pair_idx)*K, C)
+	out_x = data.out_feats[pair_idx].reshape(-1, c)
+	x = np.ascontiguousarray(np.concatenate([in_x, out_x]), dtype=np.float32)
+	y = np.concatenate([np.ones(in_x.shape[0]), np.zeros(out_x.shape[0])]).astype(np.float32)
+	return LabeledSamples(x=x, y=y, images_per_group=data.images_per_shadow)
 
 
 class CvObjective(str, Enum):
@@ -152,10 +126,20 @@ class PairSplit:
 	test_idx: np.ndarray
 
 
-# ペア単位の KFold と、各 fold の学習側からの validation 抽出
-def make_pair_splits(data: PairedShadowFeatures, settings: CvSettings, seed: int) -> list[PairSplit]:
+def make_pair_splits(data: ShadowPairFeatures, settings: CvSettings, seed: int) -> list[PairSplit]:
+	"""
+	ペア単位の k-fold 分割。IN シャドーの適用率が複数あるときは適用率で層化する
+	（適用率が 1 種類のときは従来の KFold と同じ分割）。
+	"""
 	if settings.n_folds > data.n_pairs:
 		raise ValueError(f"cv_n_folds={settings.n_folds} exceeds n_pairs={data.n_pairs}")
+	if data.is_stratified:
+		return _stratified_pair_splits(data, settings, seed)
+	return _kfold_pair_splits(data, settings, seed)
+
+
+# ペア単位の KFold と、各 fold の学習側からの validation 抽出
+def _kfold_pair_splits(data: ShadowPairFeatures, settings: CvSettings, seed: int) -> list[PairSplit]:
 	# 同じペアの IN / OUT は同じ側に入るため、IN/OUT 比はどの集合でも 1:1（層化不要）
 	kfold = KFold(n_splits=settings.n_folds, shuffle=True, random_state=seed)
 	splits: list[PairSplit] = []
@@ -175,8 +159,47 @@ def make_pair_splits(data: PairedShadowFeatures, settings: CvSettings, seed: int
 	return splits
 
 
+def _order_by_stratum(
+	pair_idx: np.ndarray, fractions: np.ndarray, rng: np.random.RandomState
+) -> np.ndarray:
+	"""ペアを適用率の降順に並べる（同じ適用率の中はシャッフル）"""
+	levels = np.unique(fractions)[::-1]
+	return np.concatenate([rng.permutation(pair_idx[fractions == level]) for level in levels])
+
+
+# 適用率で層化したペア単位の k-fold と、各 fold の学習側からの validation 抽出
+def _stratified_pair_splits(
+	data: ShadowPairFeatures, settings: CvSettings, seed: int
+) -> list[PairSplit]:
+	all_idx = np.arange(data.n_pairs)
+	# 適用率順に並べて fold を順に割り当てる。段階ごとのペア数が k 未満でも、各 fold に段階が散らばる
+	ordered = _order_by_stratum(all_idx, data.in_fractions, np.random.RandomState(seed))
+	fold_of = np.empty(data.n_pairs, dtype=int)
+	fold_of[ordered] = np.arange(data.n_pairs) % settings.n_folds
+
+	splits: list[PairSplit] = []
+	for fold in range(settings.n_folds):
+		test_idx = all_idx[fold_of == fold]
+		train_val_idx = all_idx[fold_of != fold]
+		# validation も適用率順に並べ、等間隔の位置から取ることで段階を散らす
+		rng = np.random.RandomState(seed + fold)
+		ordered_train = _order_by_stratum(train_val_idx, data.in_fractions[train_val_idx], rng)
+		n_val = settings.num_val_pairs(len(ordered_train))	# validationに回す個数取得
+		# 起点を fold ごとにずらし、validation に入る段階が全 fold で同じにならないようにする
+		offset = rng.uniform(0.0, 1.0)
+		positions = ((np.arange(n_val) + offset) * len(ordered_train) / n_val).astype(int)
+		val_idx = ordered_train[positions]
+		splits.append(PairSplit(
+			fold=fold,
+			train_idx=np.sort(np.setdiff1d(train_val_idx, val_idx)),
+			val_idx=np.sort(val_idx),
+			test_idx=np.sort(test_idx),
+		))
+	return splits
+
+
 def validate_pair_splits(
-	data: PairedShadowFeatures, splits: list[PairSplit], objective: CvObjective
+	data: ShadowPairFeatures, splits: list[PairSplit], objective: CvObjective
 ) -> None:
 	"""目的指標が評価集合（テスト fold / validation）で分解可能かを学習前に検証する"""
 	required = objective.min_out_images
@@ -311,9 +334,8 @@ class PairCvSearch(Generic[P, M]):
 		self.metadata = dict(metadata or {})
 		self._best: CvResult[P, M] | None = None
 
-	def run(self, in_feats: np.ndarray, out_feats: np.ndarray) -> PairCvOutcome[P, M]:
+	def run(self, data: ShadowPairFeatures) -> PairCvOutcome[P, M]:
 		"""in_feats, out_feats: (n_pairs, K, C)。K 枚それぞれを独立した学習サンプルとして展開する。"""
-		data = PairedShadowFeatures(in_feats=in_feats, out_feats=out_feats)
 		splits = make_pair_splits(data, self.settings, self.seed)	# K-fold用にpairを train/validation/testに分割
 		validate_pair_splits(data, splits, self.settings.objective)
 
@@ -334,12 +356,12 @@ class PairCvSearch(Generic[P, M]):
 		if self._best is None:
 			raise RuntimeError(f"{self.name}: no trial completed")
 
-		self._save_outputs(study, splits, self._best)
+		self._save_outputs(study, data, splits, self._best)
 		return PairCvOutcome(best=self._best, study=study)
 
 	# 試行をしてスコアを返す
 	def _run_trial(
-		self, trial: optuna.Trial, data: PairedShadowFeatures, splits: list[PairSplit]
+		self, trial: optuna.Trial, data: ShadowPairFeatures, splits: list[PairSplit]
 	) -> float:
 		params = self.trainer.params_from_trial(trial)	# optunaのサンプラーによってパラメータ決定
 		fold_scores: list[float] = []
@@ -349,12 +371,12 @@ class PairCvSearch(Generic[P, M]):
 			# 学習
 			fold_model = self.trainer.train(
 				params,
-				data.subset(split.train_idx),
-				data.subset(split.val_idx),
+				to_labeled_samples(data, split.train_idx),
+				to_labeled_samples(data, split.val_idx),
 				seed=self.seed + trial.number * self.settings.n_folds + split.fold,	# 全てのtrailの全てのfoldで独立になるように
 			)
 			# 汎化性能評価
-			test = data.subset(split.test_idx)
+			test = to_labeled_samples(data, split.test_idx)
 			fold_scores.append(self.settings.objective.evaluate(fold_model.predict_proba(test.x), test))
 			fold_models.append(fold_model)
 
@@ -388,7 +410,11 @@ class PairCvSearch(Generic[P, M]):
 		return result.score
 
 	def _save_outputs(
-		self, study: optuna.Study, splits: list[PairSplit], best: CvResult[P, M]
+		self,
+		study: optuna.Study,
+		data: ShadowPairFeatures,
+		splits: list[PairSplit],
+		best: CvResult[P, M],
 	) -> None:
 		os.makedirs(self.output_dir, exist_ok=True)
 
@@ -413,6 +439,10 @@ class PairCvSearch(Generic[P, M]):
 					"train_pairs": split.train_idx.tolist(),
 					"val_pairs": split.val_idx.tolist(),
 					"test_pairs": split.test_idx.tolist(),
+					# 各ペアの IN シャドーの装飾適用率（*_pairs と同じ順序）
+					"train_fractions": data.in_fractions[split.train_idx].tolist(),
+					"val_fractions": data.in_fractions[split.val_idx].tolist(),
+					"test_fractions": data.in_fractions[split.test_idx].tolist(),
 				}
 				for split, score, model in zip(
 					splits, best.fold_scores, best.fold_models, strict=True

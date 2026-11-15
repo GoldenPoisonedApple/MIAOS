@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 import src.core.config as cfg
 from src.attacks.analysis.attack_model_analysis import analyze_attack_model
-from src.attacks.membership_scorers.base import MembershipScore, ScoreScale
+from src.attacks.membership_scorers.base import MembershipScore, ScoreScale, ShadowPairFeatures
 from src.attacks.mia_attack import MIA_Attack
 from src.models.attack_model import AttackNet
 
@@ -33,8 +33,9 @@ class NeuralMembershipScorer:
 		self._model: AttackNet | None = None
 		self._diagnostics: dict[str, Any] = {}
 
-	def fit(self, in_feats: np.ndarray, out_feats: np.ndarray) -> None:
+	def fit(self, features: ShadowPairFeatures) -> None:
 		"""in_feats, out_feats: (n_pairs, K, C)。K 枚それぞれを独立した学習サンプルとして展開する。"""
+		in_feats, out_feats = features.in_feats, features.out_feats
 		num_classes = in_feats.shape[-1]
 		# 結合: (n_pairs, K, C) -> (n_pairs * K, C)
 		# np.ascontiguousarray: 連続したメモリ領域に変換

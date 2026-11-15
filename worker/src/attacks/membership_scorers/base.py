@@ -34,12 +34,64 @@ class MembershipScore:
 		return float(np.var(self.per_image, ddof=1))
 
 
+@dataclass(frozen=True)
+class ShadowPairFeatures:
+	"""
+	シャドー IN/OUT ペアの特徴。in_feats, out_feats: (n_pairs, K, C)。分割はペア単位で行う。
+	in_fractions: (n_pairs,) 各ペアの IN シャドーの装飾適用率（OUT シャドーは常に 0）
+	"""
+
+	in_feats: np.ndarray
+	out_feats: np.ndarray
+	in_fractions: np.ndarray
+
+	def __post_init__(self) -> None:
+		if self.in_feats.ndim != 3 or self.in_feats.shape != self.out_feats.shape:
+			raise ValueError(
+				f"in_feats / out_feats must have the same (n_pairs, K, C) shape, "
+				f"got {self.in_feats.shape} / {self.out_feats.shape}"
+			)
+		if self.in_fractions.shape != (self.n_pairs,):
+			raise ValueError(
+				f"in_fractions must have shape ({self.n_pairs},), got {self.in_fractions.shape}"
+			)
+
+	@classmethod
+	def uniform(
+		cls, in_feats: np.ndarray, out_feats: np.ndarray, fraction: float = 1.0
+	) -> "ShadowPairFeatures":
+		"""全ペアの IN シャドーが同じ適用率のペア特徴"""
+		return cls(
+			in_feats=in_feats,
+			out_feats=out_feats,
+			in_fractions=np.full(in_feats.shape[0], fraction, dtype=np.float64),
+		)
+
+	@property
+	def n_pairs(self) -> int:
+		return int(self.in_feats.shape[0])
+
+	# 1shadowの合成画像枚数
+	@property
+	def images_per_shadow(self) -> int:
+		return int(self.in_feats.shape[1])
+
+	@property
+	def num_classes(self) -> int:
+		return int(self.in_feats.shape[2])
+
+	@property
+	def is_stratified(self) -> bool:
+		"""IN シャドーの適用率が 2 種類以上あるか（ペア分割の層化が必要か）"""
+		return np.unique(self.in_fractions).size > 1
+
+
 class MembershipScorer(Protocol):
 	"""
 	シャドー IN/OUT ペアの特徴から学習し、ターゲット特徴のメンバシップスコアを返す攻撃モデル。
 
 	特徴の形状:
-		fit:   in_feats, out_feats は (n_pairs, K, C)。K はプローブ画像枚数（LF_MIA では 1）
+		fit:   features.in_feats, features.out_feats は (n_pairs, K, C)。K はプローブ画像枚数（LF_MIA では 1）
 		score: feats は (K, C)、戻り値は MembershipScore（value はスカラー、per_image は (K,)）
 	score_scale: score が返す値のスケール
 	"""
@@ -47,7 +99,7 @@ class MembershipScorer(Protocol):
 	name: str
 	score_scale: ScoreScale
 
-	def fit(self, in_feats: np.ndarray, out_feats: np.ndarray) -> None: ...
+	def fit(self, features: ShadowPairFeatures) -> None: ...
 
 	def score(self, feats: np.ndarray) -> MembershipScore: ...
 

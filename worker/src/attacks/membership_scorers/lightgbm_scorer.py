@@ -9,7 +9,7 @@ import optuna
 from sklearn.metrics import log_loss
 
 import src.core.config as cfg
-from src.attacks.membership_scorers.base import MembershipScore, ScoreScale
+from src.attacks.membership_scorers.base import MembershipScore, ScoreScale, ShadowPairFeatures
 from src.attacks.membership_scorers.pair_cv import (
 	CvObjective,
 	CvResult,
@@ -218,7 +218,7 @@ class LightGbmMembershipScorer:
 		self._best: CvResult[LightGbmParams, LightGbmFoldModel] | None = None
 		self._diagnostics: dict[str, Any] = {}
 
-	def fit(self, in_feats: np.ndarray, out_feats: np.ndarray) -> None:
+	def fit(self, features: ShadowPairFeatures) -> None:
 		"""in_feats, out_feats: (n_pairs, K, C)。K 枚それぞれを独立した学習サンプルとして展開する。"""
 		search = PairCvSearch(
 			name=self.name,
@@ -231,7 +231,7 @@ class LightGbmMembershipScorer:
 			metadata={"patience": self.settings.patience, "max_rounds": self.settings.max_rounds},
 		)
 		self._best = None
-		outcome = search.run(in_feats, out_feats)
+		outcome = search.run(features)
 		self._best = outcome.best
 		self._diagnostics = {
 			**outcome.common_diagnostics(self.cv_settings.objective),

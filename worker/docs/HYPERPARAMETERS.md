@@ -13,7 +13,8 @@
 | ---- | -- | ------ | -------- | -------- |
 | `target_train_decoration` | 装飾オブジェクト | なし（装飾しない） | 全手法（LF_MIA 系は**必須**） | `data/decorations/config.py`, `dataset.get_target_dataloaders`, `LF_MIA.train_target_model` |
 | `eval_decoration` | 装飾オブジェクト | なし | `OfflineLira` / `OnlineLira` / `Shokri` | `dataset.get_eval_target_dataloaders` / `get_eval_shadow_dataloader` / `get_eval_decorated_sample` |
-| `shadow_decoration` | 装飾オブジェクト | なし | LF_MIA 系 | `dataset.get_shadow_dataloader(is_decoration=True)` |
+| `shadow_decoration` | 装飾オブジェクト | なし | LF_MIA 系 | `dataset.get_shadow_dataloader(decoration_spec=)`, `LF_MIA.train_shadow_models` |
+| `shadow_fraction_sweep` | bool（`true` / `false`。文字列も可） | `false` | LF_MIA 系 | `attacks/shadow_fraction_sweep.py`, `LF_MIA.train_shadow_models` |
 | `attack_decoration` | 装飾オブジェクト（`watermark` のみ） | なし | LF_MIA 系（**必須**） | `dataset.get_attack_watermark_dataloader` / `get_attack_composite_dataloaders` |
 | `attack_num_images` | int (>= 1) | なし | `LfMultMia` / `LfMultDiffMia`（**必須**） | `LF_Mult_MIA._num_images` |
 | `membership_scorer` | str | `neural` | LF_MIA 系 | `attacks/membership_scorers/__init__.py` |
@@ -47,6 +48,7 @@ LF_MIA 系 = `LfMia` / `LfMultMia` / `LfMultDiffMia`。
 | `shadow_decoration` | 不使用 | 不使用 | 不使用 | 実質必須 | 実質必須 |
 | `attack_decoration` | 不使用 | 不使用 | 不使用 | 必須 | 必須 |
 | `attack_num_images` | 不使用 | 不使用 | 不使用 | 不使用 | 必須 |
+| `shadow_fraction_sweep` | 不使用 | 不使用 | 不使用 | 任意 | 任意 |
 | membership scorer 系 | 不使用 | 不使用 | 不使用 | 任意 | 任意 |
 
 「実質必須」: 未指定でもエラーにはならないが、IN シャドーが装飾なしで学習され IN / OUT シャドーが区別できなくなる（下記「注意事項」）。
@@ -98,7 +100,7 @@ LF_MIA 系 = `LfMia` / `LfMultMia` / `LfMultDiffMia`。
 | ---- | ------ |
 | `target_train_decoration` | ターゲットモデルの**学習データ**（`target_train_idx`）。ターゲットのテストデータには適用しない。LF_MIA 系では種類（`filter_id` 等）のベースとして使い、`fraction` は `LF_MIA_TARGET_FRACTIONS`（`1.0` から `0.001`、および `0.0` × 12）で上書きされる。指定した `fraction` は使われない |
 | `eval_decoration` | LiRA / Shokri の評価・特徴抽出時のクエリデータ（ターゲットの学習データ・テストデータ）と、Shokri のシャドー評価データ。`OfflineLira` / `OnlineLira` のサンプル可視化の画像にも使う |
-| `shadow_decoration` | LF_MIA 系の **IN シャドー**の学習データとテストデータ。OUT シャドーには適用しない |
+| `shadow_decoration` | LF_MIA 系の **IN シャドー**の学習データとテストデータ。OUT シャドーには適用しない。`shadow_fraction_sweep=true` のときは種類（`filter_id` 等）と `seed_offset` のベースとして使い、`fraction` は IN シャドーごとの適用率で上書きされる |
 | `attack_decoration` | LF_MIA 系の攻撃プローブ。`LfMia` は黒背景に透かしを合成した 1 枚、`LfMultMia` / `LfMultDiffMia` はターゲットのテスト画像 K 枚に透かしを合成したもの。`filter_id` のみを使い、`fraction` / `seed_offset` は使わない。`display_mask` を指定すると `ValueError` |
 
 各装飾の見た目は `work_dir/decoration_preview.png`（左から plain / target / eval / shadow / attack）で確認できる。プレビューは `fraction` に関係なく装飾を適用して描画する。
@@ -113,6 +115,28 @@ LF_MIA 系 = `LfMia` / `LfMultMia` / `LfMultDiffMia`。
 
 - `1 <= K <= target_test_size` を満たさない場合は `ValueError`。
 - `config.py` に既定値はない。
+
+### `shadow_fraction_sweep`
+
+IN シャドーの装飾適用率を複数段階に振るモード。ターゲットは適用率 `1.0`〜`0.001` で学習されるため、IN シャドーも適用率を振ることで、scorer が「適用率が 1.0 でない IN」も学習できるようにする。
+
+| 値 | 挙動 |
+| -- | ---- |
+| `false`（既定） | 全 IN シャドーに `shadow_decoration.fraction` をそのまま使う（従来どおり） |
+| `true` | ペア i（IN シャドー i と OUT シャドー i）の IN シャドーに、適用率 `[1.0, 0.9, ..., 0.1][i % 10]` を割り当てる。各段階のペア数は同数（`n_pairs / 10`） |
+
+- `true` のとき、ペア数 `n_pairs = num_shadow_models / 2` が 10 の倍数（`num_shadow_models` が 20 の倍数）でなければ `ValueError`。`shadow_decoration` が未指定でも `ValueError`。
+- `true` のとき、`shadow_decoration.fraction` は使われない（`filter_id` / `seed_offset` 等は使う）。
+- scorer の学習ラベルは適用率によらず IN=1 / OUT=0。適用率は CV 探索の分割の層化に使う（下記「CV 探索の共通設定」）。
+- `true` / `false`（文字列は大文字小文字を問わない）以外は `ValueError`。
+- 適用率は設定から決定的に求めるため、`load_shadow_model` でシャドーを読み込む場合も、学習時と同じ設定を指定すれば同じ値になる。
+
+metrics:
+
+| キー | 意味・解説 |
+| ---- | ---------- |
+| `shadow_fraction_sweep` | このモードの有無 |
+| `shadow_in_fractions` | IN シャドーごとの装飾適用率（長さ `n_pairs` のリスト。i 番目が IN シャドー i）。無効時は全要素が `shadow_decoration.fraction`（未指定なら `0.0`） |
 
 ### membership scorer
 
@@ -148,6 +172,8 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
 #### CV 探索の共通設定（`neural_regularized` / `lightgbm`）
 
 シャドー IN/OUT ペアを単位に k-fold CV を行い、fold 指標の `mean − λ·std` を Optuna（TPE + MedianPruner）で最大化する。各 fold の学習側ペアの一部を validation に回して早期停止し、最良 trial の k 個の fold モデルの IN 確率の平均でターゲットを推論する。
+
+IN シャドーの適用率が複数ある場合（`shadow_fraction_sweep=true`）は、テスト fold と validation を適用率で層化する。適用率の段階ごとのペア数が `cv_n_folds` より少なくてもエラーにはせず、各 fold に段階ができるだけ散らばるように割り当てる（例: 20 ペア・k=10 では、各テスト fold は異なる 2 段階のペアで構成される）。適用率が 1 種類のときは従来の分割と完全に同じ。各 fold のペアの適用率は `folds.json` の `train_fractions` / `val_fractions` / `test_fractions` に記録される。
 
 ハイパーパラメータ:
 
@@ -354,12 +380,15 @@ metrics:
 }
 ```
 
-### `LfMultMia` + `lightgbm`
+### `LfMultMia` + `lightgbm` + IN シャドーの適用率スイープ
+
+`num_shadow_models` は 20 の倍数にする。
 
 ```json
 {
   "target_train_decoration": {"type": "watermark", "filter_id": "circle"},
-  "shadow_decoration": {"type": "watermark", "filter_id": "circle", "fraction": 1.0},
+  "shadow_decoration": {"type": "watermark", "filter_id": "circle"},
+  "shadow_fraction_sweep": true,
   "attack_decoration": {"type": "watermark", "filter_id": "circle"},
   "attack_num_images": 100,
   "membership_scorer": "lightgbm",

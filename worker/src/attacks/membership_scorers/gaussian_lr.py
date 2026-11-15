@@ -12,7 +12,7 @@ from typing import Any
 
 import numpy as np
 
-from src.attacks.membership_scorers.base import MembershipScore, ScoreScale
+from src.attacks.membership_scorers.base import MembershipScore, ScoreScale, ShadowPairFeatures
 from src.attacks.membership_scorers.class_selection import (
 	DEFAULT_SIGNIFICANT_CLASS_SELECTION,
 	ClassMask,
@@ -68,10 +68,10 @@ class GaussianLrMembershipScorer:
 		self._floored_ratio_in: float | None = None
 		self._floored_ratio_out: float | None = None
 
-	def fit(self, in_feats: np.ndarray, out_feats: np.ndarray) -> None:
+	def fit(self, features: ShadowPairFeatures) -> None:
 		"""in_feats, out_feats: (n_pairs, K, C)"""
-		in_feats = np.asarray(in_feats, dtype=np.float64)
-		out_feats = np.asarray(out_feats, dtype=np.float64)
+		in_feats = np.asarray(features.in_feats, dtype=np.float64)
+		out_feats = np.asarray(features.out_feats, dtype=np.float64)
 		if in_feats.shape != out_feats.shape:
 			raise ValueError("in_feats and out_feats must have the same shape")
 		if in_feats.ndim != 3:
