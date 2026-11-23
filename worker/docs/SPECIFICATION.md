@@ -758,6 +758,7 @@ LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し�
 | `lightgbm_scorer.py` | `LightGbmMembershipScorer`, `LightGbmSettings`, `LightGbmFoldTrainer`, `LexicographicEarlyStopping` |
 | `svm_common.py` | svm / flat_svm 共通: `SvmKernel`, `SvmParams`, `scale_gamma`, `PlattScaling`, `SvmFoldModel`, `calibrate_fold`, `oof_logits`, `ensemble_logit`, `build_decision_analysis` |
 | `svm_scorer.py` | `SvmMembershipScorer`, `SvmSettings`, `SvmFoldTrainer` |
+| `rbf_nystroem.py` | `RbfNystroem`（`svm` の rbf 用 Nystroem 近似。固有値分解・float64） |
 | `flat_svm_scorer.py` | `FlatSvmMembershipScorer`, `FlatSvmSettings`, `FlatSvmFoldTrainer` |
 | `diagonal_lda.py` | `DiagonalLdaMembershipScorer`, 共通推定関数 `fit_diagonal_linear`, `DiagonalVariance` |
 | `flat_diagonal_lda.py` | `FlatDiagonalLdaMembershipScorer` |
@@ -832,9 +833,10 @@ LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し�
 
 #### `svm`
 
-- 入力は画像単位（C 次元）。`svm_kernel=linear`（既定）は `LinearSVC`、`rbf` は `Nystroem(kernel="rbf", n_components=svm_rbf_n_components)` + `LinearSVC`（厳密な RBF-SVC は学習サンプル数 n に対し O(n²)〜O(n³) のため近似を使う）。
-- 探索空間（固定）: `C` 1e-4〜1e2（log）、`gamma_factor` 1e-3〜1e2（log, `rbf` のみ）。`gamma = gamma_factor / (n_features · X.var())`（sklearn の `gamma="scale"` 基準。標準化後の学習側特徴から fold ごとに計算）。
-- 各 fold: `Pipeline(StandardScaler | 恒等変換, Nystroem | なし, LinearSVC)` を学習側で学習する（`random_state` は fold の seed）。早期停止は行わず、学習済みモデルを固定したまま validation の `decision_function` で `PlattScaling` を学習し、その IN 確率で推論する。学習と較正のデータは重ならない。
+- 入力は画像単位（C 次元）。`svm_kernel=linear`（既定）は `LinearSVC`、`rbf` は `RbfNystroem(n_components=svm_rbf_n_components)` + `LinearSVC`（厳密な RBF-SVC は学習サンプル数 n に対し O(n²)〜O(n³) のため近似を使う）。
+- `RbfNystroem`（`rbf_nystroem.py`）: sklearn の `Nystroem(kernel="rbf")` と同じ特徴写像 `k(x, basis) · K_basis^{-1/2}`。`K_basis^{-1/2}` を汎用 SVD（`gesdd`）ではなく対称行列の固有値分解（`scipy.linalg.eigh`）で求め、計算は float64 で行う。gamma が大きく `K_basis` が単位行列に近いと、float32 の `gesdd` は `LinAlgError("SVD did not converge")` で失敗することがあるため。
+- 探索空間（固定）: `C` 1e-4〜1e2（log）、`gamma_factor` 1e-3〜1e1（log, `rbf` のみ。上限を超えるとカーネル行列がほぼ対角になり汎化に寄与しない）。`gamma = gamma_factor / (n_features · X.var())`（sklearn の `gamma="scale"` 基準。標準化後の学習側特徴から fold ごとに計算）。
+- 各 fold: `Pipeline(StandardScaler | 恒等変換, RbfNystroem | なし, LinearSVC)` を学習側で学習する（`random_state` は fold の seed）。早期停止は行わず、学習済みモデルを固定したまま validation の `decision_function` で `PlattScaling` を学習し、その IN 確率で推論する。学習と較正のデータは重ならない。
 - 反復数を持たないため `FoldModel.best_iteration` は `None`、`PairCvSearch(iteration_label=None)` で `folds.json` / trial の記録に反復数を出力しない。
 
 #### `svm_common.py`（`svm` / `flat_svm` 共通）

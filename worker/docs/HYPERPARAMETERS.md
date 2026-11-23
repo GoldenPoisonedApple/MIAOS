@@ -289,7 +289,7 @@ metrics（CV 共通の metrics に加えて）:
 
 #### `svm`
 
-画像単位（特徴 C 次元）の SVM 二値分類を CV 探索の共通設定（上記）で探索する。各 fold は `Pipeline(StandardScaler | 恒等変換, Nystroem | なし, LinearSVC)` を学習側ペアで学習し、学習済みモデルは固定したまま、validation ペアの `decision_function` で Platt scaling（`svm_common.PlattScaling`。IN の logit = `a·f + b`）を学習して IN 確率を得る。早期停止は行わない。
+画像単位（特徴 C 次元）の SVM 二値分類を CV 探索の共通設定（上記）で探索する。各 fold は `Pipeline(StandardScaler | 恒等変換, RbfNystroem | なし, LinearSVC)` を学習側ペアで学習し、学習済みモデルは固定したまま、validation ペアの `decision_function` で Platt scaling（`svm_common.PlattScaling`。IN の logit = `a·f + b`）を学習して IN 確率を得る。早期停止は行わない。
 
 Platt scaling は Platt (1999) の目標値の平滑化（正例 `(N₊+1)/(N₊+2)`、負例 `1/(N₋+2)`）付きの交差エントロピー最小化で、sklearn の `CalibratedClassifierCV(method="sigmoid")` と同じ手法。較正後の logit を可視化に使うため自前で実装している。
 
@@ -307,7 +307,7 @@ Platt scaling は Platt (1999) の目標値の平滑化（正例 `(N₊+1)/(N₊
 | パラメータ | 範囲 | 意味 |
 | ---------- | ---- | ---- |
 | `C` | 1e-4〜1e2（log） | 誤分類のペナルティ。小さいほど正則化が強い |
-| `gamma_factor` | 1e-3〜1e2（log） | `rbf` のみ。RBF の `gamma = gamma_factor / (n_features · X.var())`。基準値は sklearn の `gamma="scale"` と同じで、標準化後（`svm_standardize=false` では生）の学習側特徴から fold ごとに計算する |
+| `gamma_factor` | 1e-3〜1e1（log） | `rbf` のみ。RBF の `gamma = gamma_factor / (n_features · X.var())`。基準値は sklearn の `gamma="scale"` と同じで、標準化後（`svm_standardize=false` では生）の学習側特徴から fold ごとに計算する |
 
 metrics（CV 共通の metrics に加えて）:
 

@@ -21,7 +21,8 @@ from src.attacks.membership_scorers.pair_cv import (
 # 探索空間（固定）
 C_RANGE: tuple[float, float] = (1e-4, 1e2)
 # gamma = gamma_factor * (sklearn の gamma="scale" 相当の基準値)
-GAMMA_FACTOR_RANGE: tuple[float, float] = (1e-3, 1e2)
+# 上限 1e1: これを超えるとカーネル行列がほぼ対角（学習点の記憶）になり、汎化に寄与せず数値的にも不安定
+GAMMA_FACTOR_RANGE: tuple[float, float] = (1e-3, 1e1)
 
 # 可視化の単位（SampleLayout ごと）
 DECISION_ANALYSIS_UNITS: dict[SampleLayout, str] = {

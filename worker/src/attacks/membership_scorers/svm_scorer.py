@@ -5,7 +5,6 @@ from typing import Any
 
 import numpy as np
 import optuna
-from sklearn.kernel_approximation import Nystroem
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
@@ -24,6 +23,7 @@ from src.attacks.membership_scorers.pair_cv import (
 	PairCvSearch,
 	SampleLayout,
 )
+from src.attacks.membership_scorers.rbf_nystroem import RbfNystroem
 from src.attacks.membership_scorers.svm_common import (
 	C_RANGE,
 	GAMMA_FACTOR_RANGE,
@@ -86,12 +86,11 @@ class SvmFoldTrainer:
 		self, params: SvmParams, train: LabeledSamples, val: LabeledSamples, seed: int
 	) -> SvmFoldModel:
 		scaler = StandardScaler() if self.settings.standardize else "passthrough"
-		feature_map: Nystroem | str = "passthrough"
+		feature_map: RbfNystroem | str = "passthrough"
 		if params.gamma_factor is not None:
 			# gamma の基準値は標準化後（standardize=False では生）の学習側特徴から決める
 			scaled = StandardScaler().fit_transform(train.x) if self.settings.standardize else train.x
-			feature_map = Nystroem(
-				kernel="rbf",
+			feature_map = RbfNystroem(
 				gamma=params.gamma_factor * scale_gamma(scaled),
 				n_components=min(self.settings.rbf_n_components, train.x.shape[0]),
 				random_state=seed,
