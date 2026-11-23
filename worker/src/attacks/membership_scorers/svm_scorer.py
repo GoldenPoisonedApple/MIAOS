@@ -1,42 +1,53 @@
 import logging
 import os
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any
 
 import numpy as np
 import optuna
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.frozen import FrozenEstimator
 from sklearn.kernel_approximation import Nystroem
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 
 import src.core.config as cfg
-from src.attacks.membership_scorers.base import MembershipScore, ScoreScale, ShadowPairFeatures
+from src.attacks.membership_scorers.base import (
+	DecisionAnalysisData,
+	MembershipScore,
+	ScoreScale,
+	ShadowPairFeatures,
+)
 from src.attacks.membership_scorers.pair_cv import (
 	CvResult,
 	CvSettings,
 	LabeledSamples,
 	PairCvSearch,
+	SampleLayout,
+)
+from src.attacks.membership_scorers.svm_common import (
+	C_RANGE,
+	GAMMA_FACTOR_RANGE,
+	OofLogits,
+	SvmFoldModel,
+	SvmKernel,
+	SvmParams,
+	build_decision_analysis,
+	calibrate_fold,
+	oof_logits,
+	scale_gamma,
 )
 
-# 探索空間（固定）
-C_RANGE: tuple[float, float] = (1e-4, 1e2)
-# gamma = gamma_factor * (sklearn の gamma="scale" 相当の基準値)
-GAMMA_FACTOR_RANGE: tuple[float, float] = (1e-3, 1e2)
-
-IN_LABEL: float = 1.0
-
-
-class SvmKernel(str, Enum):
-	"""SVM のカーネル。"""
-
-	# LinearSVC
-	LINEAR = "linear"
-	# Nystroem 近似の RBF 特徴写像 + LinearSVC（厳密な SVC は学習サンプル数に対して O(n^2)〜O(n^3) のため）
-	RBF = "rbf"
+__all__ = [
+	"C_RANGE",
+	"GAMMA_FACTOR_RANGE",
+	"SvmFoldModel",
+	"SvmFoldTrainer",
+	"SvmKernel",
+	"SvmMembershipScorer",
+	"SvmParams",
+	"SvmSettings",
+	"scale_gamma",
+]
 
 
 @dataclass(frozen=True)
@@ -60,47 +71,6 @@ class SvmSettings:
 			raise ValueError(f"rbf_n_components must be >= 1, got {self.rbf_n_components}")
 		if self.max_iter < 1:
 			raise ValueError(f"max_iter must be >= 1, got {self.max_iter}")
-
-
-@dataclass(frozen=True)
-class SvmParams:
-	"""1 trial で探索するハイパーパラメータ。gamma_factor=None は linear カーネル。"""
-
-	c: float
-	gamma_factor: float | None
-
-	@classmethod
-	def from_trial(cls, trial: optuna.Trial, kernel: SvmKernel) -> "SvmParams":
-		c = trial.suggest_float("C", *C_RANGE, log=True)
-		# gamma は rbf のときだけ意味を持つ（条件付き探索）
-		if kernel is SvmKernel.LINEAR:
-			return cls(c=c, gamma_factor=None)
-		return cls(c=c, gamma_factor=trial.suggest_float("gamma_factor", *GAMMA_FACTOR_RANGE, log=True))
-
-	def to_dict(self) -> dict[str, Any]:
-		return {"C": self.c, "gamma_factor": self.gamma_factor}
-
-
-def scale_gamma(x: np.ndarray) -> float:
-	"""sklearn の gamma="scale" と同じ基準値 1 / (n_features * X.var())。分散 0 では分母の分散を 1 とする"""
-	var = float(x.var())
-	return 1.0 / (x.shape[1] * (var if var > 0 else 1.0))
-
-
-@dataclass(frozen=True)
-class SvmFoldModel:
-	"""1 fold 分の学習済みモデル（学習側で fit した SVM を validation で Platt 較正したもの）。"""
-
-	calibrated: CalibratedClassifierCV
-
-	@property
-	def best_iteration(self) -> None:
-		return None
-
-	def predict_proba(self, x: np.ndarray) -> np.ndarray:
-		"""x: (N, C) → 画像ごとの IN 確率 (N,)"""
-		in_col = list(self.calibrated.classes_).index(IN_LABEL)
-		return self.calibrated.predict_proba(x)[:, in_col].astype(np.float64)
 
 
 @dataclass(frozen=True)
@@ -131,12 +101,8 @@ class SvmFoldTrainer:
 			("feature_map", feature_map),
 			("svc", LinearSVC(C=params.c, max_iter=self.settings.max_iter, random_state=seed)),
 		])
-		pipeline.fit(train.x, train.y)
-
-		# 学習済みの SVM は凍結し、decision_function → IN 確率の sigmoid（Platt）だけを validation で学習する
-		calibrated = CalibratedClassifierCV(FrozenEstimator(pipeline), method="sigmoid")
-		calibrated.fit(val.x, val.y)
-		return SvmFoldModel(calibrated=calibrated)
+		# 学習済みの SVM は固定し、decision_function → IN 確率の sigmoid（Platt）だけを validation で学習する
+		return calibrate_fold(pipeline, train, val)
 
 
 class SvmMembershipScorer:
@@ -164,6 +130,8 @@ class SvmMembershipScorer:
 		self.save_dir = save_dir
 		self.logger = logger
 		self._best: CvResult[SvmParams, SvmFoldModel] | None = None
+		# 可視化用のシャドーの out-of-fold logit（画像単位）
+		self._oof: OofLogits | None = None
 		self._diagnostics: dict[str, Any] = {}
 
 	def fit(self, features: ShadowPairFeatures) -> None:
@@ -181,10 +149,13 @@ class SvmMembershipScorer:
 				"rbf_n_components": self.settings.rbf_n_components,
 				"max_iter": self.settings.max_iter,
 			},
+			layout=SampleLayout.PER_IMAGE,
 		)
 		self._best = None
+		self._oof = None
 		outcome = search.run(features)
 		self._best = outcome.best
+		self._oof = oof_logits(outcome, features)
 		best_params = outcome.best.params
 		self._diagnostics = {
 			**outcome.common_diagnostics(self.cv_settings.objective),
@@ -204,6 +175,16 @@ class SvmMembershipScorer:
 		x = np.ascontiguousarray(feats, dtype=np.float32)
 		per_image = self._best.predict_proba(x)
 		return MembershipScore(value=float(per_image.mean()), per_image=per_image)
+
+	def decision_analysis(
+		self, target_feats: np.ndarray, target_fractions: np.ndarray
+	) -> DecisionAnalysisData:
+		"""target_feats: (T, K, C), target_fractions: (T,) → 画像単位の可視化データ"""
+		if self._best is None or self._oof is None:
+			raise RuntimeError("SvmMembershipScorer.fit must be called before decision_analysis")
+		return build_decision_analysis(
+			self.name, SampleLayout.PER_IMAGE, self._oof, self._best, target_feats, target_fractions
+		)
 
 	def diagnostics(self) -> dict[str, Any]:
 		return dict(self._diagnostics)

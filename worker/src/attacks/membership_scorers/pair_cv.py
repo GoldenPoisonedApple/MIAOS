@@ -61,6 +61,42 @@ def to_labeled_samples(data: ShadowPairFeatures, pair_idx: np.ndarray) -> Labele
 	return LabeledSamples(x=x, y=y, images_per_group=data.images_per_shadow)
 
 
+def to_flat_labeled_samples(data: ShadowPairFeatures, pair_idx: np.ndarray) -> LabeledSamples:
+	"""指定ペアの IN シャドー群・OUT シャドー群を、シャドーごとに (K*C) へ平坦化する（IN, OUT の順）"""
+	in_x = data.in_feats[pair_idx].reshape(len(pair_idx), -1)	# (len(pair_idx), K, C) -> (len(pair_idx), K*C)
+	out_x = data.out_feats[pair_idx].reshape(len(pair_idx), -1)
+	x = np.ascontiguousarray(np.concatenate([in_x, out_x]), dtype=np.float32)
+	y = np.concatenate([np.ones(in_x.shape[0]), np.zeros(out_x.shape[0])]).astype(np.float32)
+	# 1 シャドー = 1 サンプルなので、グループ集約は恒等になる
+	return LabeledSamples(x=x, y=y, images_per_group=1)
+
+
+class SampleLayout(str, Enum):
+	"""シャドーペア特徴を学習サンプルに展開する方法。"""
+
+	# 画像ごとに 1 サンプル: x (2*n*K, C)
+	PER_IMAGE = "per_image"
+	# シャドーごとに (K*C) へ平坦化して 1 サンプル: x (2*n, K*C)
+	FLAT = "flat"
+
+	def to_samples(self, data: ShadowPairFeatures, pair_idx: np.ndarray) -> LabeledSamples:
+		if self is SampleLayout.FLAT:
+			return to_flat_labeled_samples(data, pair_idx)
+		return to_labeled_samples(data, pair_idx)
+
+	def images_per_group(self, data: ShadowPairFeatures) -> int:
+		"""1 シャドーあたりのサンプル数"""
+		if self is SampleLayout.FLAT:
+			return 1
+		return data.images_per_shadow
+
+	def flatten_target(self, feats: np.ndarray) -> np.ndarray:
+		"""ターゲット特徴 (K, C) をこの展開方法のサンプル (n, D) にする"""
+		if self is SampleLayout.FLAT:
+			return feats.reshape(1, -1)
+		return feats
+
+
 class CvObjective(str, Enum):
 	"""交差検証・早期停止で最大化する汎化性能指標。"""
 
@@ -199,17 +235,22 @@ def _stratified_pair_splits(
 
 
 def validate_pair_splits(
-	data: ShadowPairFeatures, splits: list[PairSplit], objective: CvObjective
+	data: ShadowPairFeatures,
+	splits: list[PairSplit],
+	objective: CvObjective,
+	layout: SampleLayout = SampleLayout.PER_IMAGE,
 ) -> None:
 	"""目的指標が評価集合（テスト fold / validation）で分解可能かを学習前に検証する"""
 	required = objective.min_out_images
 	min_pairs = min(min(len(s.val_idx), len(s.test_idx)) for s in splits)
-	min_out_images = min_pairs * data.images_per_shadow
+	# 1 シャドーあたりのサンプル数（PER_IMAGE: K, FLAT: 1）
+	samples_per_shadow = layout.images_per_group(data)
+	min_out_images = min_pairs * samples_per_shadow
 	if min_out_images < required:
 		raise ValueError(
 			f"cv_objective={objective.value} requires >= {required} "
-			f"OUT images per test fold / validation, got {min_out_images} "
-			f"({min_pairs} pairs x K={data.images_per_shadow})"
+			f"OUT samples per test fold / validation, got {min_out_images} "
+			f"({min_pairs} pairs x {samples_per_shadow} samples/shadow, layout={layout.value})"
 		)
 
 
@@ -283,6 +324,9 @@ class PairCvOutcome(Generic[P, M]):
 
 	best: CvResult[P, M]
 	study: optuna.Study
+	# 全 trial 共通のペア分割（各ペアはちょうど 1 回テスト fold に入る。OOF 予測に使う）
+	splits: list[PairSplit]
+	layout: SampleLayout
 
 	def common_diagnostics(self, objective: CvObjective) -> dict[str, Any]:
 		"""scorer によらない diagnostics"""
@@ -319,14 +363,17 @@ class PairCvSearch(Generic[P, M]):
 		logger: logging.Logger,
 		iteration_label: str | None = None,
 		metadata: dict[str, Any] | None = None,
+		layout: SampleLayout = SampleLayout.PER_IMAGE,
 	) -> None:
 		"""
 		name: ログ接頭辞
 		iteration_label: folds.json での反復数のキー名（例: best_epoch）。
 			None は反復で学習しないモデル（反復数を trial の記録・folds.json に出力しない）
 		metadata: best_params.json に追記する scorer 固有の設定
+		layout: シャドーペア特徴を学習サンプルに展開する方法
 		"""
 		self.name = name
+		self.layout = layout
 		self.settings = settings
 		self.trainer = trainer
 		self.seed = seed
@@ -339,7 +386,7 @@ class PairCvSearch(Generic[P, M]):
 	def run(self, data: ShadowPairFeatures) -> PairCvOutcome[P, M]:
 		"""in_feats, out_feats: (n_pairs, K, C)。K 枚それぞれを独立した学習サンプルとして展開する。"""
 		splits = make_pair_splits(data, self.settings, self.seed)	# K-fold用にpairを train/validation/testに分割
-		validate_pair_splits(data, splits, self.settings.objective)
+		validate_pair_splits(data, splits, self.settings.objective, self.layout)
 
 		self._best = None
 		optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -359,7 +406,7 @@ class PairCvSearch(Generic[P, M]):
 			raise RuntimeError(f"{self.name}: no trial completed")
 
 		self._save_outputs(study, data, splits, self._best)
-		return PairCvOutcome(best=self._best, study=study)
+		return PairCvOutcome(best=self._best, study=study, splits=splits, layout=self.layout)
 
 	# 試行をしてスコアを返す
 	def _run_trial(
@@ -373,12 +420,12 @@ class PairCvSearch(Generic[P, M]):
 			# 学習
 			fold_model = self.trainer.train(
 				params,
-				to_labeled_samples(data, split.train_idx),
-				to_labeled_samples(data, split.val_idx),
+				self.layout.to_samples(data, split.train_idx),
+				self.layout.to_samples(data, split.val_idx),
 				seed=self.seed + trial.number * self.settings.n_folds + split.fold,	# 全てのtrailの全てのfoldで独立になるように
 			)
 			# 汎化性能評価
-			test = to_labeled_samples(data, split.test_idx)
+			test = self.layout.to_samples(data, split.test_idx)
 			fold_scores.append(self.settings.objective.evaluate(fold_model.predict_proba(test.x), test))
 			fold_models.append(fold_model)
 

@@ -17,6 +17,7 @@ from src.attacks.analysis.attack_score_distribution import (
 	analyze_attack_score_distribution,
 )
 from src.attacks.analysis.shadow_pair_effect_analysis import analyze_shadow_pair_effects
+from src.attacks.analysis.svm_decision_analysis import analyze_svm_decision
 from src.attacks.analysis.probe_violin import (
 	ProbeViolinPanel,
 	SignificanceTest,
@@ -28,7 +29,9 @@ from src.attacks.analysis.target_attack_sign_output import (
 	fraction_to_filename,
 )
 from src.attacks.membership_scorers import (
+	DecisionAnalyzable,
 	MembershipScore,
+	MembershipScorer,
 	MembershipScorerConfig,
 	ScoreScale,
 	ShadowPairFeatures,
@@ -503,6 +506,9 @@ class LF_MIA(MIA_Attack):
 		# K 枚分のスコア全体での ROC（fraction>0 を IN、fraction=0 を OUT）
 		self._evaluate_all_scores_roc(score_entries)
 
+		# 学習済み判別モデル（svm / flat_svm）の PCA 散布図・較正後 logit ヒストグラム
+		self._run_decision_analysis(scorer, target_feats_list, attack_fractions)
+
 		# ターゲットモデルへの攻撃透かし入力結果の可視化
 		self._output_target_attack_sign_analysis(target_model)
 		# ターゲットのプローブ特徴のクラス別バイオリン図（攻撃時の特徴を流用し、再推論はしない）
@@ -535,6 +541,20 @@ class LF_MIA(MIA_Attack):
 		per_image = np.asarray(result.per_image, dtype=np.float64).flatten()
 		# K=1 では unbiased 分散が NaN になるため 0.0 とする（MembershipScore.per_image_var）
 		return float(result.value), result.per_image_var, per_image.tolist()
+
+	# 判別モデルの可視化（対応する scorer のみ）
+	def _run_decision_analysis(
+		self,
+		scorer: MembershipScorer,
+		target_feats_list: list[np.ndarray],
+		attack_fractions: list[float],
+	) -> None:
+		if not isinstance(scorer, DecisionAnalyzable):
+			return
+		data = scorer.decision_analysis(np.stack(target_feats_list), np.asarray(attack_fractions))
+		output_dir = os.path.join(self.MODEL_SAVE_DIR, cfg.SVM_DECISION_ANALYSIS_DIR)
+		summary_path = analyze_svm_decision(data, output_dir)
+		self.logger.info(f"Decision analysis saved -> {output_dir} (summary: {summary_path})")
 
 	# ターゲットごとのスコア分布を可視化・保存
 	def _output_attack_score_distribution(

@@ -136,7 +136,7 @@ target_model = mia_class.train_target_model(lambda: TargetCNN())
 | 手法            | `attack()` 第2引数 `target_model` | `attack()` 戻り値                         | Phase 5 の主な成果物                                      |
 | ------------- | ------------------------------- | -------------------------------------- | --------------------------------------------------- |
 | LiRA / Shokri | `nn.Module`（単一）                 | `(np.ndarray, np.ndarray)` スコア配列・真値ラベル | `roc_curve.png`、`global_auc`、TPR@FPR 等               |
-| LF_MIA 系（`LfMia` / `LfMultMia` / `LfMultDiffMia`） | `list[nn.Module]`（24 体）          | `(list[float], list[float])` スコア・装飾適用率（各 24 要素）。`attack_score` は membership scorer が K 枚分を集約したスコア（`LfMia` は K=1）。スケールは `membership_score_scale` | `roc_curve.png`（ターゲット単位。fraction>0 を IN、fraction=0 を OUT）、`global_auc`、TPR@FPR 等、`attack_score` / `attack_fraction`。Phase 4 中に `roc_curve_all_scores.png`、`attack_score_distribution/`、`target_attacksign_output/`、`shadow_pair_effect/`、（`neural` のみ）`analyze_attack_model/`、（`neural_regularized` のみ）`neural_regularized_cv/`、（`lightgbm` のみ）`lightgbm_cv/`、（`svm` のみ）`svm_cv/` を出力 |
+| LF_MIA 系（`LfMia` / `LfMultMia` / `LfMultDiffMia`） | `list[nn.Module]`（24 体）          | `(list[float], list[float])` スコア・装飾適用率（各 24 要素）。`attack_score` は membership scorer が K 枚分を集約したスコア（`LfMia` は K=1）。スケールは `membership_score_scale` | `roc_curve.png`（ターゲット単位。fraction>0 を IN、fraction=0 を OUT）、`global_auc`、TPR@FPR 等、`attack_score` / `attack_fraction`。Phase 4 中に `roc_curve_all_scores.png`、`attack_score_distribution/`、`target_attacksign_output/`、`shadow_pair_effect/`、（`neural` のみ）`analyze_attack_model/`、（`neural_regularized` のみ）`neural_regularized_cv/`、（`lightgbm` のみ）`lightgbm_cv/`、（`svm` のみ）`svm_cv/`、（`flat_svm` のみ）`flat_svm_cv/`、（`svm` / `flat_svm` のみ）`svm_decision_analysis/` を出力 |
 
 
 ログ: `work_dir/execution.log` + stdout
@@ -570,6 +570,8 @@ Phase 5 の `comprehensive_evaluate` は `attack_score` と「fraction>0 を IN�
 | `neural_regularized_cv/` | （`neural_regularized` のみ）`trials.csv`（Optuna 全 trial）、`best_params.json`（最良 trial のハイパーパラメータと CV スコア）、`folds.json`（最良 trial の fold ごとのスコア・best epoch・ペア分割と各ペアの IN 適用率 `train_fractions` / `val_fractions` / `test_fractions`） |
 | `lightgbm_cv/` | （`lightgbm` のみ）`neural_regularized_cv/` と同じ構成。`best_params.json` には `patience` / `max_rounds` も含み、`folds.json` の反復数キーは `best_iteration`（採用したブースティングラウンド数） |
 | `svm_cv/` | （`svm` のみ）`neural_regularized_cv/` と同じ構成。`best_params.json` には `kernel` / `standardize` / `rbf_n_components` / `max_iter` も含む。早期停止しないため `folds.json` に反復数のキーは無い |
+| `flat_svm_cv/` | （`flat_svm` のみ）`svm_cv/` と同じ構成。`best_params.json` の scorer 固有の設定は `kernel` / `standardize` |
+| `svm_decision_analysis/` | （`svm` / `flat_svm` のみ）`pca_scatter.png`、`decision_histogram.png`、`summary.json`（学習済みモデルの可視化。`HYPERPARAMETERS.md` 参照） |
 | `roc_curve.png` | ターゲット単位（`attack_score`）の ROC |
 | `roc_curve_all_scores.png` | 画像ごとのスコア（`per_image`）全体の ROC |
 | `attack_score_distribution/` | `scores.json`（全ターゲット）。K>=2 のときのみ `histogram_overlay.png` / `histogram_facet.png` / `violin.png` |
@@ -586,6 +588,7 @@ metrics には ROC 指標・`attack_score` / `attack_fraction` に加えて、`t
 | `neural_regularized` | `cv_objective`, `standardize`, `cv_score` / `cv_fold_mean` / `cv_fold_std`, `best_trial_number`, `best_lr` / `best_weight_decay` / `best_n_hidden` / `best_hidden_dim`（0 層時 `null`）/ `best_dropout`, `best_epoch_median`, `n_trials_completed` / `n_trials_pruned` |
 | `lightgbm` | `cv_objective`, `cv_score` / `cv_fold_mean` / `cv_fold_std`, `best_trial_number`, `best_learning_rate` / `best_num_leaves` / `best_max_depth`（無制限時 `-1`）/ `best_min_child_samples` / `best_feature_fraction` / `best_bagging_fraction` / `best_lambda_l1` / `best_lambda_l2`, `best_iteration_median`, `n_trials_completed` / `n_trials_pruned` |
 | `svm` | `cv_objective`, `svm_kernel`, `standardize`, `cv_score` / `cv_fold_mean` / `cv_fold_std`, `best_trial_number`, `best_C` / `best_gamma_factor`（`linear` 時 `null`）, `n_trials_completed` / `n_trials_pruned` |
+| `flat_svm` | `svm` と同じ（`svm_kernel` の代わりに `flat_svm_kernel`） |
 | `diagonal_lda` | `diagonal_lda_reg_lambda`, `diagonal_lda_variance`, `diagonal_lda_w_norm`, `diagonal_lda_b`, クラス選択共通キー |
 | `flat_diagonal_lda` | `flat_diagonal_lda_reg_lambda`, `flat_diagonal_lda_variance`, `flat_diagonal_lda_w_norm`, `flat_diagonal_lda_b`, `flat_diagonal_lda_w_norm_per_image`（K 要素リスト）, クラス選択共通キー |
 | `gaussian_lr` | `gaussian_lr_variance`, `gaussian_lr_var_floor`, `gaussian_lr_floored_ratio_in` / `gaussian_lr_floored_ratio_out`（クラス選択に依らず全次元で算出）, クラス選択共通キー |
@@ -743,16 +746,18 @@ Wilcoxon 等の統計単位は `n_pairs = num_shadow_models / 2` とする。
 
 ### Membership scorer（`attacks/membership_scorers/`）
 
-LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し、`build_membership_scorer(MembershipScorerConfig, save_dir=, logger=, seed=)` で生成する（`seed` は `settings.seed`。`neural_regularized` / `lightgbm` / `svm` の分割・探索・初期化に使う）。`fit(features: ShadowPairFeatures)` は `in_feats` / `out_feats` が `(n_pairs, K, C)`、`in_fractions` が `(n_pairs,)`（層化に使うのは `neural_regularized` / `lightgbm` / `svm` のみ）、`score(feats)` は `(K, C)` を受け取り `MembershipScore(value: float, per_image: (K,))` を返す。`score_scale`（`ScoreScale.PROBABILITY` / `LOG_ODDS`）は metrics の `membership_score_scale` として出力され、`attack_score` / `threshold_at_*` の単位を表す。
+LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し、`build_membership_scorer(MembershipScorerConfig, save_dir=, logger=, seed=)` で生成する（`seed` は `settings.seed`。`neural_regularized` / `lightgbm` / `svm` / `flat_svm` の分割・探索・初期化に使う）。`fit(features: ShadowPairFeatures)` は `in_feats` / `out_feats` が `(n_pairs, K, C)`、`in_fractions` が `(n_pairs,)`（層化に使うのは `neural_regularized` / `lightgbm` / `svm` / `flat_svm` のみ）、`score(feats)` は `(K, C)` を受け取り `MembershipScore(value: float, per_image: (K,))` を返す。`score_scale`（`ScoreScale.PROBABILITY` / `LOG_ODDS`）は metrics の `membership_score_scale` として出力され、`attack_score` / `threshold_at_*` の単位を表す。
 
 | モジュール | 内容 |
 | ---------- | ---- |
-| `base.py` | `MembershipScorer`（Protocol）, `MembershipScore`, `ScoreScale`, `ShadowPairFeatures`（`fit` の入力。IN/OUT 特徴と IN の適用率） |
+| `base.py` | `MembershipScorer`（Protocol）, `MembershipScore`, `ScoreScale`, `ShadowPairFeatures`（`fit` の入力。IN/OUT 特徴と IN の適用率）, `DecisionAnalyzable`（Protocol）, `DecisionAnalysisData` |
 | `neural.py` | `NeuralMembershipScorer` |
-| `pair_cv.py` | CV で探索する scorer 共通の基盤: `CvSettings`, `CvObjective`, `LabeledSamples`, `to_labeled_samples`, `make_pair_splits`（適用率での層化を含む）, `FoldTrainer`（Protocol）, `PairCvSearch` |
+| `pair_cv.py` | CV で探索する scorer 共通の基盤: `CvSettings`, `CvObjective`, `LabeledSamples`, `SampleLayout`, `to_labeled_samples`, `to_flat_labeled_samples`, `make_pair_splits`（適用率での層化を含む）, `FoldTrainer`（Protocol）, `PairCvSearch` |
 | `neural_regularized.py` | `NeuralRegularizedMembershipScorer`, `NeuralRegularizedSettings`, `NeuralFoldTrainer`, `train_with_early_stopping` |
 | `lightgbm_scorer.py` | `LightGbmMembershipScorer`, `LightGbmSettings`, `LightGbmFoldTrainer`, `LexicographicEarlyStopping` |
-| `svm_scorer.py` | `SvmMembershipScorer`, `SvmSettings`, `SvmKernel`, `SvmParams`, `SvmFoldTrainer` |
+| `svm_common.py` | svm / flat_svm 共通: `SvmKernel`, `SvmParams`, `scale_gamma`, `PlattScaling`, `SvmFoldModel`, `calibrate_fold`, `oof_logits`, `ensemble_logit`, `build_decision_analysis` |
+| `svm_scorer.py` | `SvmMembershipScorer`, `SvmSettings`, `SvmFoldTrainer` |
+| `flat_svm_scorer.py` | `FlatSvmMembershipScorer`, `FlatSvmSettings`, `FlatSvmFoldTrainer` |
 | `diagonal_lda.py` | `DiagonalLdaMembershipScorer`, 共通推定関数 `fit_diagonal_linear`, `DiagonalVariance` |
 | `flat_diagonal_lda.py` | `FlatDiagonalLdaMembershipScorer` |
 | `gaussian_lr.py` | `GaussianLrMembershipScorer`, `GaussianVariance` |
@@ -765,6 +770,7 @@ LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し�
 | `neural_regularized` | `BinaryAttackNet`（1 出力）をペア単位 k-fold CV + 早期停止 + Optuna で探索し、最良 trial の k 個の fold モデルをアンサンブル | 画像ごとの IN 確率（fold モデル平均） | 平均 | `probability` |
 | `lightgbm` | 画像単位の LightGBM 二値分類をペア単位 k-fold CV + 早期停止 + Optuna で探索し、最良 trial の k 個の fold モデルをアンサンブル | 画像ごとの IN 確率（fold モデル平均） | 平均 | `probability` |
 | `svm` | 画像単位の SVM（linear / Nystroem 近似の rbf）をペア単位 k-fold CV + validation での Platt 較正 + Optuna で探索し、最良 trial の k 個の fold モデルをアンサンブル | 画像ごとの IN 確率（fold モデル平均） | 平均 | `probability` |
+| `flat_svm` | `(K·C)` に平坦化したシャドー単位の SVM（厳密な SVC。linear / rbf）を svm と同じ流れで探索・アンサンブル | `value` を K 個複製 | ターゲット単位の IN 確率（fold モデル平均） | `probability` |
 | `diagonal_lda` | K 平均した特徴に対する対角 LDA（分母は既定でペア差分の分散） | 画像ごとの logit | 平均 | `log_odds` |
 | `flat_diagonal_lda` | `(K·C)` に平坦化した対角 LDA（(k, c) ごとに独立な重み） | 画像ごとの寄与 `w_k·x_k + b/K` | 和 | `log_odds` |
 | `gaussian_lr` | (k, c) ごとに IN/OUT の正規分布を推定する尤度比検定（LiRA の拡張） | 画像ごとの対数尤度比の和 | 和 | `log_odds` |
@@ -790,9 +796,9 @@ LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し�
 
 各クラスのシャドーが 1 本（`n_pairs=1`）のときは分散が定義できないため、分散を正則化項 / 下限のみとして動作する（`variance=none` は分散を使わないため影響を受けない）。
 
-#### ペア単位 CV 探索（`pair_cv.py`。`neural_regularized` / `lightgbm` / `svm` 共通）
+#### ペア単位 CV 探索（`pair_cv.py`。`neural_regularized` / `lightgbm` / `svm` / `flat_svm` 共通）
 
-設定は `CvSettings`（`hyperparameters` の `cv_*`）。モデル固有の探索空間と 1 fold 分の学習は `FoldTrainer`（`params_from_trial` / `train`）に委譲する。
+設定は `CvSettings`（`hyperparameters` の `cv_*`）。モデル固有の探索空間と 1 fold 分の学習は `FoldTrainer`（`params_from_trial` / `train`）に委譲する。サンプルの展開方法は `SampleLayout` で選ぶ: `PER_IMAGE`（既定。x `(2·n·K, C)`、`flat_svm` 以外）/ `FLAT`（x `(2·n, K·C)`、`flat_svm`）。`FLAT` ではシャドー単位の評価がそのままサンプル単位になり、`tpr_at_1_fpr` の OUT 数の検証もシャドー数で行う。`PairCvOutcome` は分割 `splits` と `layout` を持ち、OOF 予測に使える。
 
 1. ペア単位で分割する。同じペアの IN / OUT は同じ側に入るため IN/OUT 比は常に 1:1。validation のペア数は各 fold の学習側 n ペアの `round(n × val_ratio)`（1 以上、学習側に 1 以上残す）。分割は全 trial で共通。
    - IN の適用率が 1 種類（`ShadowPairFeatures.is_stratified=False`）: ペア index に `KFold(n_splits=k, shuffle=True, random_state=seed)` を適用する（ペアをグループとした GroupKFold と等価）。validation は学習側ペアを `RandomState(seed + fold)` でシャッフルした先頭から取る。
@@ -827,8 +833,25 @@ LF_MIA 系の攻撃モデル。`hyperparameters.membership_scorer` で選択し�
 
 - 入力は画像単位（C 次元）。`svm_kernel=linear`（既定）は `LinearSVC`、`rbf` は `Nystroem(kernel="rbf", n_components=svm_rbf_n_components)` + `LinearSVC`（厳密な RBF-SVC は学習サンプル数 n に対し O(n²)〜O(n³) のため近似を使う）。
 - 探索空間（固定）: `C` 1e-4〜1e2（log）、`gamma_factor` 1e-3〜1e2（log, `rbf` のみ）。`gamma = gamma_factor / (n_features · X.var())`（sklearn の `gamma="scale"` 基準。標準化後の学習側特徴から fold ごとに計算）。
-- 各 fold: `Pipeline(StandardScaler | 恒等変換, Nystroem | なし, LinearSVC)` を学習側で学習する（`random_state` は fold の seed）。早期停止は行わず、学習済みモデルを `FrozenEstimator` で凍結して `CalibratedClassifierCV(method="sigmoid")`（Platt scaling）を validation で学習し、その IN 確率で推論する。学習と較正のデータは重ならない。
+- 各 fold: `Pipeline(StandardScaler | 恒等変換, Nystroem | なし, LinearSVC)` を学習側で学習する（`random_state` は fold の seed）。早期停止は行わず、学習済みモデルを固定したまま validation の `decision_function` で `PlattScaling` を学習し、その IN 確率で推論する。学習と較正のデータは重ならない。
 - 反復数を持たないため `FoldModel.best_iteration` は `None`、`PairCvSearch(iteration_label=None)` で `folds.json` / trial の記録に反復数を出力しない。
+
+#### `svm_common.py`（`svm` / `flat_svm` 共通）
+
+- `SvmKernel`, `SvmParams`（探索空間）, `scale_gamma`。
+- `PlattScaling(a, b)`: IN の logit = `a·f + b`（f は `decision_function`）。Platt (1999) の目標値の平滑化（正例 `(N₊+1)/(N₊+2)`、負例 `1/(N₋+2)`）付き交差エントロピーを `scipy.optimize.minimize`（L-BFGS-B）で最小化する。sklearn の `CalibratedClassifierCV(method="sigmoid")` と同じ手法だが、較正後の logit を公開 API で得られないため自前で実装する。平滑化により、validation が完全分離しても `a` が発散しない。
+- `SvmFoldModel(estimator, platt)`: `predict_proba` / `predict_logit`。`calibrate_fold(pipeline, train, val)` が学習と較正を行う。
+- `oof_logits(outcome, data)`: 各ペアを、そのペアがテストだった fold のモデルで評価した out-of-fold logit。`ensemble_logit(result, x)`: fold モデルの logit の平均。
+
+#### `flat_svm`
+
+- 入力はシャドー単位で `(K, C)` を `K·C` 次元に平坦化（`SampleLayout.FLAT`。サンプル数 `n_pairs × 2`）。サンプル数が少ないため近似せず、`flat_svm_kernel=linear`（既定）は `SVC(kernel="linear")`、`rbf` は `SVC(kernel="rbf", gamma=gamma_factor·scale_gamma)`。
+- 探索空間・Platt 較正・fold アンサンブルは `svm` と同じ。各 fold: `Pipeline(StandardScaler | 恒等変換, SVC)`。
+- `score(feats)`: `(1, K·C)` に平坦化して fold モデルの IN 確率の平均を `value` とし、`per_image` は `value` を K 個並べる。
+
+#### 判別モデルの可視化（`DecisionAnalyzable`）
+
+`base.py` の `DecisionAnalyzable`（`runtime_checkable` Protocol）を実装する scorer（`svm` / `flat_svm`）について、`LF_MIA.attack` がターゲット推論後に `scorer.decision_analysis(target_feats (T, K, C), target_fractions (T,))` で `DecisionAnalysisData` を受け取り、`analysis/svm_decision_analysis.py` の `analyze_svm_decision` で `svm_decision_analysis/` に出力する（PCA 散布図・較正後 logit ヒストグラム・`summary.json`。詳細は `HYPERPARAMETERS.md`）。シャドーの logit は out-of-fold、ターゲットは `ensemble_logit`。
 
 
 ### LiRA 共通モジュール（`mia_lira_common.py`）
@@ -961,6 +984,8 @@ LF_MIA 系で参照する主な定数（抜粋）:
 | `NEURAL_REGULARIZED_CV_DIR` | `neural_regularized_cv` | `neural_regularized` の CV・探索結果の出力先 |
 | `LIGHTGBM_CV_DIR` | `lightgbm_cv` | `lightgbm` の CV・探索結果の出力先 |
 | `SVM_CV_DIR` | `svm_cv` | `svm` の CV・探索結果の出力先 |
+| `FLAT_SVM_CV_DIR` | `flat_svm_cv` | `flat_svm` の CV・探索結果の出力先 |
+| `SVM_DECISION_ANALYSIS_DIR` | `svm_decision_analysis` | `svm` / `flat_svm` の学習済みモデルの可視化の出力先 |
 | `ATTACK_MODEL_BATCH_SIZE` | `64` | `neural` / `neural_regularized` スコアラーのバッチサイズ既定値 |
 | `ATTACK_MODEL_EPOCHS` | `100` | `neural` スコアラーのエポック数既定値（Shokri は常にこの値） |
 | `SHADOW_PAIR_N_PERMUTATIONS` | `9999` | グローバル置換検定の反復回数 |
@@ -1012,7 +1037,8 @@ attacks/
 │   ├── attack_score_distribution.py
 │   ├── target_attack_sign_output.py
 │   ├── shadow_pair_effect_analysis.py
-│   └── probe_violin.py
+│   ├── probe_violin.py
+│   └── svm_decision_analysis.py
 └── membership_scorers/
     ├── __init__.py
     ├── base.py
@@ -1020,7 +1046,9 @@ attacks/
     ├── pair_cv.py
     ├── neural_regularized.py
     ├── lightgbm_scorer.py
+    ├── svm_common.py
     ├── svm_scorer.py
+    ├── flat_svm_scorer.py
     ├── diagonal_lda.py
     ├── flat_diagonal_lda.py
     └── gaussian_lr.py
