@@ -16,6 +16,7 @@ from src.attacks.analysis.attack_score_distribution import (
 	TargetScoreEntry,
 	analyze_attack_score_distribution,
 )
+from src.attacks.analysis.roc_per_fraction import plot_roc_per_fraction
 from src.attacks.analysis.shadow_pair_effect_analysis import analyze_shadow_pair_effects
 from src.attacks.analysis.svm_decision_analysis import analyze_svm_decision
 from src.attacks.analysis.probe_violin import (
@@ -505,6 +506,8 @@ class LF_MIA(MIA_Attack):
 
 		# K 枚分のスコア全体での ROC（fraction>0 を IN、fraction=0 を OUT）
 		self._evaluate_all_scores_roc(score_entries)
+		# IN ターゲットの適用率ごとの ROC（陰性は全 OUT ターゲット）
+		self._output_roc_per_fraction(score_entries)
 
 		# 学習済み判別モデル（svm / flat_svm）の PCA 散布図・較正後 logit ヒストグラム
 		self._run_decision_analysis(scorer, target_feats_list, attack_fractions)
@@ -594,6 +597,12 @@ class LF_MIA(MIA_Attack):
 				if key != "global_auc"
 			},
 		})
+
+	# 適用率ごとの K 枚分のスコアでの ROC（3x4 パネル。K>=2 のみ）
+	def _output_roc_per_fraction(self, entries: list[TargetScoreEntry]) -> None:
+		roc_plot_path = os.path.join(self.MODEL_SAVE_DIR, "roc_curve_all_scores_per_fraction.png")
+		if plot_roc_per_fraction(entries, roc_plot_path):
+			self.logger.info(f"Saved per-fraction all-scores ROC curve plot to: {roc_plot_path}")
 
 	# モデルの総合評価 オーバーライド
 	def comprehensive_evaluate(self, scores: list[float], trues: list[float]):

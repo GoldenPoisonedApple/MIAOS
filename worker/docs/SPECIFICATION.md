@@ -136,7 +136,7 @@ target_model = mia_class.train_target_model(lambda: TargetCNN())
 | 手法            | `attack()` 第2引数 `target_model` | `attack()` 戻り値                         | Phase 5 の主な成果物                                      |
 | ------------- | ------------------------------- | -------------------------------------- | --------------------------------------------------- |
 | LiRA / Shokri | `nn.Module`（単一）                 | `(np.ndarray, np.ndarray)` スコア配列・真値ラベル | `roc_curve.png`、`global_auc`、TPR@FPR 等               |
-| LF_MIA 系（`LfMia` / `LfMultMia` / `LfMultDiffMia`） | `list[nn.Module]`（24 体）          | `(list[float], list[float])` スコア・装飾適用率（各 24 要素）。`attack_score` は membership scorer が K 枚分を集約したスコア（`LfMia` は K=1）。スケールは `membership_score_scale` | `roc_curve.png`（ターゲット単位。fraction>0 を IN、fraction=0 を OUT）、`global_auc`、TPR@FPR 等、`attack_score` / `attack_fraction`。Phase 4 中に `roc_curve_all_scores.png`、`attack_score_distribution/`、`target_attacksign_output/`、`shadow_pair_effect/`、（`neural` のみ）`analyze_attack_model/`、（`neural_regularized` のみ）`neural_regularized_cv/`、（`lightgbm` のみ）`lightgbm_cv/`、（`svm` のみ）`svm_cv/`、（`flat_svm` のみ）`flat_svm_cv/`、（`svm` / `flat_svm` のみ）`svm_decision_analysis/` を出力 |
+| LF_MIA 系（`LfMia` / `LfMultMia` / `LfMultDiffMia`） | `list[nn.Module]`（24 体）          | `(list[float], list[float])` スコア・装飾適用率（各 24 要素）。`attack_score` は membership scorer が K 枚分を集約したスコア（`LfMia` は K=1）。スケールは `membership_score_scale` | `roc_curve.png`（ターゲット単位。fraction>0 を IN、fraction=0 を OUT）、`global_auc`、TPR@FPR 等、`attack_score` / `attack_fraction`。Phase 4 中に `roc_curve_all_scores.png`、（K>=2 のみ）`roc_curve_all_scores_per_fraction.png`、`attack_score_distribution/`、`target_attacksign_output/`、`shadow_pair_effect/`、（`neural` のみ）`analyze_attack_model/`、（`neural_regularized` のみ）`neural_regularized_cv/`、（`lightgbm` のみ）`lightgbm_cv/`、（`svm` のみ）`svm_cv/`、（`flat_svm` のみ）`flat_svm_cv/`、（`svm` / `flat_svm` のみ）`svm_decision_analysis/` を出力 |
 
 
 ログ: `work_dir/execution.log` + stdout
@@ -550,7 +550,7 @@ flowchart LR
    - `attack_score`: `value`（スコアラーが K 枚分を集約したスコア。長さ 24 のリスト）
    - `attack_scores_vars`: `per_image` の標本分散（K=1 のときは 0.0）
    - `attack_fraction`: `LF_MIA_TARGET_FRACTIONS` の対応値（装飾適用率。評価時に fraction>0 を IN とみなす）
-5. `per_image` を `attack_score_distribution/` に出力し（下記）、全ターゲットの `per_image` を展開した ROC（各値にそのターゲットのラベルを付与）を `roc_curve_all_scores.png` と `all_scores_*` metrics に出力する。
+5. `per_image` を `attack_score_distribution/` に出力し（下記）、全ターゲットの `per_image` を展開した ROC（各値にそのターゲットのラベルを付与）を `roc_curve_all_scores.png` と `all_scores_*` metrics に出力する。K>=2 のときは IN の適用率ごとの ROC（陰性は全 OUT ターゲット）を `roc_curve_all_scores_per_fraction.png` に出力する。
 6. `_output_target_attack_sign_analysis` で 24 体のターゲットそれぞれに `get_attack_watermark_dataloader` の透かし 1 枚を再入力し、softmax 確率を `target_attacksign_output/` に保存する（下記）。LF_MIA 系全手法で同一。続けて `_run_target_probe_violin_analysis` で、手順 4 のターゲット特徴のクラス別バイオリン図を同じディレクトリに出力する（K>=2 のみ。下記）。
 7. `attack()` 最末尾で `_run_shadow_pair_effect_analysis` を呼び、シャドー IN/OUT ペアのクラス別装飾効果量を `shadow_pair_effect/` に出力する（下記）。続けて `_run_shadow_pair_violin_analysis` でプローブ特徴のクラス別バイオリン図を同じディレクトリに出力する（下記）。いずれも攻撃スコアには影響しない。
 
@@ -574,6 +574,7 @@ Phase 5 の `comprehensive_evaluate` は `attack_score` と「fraction>0 を IN�
 | `svm_decision_analysis/` | （`svm` / `flat_svm` のみ）`pca_scatter.png`、`decision_histogram.png`、`summary.json`（学習済みモデルの可視化。`HYPERPARAMETERS.md` 参照） |
 | `roc_curve.png` | ターゲット単位（`attack_score`）の ROC |
 | `roc_curve_all_scores.png` | 画像ごとのスコア（`per_image`）全体の ROC |
+| `roc_curve_all_scores_per_fraction.png` | （K>=2 のみ）IN ターゲットの適用率ごとの ROC を 4 列（12 段階で 3×4）にまとめた図。陽性はその適用率のターゲットの K 枚分、陰性は fraction=0 の全ターゲットの K 枚分（全パネル共通）。各パネルに AUC と TPR@1%FPR を表記（metrics には出さない） |
 | `attack_score_distribution/` | `scores.json`（全ターゲット）。K>=2 のときのみ `histogram_overlay.png` / `histogram_facet.png` / `violin.png` |
 | `target_attacksign_output/` | ターゲットモデルへの攻撃透かし入力時のクラス別確率棒グラフ + `summary.json`。K>=2 ではターゲットのプローブ特徴バイオリン図（`probe_fraction_*_violin.png`、13 枚）も含む |
 | `shadow_pair_effect/` | シャドー IN/OUT ペア効果量解析（PNG 4 枚 + `summary.json`）とクラス別バイオリン図（`*_violin.png`。`LF_MIA` / `LF_Mult_MIA` は 3 枚、`LF_Mult_Diff_MIA` は 7 枚）。下記 |
