@@ -4,6 +4,9 @@ docker compose -f compose.base.yaml -f compose.deploy.yaml exec -T db \
   sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc --no-owner --no-acl' \
   > ~/backup/miaos_pg_$(TZ=Asia/Tokyo date +%Y%m%d_%H%M%S).dump
 
+# download
+scp ksl-v03:~/backup/miaos_pg_20261120_175826.dump .
+
 
 # shell
 docker compose -f compose.base.yaml -f compose.deploy.yaml exec db /bin/bash

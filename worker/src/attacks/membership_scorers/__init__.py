@@ -39,6 +39,7 @@ from src.attacks.membership_scorers.neural_regularized import (
 	NeuralRegularizedSettings,
 )
 from src.attacks.membership_scorers.pair_cv import CvObjective, CvSettings
+from src.attacks.membership_scorers.svm_scorer import SvmKernel, SvmMembershipScorer, SvmSettings
 from src.utils.hp_parsing import parse_bool
 
 
@@ -49,6 +50,7 @@ MEMBERSHIP_SCORER_LIGHTGBM = LightGbmMembershipScorer.name
 MEMBERSHIP_SCORER_DIAGONAL_LDA = DiagonalLdaMembershipScorer.name
 MEMBERSHIP_SCORER_FLAT_DIAGONAL_LDA = FlatDiagonalLdaMembershipScorer.name
 MEMBERSHIP_SCORER_GAUSSIAN_LR = GaussianLrMembershipScorer.name
+MEMBERSHIP_SCORER_SVM = SvmMembershipScorer.name
 
 VALID_MEMBERSHIP_SCORERS = frozenset({
 	MEMBERSHIP_SCORER_NEURAL,
@@ -57,6 +59,7 @@ VALID_MEMBERSHIP_SCORERS = frozenset({
 	MEMBERSHIP_SCORER_DIAGONAL_LDA,
 	MEMBERSHIP_SCORER_FLAT_DIAGONAL_LDA,
 	MEMBERSHIP_SCORER_GAUSSIAN_LR,
+	MEMBERSHIP_SCORER_SVM,
 })
 
 
@@ -75,12 +78,14 @@ class MembershipScorerConfig:
 	gaussian_lr_var_floor: float = DEFAULT_GAUSSIAN_LR_VAR_FLOOR
 	attack_model_batch_size: int = cfg.ATTACK_MODEL_BATCH_SIZE
 	attack_model_epochs: int = cfg.ATTACK_MODEL_EPOCHS
-	# neural_regularized / lightgbm で共用する CV・探索の設定（不変条件は CvSettings 側で検証）
+	# neural_regularized / lightgbm / svm で共用する CV・探索の設定（不変条件は CvSettings 側で検証）
 	cv: CvSettings = field(default_factory=CvSettings)
 	# neural_regularized 用（不変条件は NeuralRegularizedSettings 側で検証）
 	neural_regularized: NeuralRegularizedSettings = field(default_factory=NeuralRegularizedSettings)
 	# lightgbm 用（不変条件は LightGbmSettings 側で検証）
 	lightgbm: LightGbmSettings = field(default_factory=LightGbmSettings)
+	# svm 用（不変条件は SvmSettings 側で検証）
+	svm: SvmSettings = field(default_factory=SvmSettings)
 
 	def __post_init__(self) -> None:
 		if self.kind not in VALID_MEMBERSHIP_SCORERS:
@@ -121,7 +126,7 @@ class MembershipScorerConfig:
 	@classmethod
 	def from_hyperparameters(cls, hp: dict[str, Any] | None) -> "MembershipScorerConfig":
 		"""
-		membership_scorer: neural（デフォルト）| neural_regularized | lightgbm | diagonal_lda | flat_diagonal_lda | gaussian_lr
+		membership_scorer: neural（デフォルト）| neural_regularized | lightgbm | svm | diagonal_lda | flat_diagonal_lda | gaussian_lr
 		significant_class_selection: none（デフォルト）| bh_fdr | bonferroni
 			diagonal_lda / flat_diagonal_lda / gaussian_lr 共通。shadow_pair 分析で有意なクラスのみ使う
 		diagonal_lda_reg_lambda: diagonal_lda / flat_diagonal_lda 用。未指定時 DEFAULT_DIAGONAL_LDA_REG_LAMBDA
@@ -132,13 +137,16 @@ class MembershipScorerConfig:
 		gaussian_lr_var_floor: gaussian_lr の分散の下限。未指定時 DEFAULT_GAUSSIAN_LR_VAR_FLOOR
 		attack_model_batch_size / attack_model_epochs: neural 用。未指定時 cfg の既定値
 			（attack_model_batch_size は neural_regularized でも使用）
-		cv_*: neural_regularized / lightgbm 共通の CV・探索の設定。未指定時 CvSettings の既定値
+		cv_*: neural_regularized / lightgbm / svm 共通の CV・探索の設定。未指定時 CvSettings の既定値
 			（cv_objective / cv_n_folds / cv_val_ratio / cv_n_trials / cv_stability_lambda）
 		neural_regularized_*: neural_regularized 用。未指定時 NeuralRegularizedSettings の既定値
 			（neural_regularized_patience / neural_regularized_max_epochs /
 			neural_regularized_standardize: true（デフォルト）| false。入力の z-score 標準化の有無）
 		lightgbm_*: lightgbm 用。未指定時 LightGbmSettings の既定値
 			（lightgbm_patience / lightgbm_max_rounds）
+		svm_*: svm 用。未指定時 SvmSettings の既定値
+			（svm_kernel: linear（デフォルト）| rbf / svm_standardize: true（デフォルト）| false /
+			svm_rbf_n_components / svm_max_iter）
 		"""
 		if not hp:
 			return cls()
@@ -168,6 +176,15 @@ class MembershipScorerConfig:
 			patience=int(hp.get("lightgbm_patience", lgb_defaults.patience)),
 			max_rounds=int(hp.get("lightgbm_max_rounds", lgb_defaults.max_rounds)),
 		)
+		svm_defaults = SvmSettings()
+		svm = SvmSettings(
+			kernel=_parse_enum(SvmKernel, hp.get("svm_kernel", svm_defaults.kernel), "svm_kernel"),
+			standardize=parse_bool(
+				hp.get("svm_standardize", svm_defaults.standardize), "svm_standardize"
+			),
+			rbf_n_components=int(hp.get("svm_rbf_n_components", svm_defaults.rbf_n_components)),
+			max_iter=int(hp.get("svm_max_iter", svm_defaults.max_iter)),
+		)
 		return cls(
 			kind=str(hp.get("membership_scorer", MEMBERSHIP_SCORER_NEURAL)).strip().lower(),
 			significant_class_selection=hp.get(
@@ -189,6 +206,7 @@ class MembershipScorerConfig:
 			cv=cv,
 			neural_regularized=neural_regularized,
 			lightgbm=lightgbm,
+			svm=svm,
 		)
 
 
@@ -228,6 +246,14 @@ def build_membership_scorer(
 			save_dir=save_dir,
 			logger=logger,
 		)
+	if config.kind == MEMBERSHIP_SCORER_SVM:
+		return SvmMembershipScorer(
+			cv_settings=config.cv,
+			settings=config.svm,
+			seed=seed,
+			save_dir=save_dir,
+			logger=logger,
+		)
 	if config.kind == MEMBERSHIP_SCORER_DIAGONAL_LDA:
 		return DiagonalLdaMembershipScorer(
 			reg_lambda=config.diagonal_lda_reg_lambda,
@@ -261,6 +287,7 @@ __all__ = [
 	"MEMBERSHIP_SCORER_LIGHTGBM",
 	"MEMBERSHIP_SCORER_NEURAL",
 	"MEMBERSHIP_SCORER_NEURAL_REGULARIZED",
+	"MEMBERSHIP_SCORER_SVM",
 	"MembershipScore",
 	"MembershipScorer",
 	"MembershipScorerConfig",

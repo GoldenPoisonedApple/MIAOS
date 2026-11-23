@@ -223,8 +223,8 @@ class FoldModel(Protocol):
 	"""1 fold 分の学習済みモデル。"""
 
 	@property
-	def best_iteration(self) -> int:
-		"""早期停止で採用した反復数（epoch / ブースティングラウンド）"""
+	def best_iteration(self) -> int | None:
+		"""早期停止で採用した反復数（epoch / ブースティングラウンド）。反復で学習しないモデルは None"""
 		...
 
 	def predict_proba(self, x: np.ndarray) -> np.ndarray:
@@ -237,7 +237,8 @@ M = TypeVar("M", bound=FoldModel)
 
 
 class FoldTrainer(Protocol[P, M]):
-	"""探索空間の定義と、1 fold 分の学習（validation による早期停止を含む）を担う。"""
+	"""探索空間の定義と、1 fold 分の学習（validation による早期停止を含む）を担う。
+	早期停止しないモデルは validation を確率の較正などに使ってよい。"""
 
 	def params_from_trial(self, trial: optuna.Trial) -> P: ...
 
@@ -268,7 +269,7 @@ class CvResult(Generic[P, M]):
 		return self.mean - self.stability_lambda * self.std
 
 	@property
-	def best_iterations(self) -> list[int]:
+	def best_iterations(self) -> list[int | None]:
 		return [m.best_iteration for m in self.fold_models]
 
 	def predict_proba(self, x: np.ndarray) -> np.ndarray:
@@ -316,12 +317,13 @@ class PairCvSearch(Generic[P, M]):
 		seed: int,
 		output_dir: str,
 		logger: logging.Logger,
-		iteration_label: str,
+		iteration_label: str | None = None,
 		metadata: dict[str, Any] | None = None,
 	) -> None:
 		"""
 		name: ログ接頭辞
-		iteration_label: folds.json での反復数のキー名（例: best_epoch）
+		iteration_label: folds.json での反復数のキー名（例: best_epoch）。
+			None は反復で学習しないモデル（反復数を trial の記録・folds.json に出力しない）
 		metadata: best_params.json に追記する scorer 固有の設定
 		"""
 		self.name = name
@@ -397,7 +399,8 @@ class PairCvSearch(Generic[P, M]):
 			stability_lambda=self.settings.stability_lambda,
 		)
 		trial.set_user_attr("fold_scores", fold_scores)
-		trial.set_user_attr(f"{self.iteration_label}s", result.best_iterations)
+		if self.iteration_label is not None:
+			trial.set_user_attr(f"{self.iteration_label}s", result.best_iterations)
 		trial.set_user_attr("cv_mean", result.mean)
 		trial.set_user_attr("cv_std", result.std)
 		# 全 trial の fold モデルを保持するとメモリを食うため、最良値を更新した trial のみ保持する
@@ -435,7 +438,11 @@ class PairCvSearch(Generic[P, M]):
 				{
 					"fold": split.fold,
 					"score": score,
-					self.iteration_label: model.best_iteration,
+					**(
+						{self.iteration_label: model.best_iteration}
+						if self.iteration_label is not None
+						else {}
+					),
 					"train_pairs": split.train_idx.tolist(),
 					"val_pairs": split.val_idx.tolist(),
 					"test_pairs": split.test_idx.tolist(),
