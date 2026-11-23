@@ -37,6 +37,12 @@ ATTACK_MODEL_ANALYSIS_DIR: str = "analyze_attack_model"
 NEURAL_REGULARIZED_CV_DIR: str = "neural_regularized_cv"
 # lightgbm スコアラーの交差検証・ハイパーパラメータ探索結果の出力ディレクトリ名
 LIGHTGBM_CV_DIR: str = "lightgbm_cv"
+# svm スコアラーの交差検証・ハイパーパラメータ探索結果の出力ディレクトリ名
+SVM_CV_DIR: str = "svm_cv"
+# flat_svm スコアラーの交差検証・ハイパーパラメータ探索結果の出力ディレクトリ名
+FLAT_SVM_CV_DIR: str = "flat_svm_cv"
+# svm / flat_svm の学習済みモデルの可視化（PCA 散布図・較正後 logit ヒストグラム）の出力ディレクトリ名
+SVM_DECISION_ANALYSIS_DIR: str = "svm_decision_analysis"
 # ターゲットモデルへの攻撃透かし入力時のクラス別確率出力の保存ディレクトリ名
 TARGET_ATTACKSIGN_OUTPUT_DIR: str = "target_attacksign_output"
 # シャドー IN/OUT ペア効果量解析結果（クラス別バイオリン図を含む）の出力ディレクトリ名

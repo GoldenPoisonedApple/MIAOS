@@ -21,7 +21,7 @@
 | `significant_class_selection` | str | `none` | LF_MIA 系（`diagonal_lda` / `flat_diagonal_lda` / `gaussian_lr`） | `attacks/membership_scorers/class_selection.py` |
 | `attack_model_batch_size` | int | `64`（`cfg.ATTACK_MODEL_BATCH_SIZE`） | LF_MIA 系（`membership_scorer=neural` / `neural_regularized`） | 同上 |
 | `attack_model_epochs` | int | `100`（`cfg.ATTACK_MODEL_EPOCHS`） | LF_MIA 系（`membership_scorer=neural`） | 同上 |
-| `cv_objective` | str | `auc` | LF_MIA 系（`neural_regularized` / `lightgbm`） | `attacks/membership_scorers/pair_cv.py` |
+| `cv_objective` | str | `auc` | LF_MIA 系（`neural_regularized` / `lightgbm` / `svm` / `flat_svm`） | `attacks/membership_scorers/pair_cv.py` |
 | `cv_n_folds` | int (>= 2, <= n_pairs) | `10` | 同上 | 同上 |
 | `cv_val_ratio` | float (0 < x < 1) | `0.2` | 同上 | 同上 |
 | `cv_n_trials` | int (>= 1) | `50` | 同上 | 同上 |
@@ -31,6 +31,12 @@
 | `neural_regularized_standardize` | bool（`true` / `false`。文字列も可） | `true` | 同上 | 同上 |
 | `lightgbm_patience` | int (>= 1) | `50` | LF_MIA 系（`lightgbm`） | `attacks/membership_scorers/lightgbm_scorer.py` |
 | `lightgbm_max_rounds` | int (>= 1) | `1000` | 同上 | 同上 |
+| `svm_kernel` | str | `linear` | LF_MIA 系（`svm`） | `attacks/membership_scorers/svm_scorer.py` |
+| `svm_standardize` | bool（`true` / `false`。文字列も可） | `true` | 同上 | 同上 |
+| `svm_rbf_n_components` | int (>= 1) | `1000` | 同上（`svm_kernel=rbf`） | 同上 |
+| `svm_max_iter` | int (>= 1) | `10000` | 同上 | 同上 |
+| `flat_svm_kernel` | str | `linear` | LF_MIA 系（`flat_svm`） | `attacks/membership_scorers/flat_svm_scorer.py` |
+| `flat_svm_standardize` | bool（`true` / `false`。文字列も可） | `true` | 同上 | 同上 |
 | `diagonal_lda_reg_lambda` | float | `1e-3` | LF_MIA 系（`diagonal_lda` / `flat_diagonal_lda`） | 同上 |
 | `diagonal_lda_variance` | str | `pair_diff` | LF_MIA 系（`diagonal_lda`） | 同上 |
 | `flat_diagonal_lda_variance` | str | `within_class` | LF_MIA 系（`flat_diagonal_lda`） | 同上 |
@@ -147,6 +153,8 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
 | `neural` | `AttackNet` で画像ごとに IN/OUT を分類し、IN 確率を平均する | `attack_model_batch_size`, `attack_model_epochs` | `probability` |
 | `neural_regularized` | 1 出力 MLP をペア単位 k-fold CV + 早期停止 + Optuna で探索し、最良 trial の fold モデルのアンサンブルで画像ごとの IN 確率を平均する | `attack_model_batch_size`, `cv_*`, `neural_regularized_*` | `probability` |
 | `lightgbm` | 画像単位の LightGBM をペア単位 k-fold CV + 早期停止 + Optuna で探索し、最良 trial の fold モデルのアンサンブルで画像ごとの IN 確率を平均する | `cv_*`, `lightgbm_*` | `probability` |
+| `svm` | 画像単位の SVM（linear / Nystroem 近似の rbf）をペア単位 k-fold CV + validation での Platt 較正 + Optuna で探索し、最良 trial の fold モデルのアンサンブルで画像ごとの IN 確率を平均する | `cv_*`, `svm_*` | `probability` |
+| `flat_svm` | シャドーの特徴を `(K·C)` に平坦化した SVM（linear / rbf の厳密な SVC）をペア単位 k-fold CV + validation での Platt 較正 + Optuna で探索し、最良 trial の fold モデルのアンサンブルでターゲット単位の IN 確率を出す | `cv_*`, `flat_svm_*` | `probability` |
 | `diagonal_lda` | K 枚を平均した特徴に対する対角 LDA（分母は既定でペア差分の分散） | `diagonal_lda_reg_lambda`, `diagonal_lda_variance`, `significant_class_selection` | `log_odds` |
 | `flat_diagonal_lda` | `(K·C)` に平坦化した対角 LDA | `diagonal_lda_reg_lambda`, `flat_diagonal_lda_variance`, `significant_class_selection` | `log_odds` |
 | `gaussian_lr` | (k, c) ごとの正規分布による尤度比検定 | `gaussian_lr_variance`, `gaussian_lr_var_floor`, `significant_class_selection` | `log_odds` |
@@ -162,6 +170,8 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
 | `diagonal_lda_variance` | `pair_diff`（既定） / `within_class` / `none` | `flat_diagonal_lda_variance` と同じ意味（既定のみ異なる） |
 | `gaussian_lr_variance` | `per_class`（既定） | IN / OUT で別々の分散を使う |
 | | `pooled` | IN / OUT の分散の平均を共通に使う（シャドーが少ないとき向け） |
+| `svm_kernel` | `linear`（既定） | `LinearSVC` による線形 SVM |
+| | `rbf` | `Nystroem` 近似の RBF 特徴写像 + `LinearSVC`。厳密な RBF-SVC は学習サンプル数 n に対して O(n²)〜O(n³) のため近似を使う |
 | `cv_objective` | `auc`（既定） | シャドー単位（K 枚の IN 確率平均）の AUC。CV の fold 指標と早期停止の監視に使う |
 | | `tpr_at_1_fpr` | 画像単位の TPR@FPR=0.01。テスト fold・validation の OUT 画像数（ペア数 × K）が 100 以上必要（満たさない場合 `ValueError`） |
 
@@ -169,9 +179,9 @@ LF_MIA 系の攻撃モデル。詳細は `SPECIFICATION.md` の「Membership sco
 - スコアのスケールは metrics の `membership_score_scale` に出力され、`attack_score` / `threshold_at_*` の単位を表す。
 - 以下の「metrics」は、各 scorer が metrics に追加するキー（スコアラーの diagnostics）。全 scorer 共通で `membership_scorer`（scorer 名）と `membership_score_scale` も出力される。
 
-#### CV 探索の共通設定（`neural_regularized` / `lightgbm`）
+#### CV 探索の共通設定（`neural_regularized` / `lightgbm` / `svm` / `flat_svm`）
 
-シャドー IN/OUT ペアを単位に k-fold CV を行い、fold 指標の `mean − λ·std` を Optuna（TPE + MedianPruner）で最大化する。各 fold の学習側ペアの一部を validation に回して早期停止し、最良 trial の k 個の fold モデルの IN 確率の平均でターゲットを推論する。
+シャドー IN/OUT ペアを単位に k-fold CV を行い、fold 指標の `mean − λ·std` を Optuna（TPE + MedianPruner）で最大化する。各 fold の学習側ペアの一部を validation に回して早期停止し（`svm` / `flat_svm` は早期停止の代わりに Platt 較正に使う）、最良 trial の k 個の fold モデルの IN 確率の平均でターゲットを推論する。
 
 IN シャドーの適用率が複数ある場合（`shadow_fraction_sweep=true`）は、テスト fold と validation を適用率で層化する。適用率の段階ごとのペア数が `cv_n_folds` より少なくてもエラーにはせず、各 fold に段階ができるだけ散らばるように割り当てる（例: 20 ペア・k=10 では、各テスト fold は異なる 2 段階のペアで構成される）。適用率が 1 種類のときは従来の分割と完全に同じ。各 fold のペアの適用率は `folds.json` の `train_fractions` / `val_fractions` / `test_fractions` に記録される。
 
@@ -276,6 +286,79 @@ metrics（CV 共通の metrics に加えて）:
 | ---- | ---------- |
 | `best_learning_rate` / `best_num_leaves` / `best_max_depth` / `best_min_child_samples` / `best_feature_fraction` / `best_bagging_fraction` / `best_lambda_l1` / `best_lambda_l2` | 最良 trial のハイパーパラメータ。`best_max_depth` は深さ無制限のとき `-1` |
 | `best_iteration_median` | 最良 trial の各 fold で早期停止が採用したラウンド数の中央値。`lightgbm_max_rounds` に近いなら上限で打ち切られている。極端に小さい（数ラウンド）なら、少数の木ですぐ validation に過適合している |
+
+#### `svm`
+
+画像単位（特徴 C 次元）の SVM 二値分類を CV 探索の共通設定（上記）で探索する。各 fold は `Pipeline(StandardScaler | 恒等変換, RbfNystroem | なし, LinearSVC)` を学習側ペアで学習し、学習済みモデルは固定したまま、validation ペアの `decision_function` で Platt scaling（`svm_common.PlattScaling`。IN の logit = `a·f + b`）を学習して IN 確率を得る。早期停止は行わない。
+
+Platt scaling は Platt (1999) の目標値の平滑化（正例 `(N₊+1)/(N₊+2)`、負例 `1/(N₋+2)`）付きの交差エントロピー最小化で、sklearn の `CalibratedClassifierCV(method="sigmoid")` と同じ手法。較正後の logit を可視化に使うため自前で実装している。
+
+ハイパーパラメータ（`cv_*` に加えて）:
+
+| キー | 既定値 | 意味・解説 |
+| ---- | ------ | ---------- |
+| `svm_kernel` | `linear` | カーネル（上表） |
+| `svm_standardize` | `true` | `true` で各 fold の学習側で fit した z-score 標準化を入力に適用する。SVM は特徴のスケールに敏感なため、通常は `true` のままにする（`true` / `false` 以外は `ValueError`） |
+| `svm_rbf_n_components` | `1000` | `rbf` の Nystroem 近似の次元数（探索しない）。大きいほど厳密な RBF に近づくが、学習時間とメモリが増える。学習サンプル数を超える場合は学習サンプル数に切り詰める |
+| `svm_max_iter` | `10000` | `LinearSVC` のソルバの反復上限。不足すると `ConvergenceWarning` が出る |
+
+探索空間（コード定数で固定）:
+
+| パラメータ | 範囲 | 意味 |
+| ---------- | ---- | ---- |
+| `C` | 1e-4〜1e2（log） | 誤分類のペナルティ。小さいほど正則化が強い |
+| `gamma_factor` | 1e-3〜1e1（log） | `rbf` のみ。RBF の `gamma = gamma_factor / (n_features · X.var())`。基準値は sklearn の `gamma="scale"` と同じで、標準化後（`svm_standardize=false` では生）の学習側特徴から fold ごとに計算する |
+
+metrics（CV 共通の metrics に加えて）:
+
+| キー | 意味・解説 |
+| ---- | ---------- |
+| `svm_kernel` | 使用したカーネル |
+| `standardize` | 標準化の有無 |
+| `best_C` / `best_gamma_factor` | 最良 trial のハイパーパラメータ。`best_gamma_factor` は `linear` のとき `null` |
+
+注意: Platt 較正は validation ペアのみで行うため、`cv_val_ratio` が小さいと較正パラメータの推定がばらつく。
+
+#### `flat_svm`
+
+シャドーの特徴 `(K, C)` を `K·C` 次元に平坦化して 1 サンプルとする（サンプル数 `n_pairs × 2`）SVM 二値分類を CV 探索の共通設定（上記）で探索する。`flat_diagonal_lda` と同じく画像間の (k, c) の組み合わせを直接学習する。サンプル数が少ないため近似を使わず、各 fold は `Pipeline(StandardScaler | 恒等変換, SVC(kernel=linear | rbf))` を学習側ペアで学習し、validation ペアで Platt 較正する（`svm` と同じ）。
+
+ハイパーパラメータ（`cv_*` に加えて）:
+
+| キー | 既定値 | 意味・解説 |
+| ---- | ------ | ---------- |
+| `flat_svm_kernel` | `linear` | `linear`: `SVC(kernel="linear")` / `rbf`: `SVC(kernel="rbf")`（それ以外の値は `ValueError`） |
+| `flat_svm_standardize` | `true` | `svm_standardize` と同じ |
+
+探索空間は `svm` と同じ（`C` / `gamma_factor`。`gamma` の基準値は `K·C` 次元の学習側特徴から計算する）。
+
+metrics（CV 共通の metrics に加えて）:
+
+| キー | 意味・解説 |
+| ---- | ---------- |
+| `flat_svm_kernel` | 使用したカーネル |
+| `standardize` | 標準化の有無 |
+| `best_C` / `best_gamma_factor` | 最良 trial のハイパーパラメータ。`best_gamma_factor` は `linear` のとき `null` |
+
+注意:
+- 入力次元 `K·C`（例: K=20, C=100 で 2000）に対してサンプル数が `n_pairs × 2` と少ない（p ≫ n）。linear はほぼ確実に完全分離でき、`C` は「IN/OUT 平均差に近い解（小さい C）」と「最大マージン解（大きい C）」の間を動かす。
+- テスト fold が小さいため fold 指標のノイズが大きく、`cv_n_trials` を大きくすると選択バイアスが増える。小さめに設定する。
+- `cv_objective=tpr_at_1_fpr` はテスト fold・validation に OUT シャドーが 100 以上必要で、通常の設定では `ValueError` になる。
+- `per_image` はターゲット単位の値を K 個並べたもの。`attack_scores_vars` は常に 0、`roc_curve_all_scores` / `attack_score_distribution` はターゲット単位と同じ情報になる。
+
+#### `svm` / `flat_svm` の可視化（`svm_decision_analysis/`）
+
+学習済みモデルを `svm_decision_analysis/` に可視化する。単位は `svm` が画像（シャドー `n_pairs·2·K` 点、ターゲット `24·K` 点）、`flat_svm` がシャドー / ターゲット（`n_pairs·2` 点、24 点）。
+
+| ファイル | 内容 |
+| -------- | ---- |
+| `pca_scatter.png` | シャドー全体で fit した z-score 標準化 + PCA(2) の平面にシャドー IN / OUT を描き、ターゲットを同じ変換で射影して重ねる（IN は適用率を対数カラーマップ、OUT は青の三角） |
+| `decision_histogram.png` | Platt 較正後の logit の分布。シャドーは out-of-fold（そのペアがテストだった fold のモデル）の値、ターゲットは k 個の fold モデルの logit の平均。ターゲットの個々の値は下端の目盛りで示す |
+| `summary.json` | `pca_explained_variance_ratio`、`shadow_oof_auc`（シャドーの OOF logit による AUC。単位は上記）、群（shadow_in / shadow_out / target_in / target_out）ごとの logit の `n` / `mean` / `std` |
+
+- PCA は線形の 2 次元射影なので、RBF の判別境界や高次元での分離はこの平面に現れないことがある。
+- ターゲットの logit（fold の logit の平均）は、`attack_score`（fold の確率の平均）と厳密には一致しない。
+- シャドーの OOF logit が 0 付近に集中する fold は、validation で信号が見つからず Platt の傾き `a` がほぼ 0 になったことを示す。
 
 #### `diagonal_lda`
 

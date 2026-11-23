@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -104,3 +104,35 @@ class MembershipScorer(Protocol):
 	def score(self, feats: np.ndarray) -> MembershipScore: ...
 
 	def diagnostics(self) -> dict[str, Any]: ...
+
+
+@dataclass(frozen=True)
+class DecisionAnalysisData:
+	"""
+	学習済み判別モデルの可視化の入力（scorer に依存しない）。
+	unit: 1 点の単位（image: 画像単位 / shadow: シャドー・ターゲット単位）
+	shadow_x: (N, D) シャドーのサンプル, shadow_y: (N,) IN=1 / OUT=0,
+	shadow_logit: (N,) 学習に使っていない fold のモデルによる較正後 logit（out-of-fold）
+	target_x: (M, D) ターゲットのサンプル, target_fraction: (M,) ターゲットの装飾適用率,
+	target_logit: (M,) fold モデルの較正後 logit の平均
+	"""
+
+	scorer_name: str
+	unit: str
+	shadow_x: np.ndarray
+	shadow_y: np.ndarray
+	shadow_logit: np.ndarray
+	target_x: np.ndarray
+	target_fraction: np.ndarray
+	target_logit: np.ndarray
+
+
+@runtime_checkable
+class DecisionAnalyzable(Protocol):
+	"""fit 後に判別モデルの可視化データを提供できる scorer。"""
+
+	def decision_analysis(
+		self, target_feats: np.ndarray, target_fractions: np.ndarray
+	) -> DecisionAnalysisData:
+		"""target_feats: (T, K, C), target_fractions: (T,)"""
+		...
