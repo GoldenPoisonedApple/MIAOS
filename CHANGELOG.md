@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.2](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.9.1...v0.9.2) (2026-11-23)
+
+
+### Features
+
+* flat_svmの実装 ([8c7a8a2](https://github.com/GoldenPoisonedApple/MIAOS/commit/8c7a8a20561384c77d108ce7d06320cfba19c543))
+* svm実装 ([72ecffa](https://github.com/GoldenPoisonedApple/MIAOS/commit/72ecffaee474f814237cfd547303ea87fb1516af))
+* 適応割合ごとのroc図 ([a1d898d](https://github.com/GoldenPoisonedApple/MIAOS/commit/a1d898dcec5b143fdff2655cb137c9494032a109))
+
+
+### Bug Fixes
+
+* svmのrbfがなんかうまくいかなくなるやつ修正 ([44c37b9](https://github.com/GoldenPoisonedApple/MIAOS/commit/44c37b9c6e452fc7b158cdb8718ccdfe42951bb8))
+
 ## [0.9.1](https://github.com/GoldenPoisonedApple/MIAOS/compare/v0.9.0...v0.9.1) (2026-11-15)
 
 
